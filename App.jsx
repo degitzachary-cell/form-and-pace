@@ -73,15 +73,10 @@ const COMPLY_COLOR = { completed:"#4ade80", missed:"#f87171", partial:"#fbbf24",
 const COMPLY_LABEL = { completed:"✓ Done", missed:"✗ Missed", partial:"~ Partial", pending:"Pending" };
 
 async function callClaude(systemPrompt, userMsg) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/claude-proxy`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      system: systemPrompt,
-      messages: [{ role:"user", content: userMsg }],
-    }),
+    body: JSON.stringify({ systemPrompt, userMsg }),
   });
   const d = await res.json();
   return d.content?.[0]?.text || "{}";
