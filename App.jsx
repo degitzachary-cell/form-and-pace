@@ -689,16 +689,6 @@ Return JSON:
           </div>
 
           {/* Strava connect banner */}
-          {!stravaConnected && (
-            <div onClick={connectStrava} style={{ margin:"0 16px 16px", background:"#1a1000", border:"1px solid #f97316", borderRadius:8, padding:"12px 16px", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>
-              <span style={{ fontSize:20 }}>🔗</span>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:"#f97316" }}>Connect Strava</div>
-                <div style={{ fontSize:11, color:"#666", marginTop:2 }}>Link your runs to session feedback</div>
-              </div>
-              <span style={{ color:"#f97316", fontSize:16 }}>›</span>
-            </div>
-          )}
           {stravaConnected && (
             <div style={{ margin:"0 16px 16px", background:"#0a1a0a", border:"1px solid #166534", borderRadius:8, padding:"10px 16px", display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:16 }}>🟠</span>
