@@ -60,6 +60,51 @@ const ATHLETE_PROGRAMS = {
       },
     ]
   },
+  "z.degit@gmail.com": {
+    name: "Zachary Degit", goal: "1:50 HM", current: "1:55", avatar: "ZD",
+    weeks: [
+      {
+        weekLabel: "Week 1 · 9–15 Mar", weekStart: "2026-03-09",
+        sessions: [
+          { id:"zd-s1", day:"Mon 09", type:"LONG RUN",  tag:"easy",  desc:"16km Easy Run\n(5:45–6:00 /km)\nWith Coach",                            pace:"5:45–6:00 /km",        terrain:"FLAT/ROAD" },
+          { id:"zd-s2", day:"Tue 10", type:"SPEED",     tag:"speed", desc:"WU 15min\n8 × 400m @ 4:15–4:20 /km\n90sec rest\nCD 15min",              pace:"4:15–4:20 /km",        terrain:"TRACK" },
+          { id:"zd-s3", day:"Thu 12", type:"TEMPO",     tag:"tempo", desc:"WU 15min\n3 × 2km @ 5:15–5:20 /km (HM pace)\n2min jog rec\nCD 15min",   pace:"HM: 5:15–5:20 /km",    terrain:"ROAD" },
+          { id:"zd-s4", day:"Fri 13", type:"EASY",      tag:"easy",  desc:"45min Easy\n6 × 15sec strides\n30sec rest",                              pace:"5:50–6:00 /km",        terrain:"FLAT" },
+          { id:"zd-s5", day:"Sat 14", type:"LONG RUN",  tag:"easy",  desc:"75min Easy\n(5:45–6:00 /km)",                                            pace:"5:45–6:00 /km",        terrain:"FLAT" },
+        ]
+      },
+      {
+        weekLabel: "Week 2 · 16–22 Mar", weekStart: "2026-03-16",
+        sessions: [
+          { id:"zd-s6",  day:"Mon 16", type:"RECOVERY", tag:"easy",  desc:"55min Recovery\n6 × 15sec strides",                                       pace:"5:45–6:00 /km",        terrain:"FLAT" },
+          { id:"zd-s7",  day:"Tue 17", type:"SPEED",    tag:"speed", desc:"WU 15min\n10 × 1min @ 4:20 /km (1% incline)\n60sec rest\nCD 15min",       pace:"4:20 /km",             terrain:"TREADMILL" },
+          { id:"zd-s8",  day:"Thu 19", type:"TEMPO",    tag:"tempo", desc:"WU 15min\n5 × 1.6km @ 5:15–5:20 /km (HM pace)\n90sec jog\nCD 15min",     pace:"HM: 5:15–5:20 /km",    terrain:"FLAT/ROAD" },
+          { id:"zd-s9",  day:"Fri 20", type:"EASY",     tag:"easy",  desc:"50min Easy\n6 × 15sec strides\n30sec rest",                               pace:"5:50–6:00 /km",        terrain:"FLAT" },
+          { id:"zd-s10", day:"Sat 21", type:"LONG RUN", tag:"tempo", desc:"60min Easy (5:50 /km)\n→ 30min @ 5:20–5:25 /km (near HM pace)",           pace:"Easy 5:50 / HM 5:20–5:25", terrain:"FLAT" },
+        ]
+      },
+      {
+        weekLabel: "Week 3 · 23–29 Mar", weekStart: "2026-03-23",
+        sessions: [
+          { id:"zd-s11", day:"Mon 23", type:"RECOVERY", tag:"easy",  desc:"60min Recovery\n6 × 15sec strides",                                                   pace:"5:45–6:00 /km",        terrain:"FLAT" },
+          { id:"zd-s12", day:"Tue 24", type:"SPEED",    tag:"speed", desc:"WU 15min\n12 × 200m @ 4:00–4:10 /km\n60sec rest\nCD 15min",                           pace:"4:00–4:10 /km",        terrain:"TRACK" },
+          { id:"zd-s13", day:"Thu 26", type:"TEMPO",    tag:"tempo", desc:"WU 15min\n25min @ 5:15–5:20 /km\n5min float (5:50)\n10min @ 5:15–5:20 /km\nCD 15min", pace:"HM: 5:15–5:20 /km",    terrain:"FLAT/ROAD" },
+          { id:"zd-s14", day:"Fri 27", type:"EASY",     tag:"easy",  desc:"50min Easy\n6 × 15sec strides\n30sec rest",                                            pace:"5:50–6:00 /km",        terrain:"FLAT" },
+          { id:"zd-s15", day:"Sat 28", type:"LONG RUN", tag:"tempo", desc:"70min Easy (5:45 /km)\n→ 40min @ 5:15–5:25 /km (HM pace)",                             pace:"Easy 5:45 / HM 5:15–5:25", terrain:"FLAT" },
+        ]
+      },
+      {
+        weekLabel: "Week 4 · Deload · 30 Mar–5 Apr", weekStart: "2026-03-30",
+        sessions: [
+          { id:"zd-s16", day:"Mon 30", type:"RECOVERY", tag:"easy",  desc:"40min Recovery\n6 × 15sec strides",                              pace:"5:50–6:00 /km",   terrain:"FLAT" },
+          { id:"zd-s17", day:"Tue 31", type:"SPEED",    tag:"speed", desc:"WU 15min\n6 × 1min @ 4:25 /km\n90sec rest\nCD 15min",            pace:"4:25 /km",        terrain:"TREADMILL/TRACK" },
+          { id:"zd-s18", day:"Thu 02", type:"TEMPO",    tag:"tempo", desc:"WU 15min\n3 × 1.6km @ 5:20 /km (HM pace)\n2min jog\nCD 15min",  pace:"HM: 5:20 /km",   terrain:"FLAT" },
+          { id:"zd-s19", day:"Fri 03", type:"EASY",     tag:"easy",  desc:"40min Easy\n6 × 15sec strides\n30sec rest",                      pace:"5:50–6:00 /km",   terrain:"FLAT" },
+          { id:"zd-s20", day:"Sat 04", type:"LONG RUN", tag:"easy",  desc:"60min Easy\n(5:50–6:00 /km)",                                    pace:"5:50–6:00 /km",   terrain:"FLAT" },
+        ]
+      },
+    ]
+  },
   // Add more athletes here by email
 };
 
