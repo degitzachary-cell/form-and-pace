@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// ─── SUPABASE CONFIG ─────────────────────────────────────────────────────────
-// Replace these with your actual Supabase project values
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const STRAVA_CLIENT_ID = import.meta.env.VITE_STRAVA_CLIENT_ID;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ─── COACH EMAILS ─────────────────────────────────────────────────────────────
@@ -72,6 +72,25 @@ const TAG_STYLE = {
 const COMPLY_COLOR = { completed:"#4ade80", missed:"#f87171", partial:"#fbbf24", pending:"#555" };
 const COMPLY_LABEL = { completed:"✓ Done", missed:"✗ Missed", partial:"~ Partial", pending:"Pending" };
 
+// ─── STRAVA HELPERS ───────────────────────────────────────────────────────────
+function formatTime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`
+    : `${m}:${String(s).padStart(2,"0")}`;
+}
+function formatPace(metersPerSec) {
+  if (!metersPerSec) return "–";
+  const sPerKm = 1000 / metersPerSec;
+  return `${Math.floor(sPerKm/60)}:${String(Math.round(sPerKm%60)).padStart(2,"0")} /km`;
+}
+function formatDist(meters) { return (meters/1000).toFixed(2) + " km"; }
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"});
+}
+
 async function callClaude(systemPrompt, userMsg) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/claude-proxy`, {
     method: "POST",
@@ -105,6 +124,13 @@ export default function App() {
   const [logs,          setLogs]          = useState({});
   const [logsLoading,   setLogsLoading]   = useState(false);
 
+  // Strava state
+  const [stravaConnected,       setStravaConnected]       = useState(false);
+  const [stravaActivities,      setStravaActivities]      = useState([]);
+  const [stravaLoading,         setStravaLoading]         = useState(false);
+  const [selectedStrava,        setSelectedStrava]        = useState(null);
+  const [showActivityPicker,    setShowActivityPicker]    = useState(false);
+
   // ── Auth: listen for session changes ──
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -126,10 +152,27 @@ export default function App() {
     setAuthLoading(false);
   };
 
-  // ── Load logs from Supabase when user is set ──
+  // ── Capture Strava OAuth code before auth resolves ──
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const code = p.get("code");
+    if (code && p.get("scope")?.includes("activity")) {
+      window.history.replaceState({}, "", window.location.pathname);
+      sessionStorage.setItem("strava_pending_code", code);
+    }
+  }, []);
+
+  // ── Load logs + Strava state when user is set ──
   useEffect(() => {
     if (!user) return;
     loadLogs();
+    const pendingCode = sessionStorage.getItem("strava_pending_code");
+    if (pendingCode) {
+      sessionStorage.removeItem("strava_pending_code");
+      exchangeStravaCode(pendingCode);
+    } else {
+      checkStravaConnection();
+    }
   }, [user]);
 
   const loadLogs = async () => {
@@ -178,6 +221,66 @@ export default function App() {
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null); setRole(null); setLogs({});
+    setStravaConnected(false); setStravaActivities([]); setSelectedStrava(null);
+  };
+
+  // ── Strava ──
+  const getAuthToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? "";
+  };
+
+  const stravaCall = async (action, extra = {}) => {
+    const token = await getAuthToken();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/strava-activities`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      body: JSON.stringify({ action, ...extra }),
+    });
+    return res.json();
+  };
+
+  const checkStravaConnection = async () => {
+    try {
+      const d = await stravaCall("check");
+      setStravaConnected(d.connected === true);
+    } catch { setStravaConnected(false); }
+  };
+
+  const connectStrava = () => {
+    const params = new URLSearchParams({
+      client_id: STRAVA_CLIENT_ID,
+      redirect_uri: window.location.origin,
+      response_type: "code",
+      scope: "activity:read_all",
+    });
+    window.location.href = `https://www.strava.com/oauth/authorize?${params}`;
+  };
+
+  const exchangeStravaCode = async (code) => {
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/strava-auth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ code }),
+      });
+      const d = await res.json();
+      if (d.success) setStravaConnected(true);
+    } catch (e) { console.error("Strava exchange error", e); }
+  };
+
+  const loadStravaActivities = async () => {
+    if (stravaActivities.length > 0) { setShowActivityPicker(true); return; }
+    setStravaLoading(true);
+    try {
+      const data = await stravaCall("list", { per_page: 15 });
+      if (Array.isArray(data)) {
+        setStravaActivities(data.filter(a => ["Run","TrailRun","VirtualRun"].includes(a.type)));
+        setShowActivityPicker(true);
+      }
+    } catch (e) { console.error(e); }
+    setStravaLoading(false);
   };
 
   // ── Resolve athlete program ──
@@ -211,7 +314,24 @@ Return JSON:
     try {
       const raw = await callClaude(sys, msg);
       const analysis = JSON.parse(raw.replace(/```json|```/g,"").trim());
-      await saveLog(s.id, { feedback: feedbackText, analysis });
+      const updates = { feedback: feedbackText, analysis };
+      if (selectedStrava) {
+        updates.strava_data = {
+          id: selectedStrava.id,
+          name: selectedStrava.name,
+          distance: selectedStrava.distance,
+          moving_time: selectedStrava.moving_time,
+          average_speed: selectedStrava.average_speed,
+          average_heartrate: selectedStrava.average_heartrate,
+          max_heartrate: selectedStrava.max_heartrate,
+          total_elevation_gain: selectedStrava.total_elevation_gain,
+          start_date: selectedStrava.start_date_local,
+          splits_metric: selectedStrava.splits_metric,
+          url: `https://www.strava.com/activities/${selectedStrava.id}`,
+        };
+      }
+      await saveLog(s.id, updates);
+      setSelectedStrava(null);
       setScreen("result");
     } catch(e) { console.error(e); }
     setAiLoading(false);
@@ -472,6 +592,7 @@ Return JSON:
               <SectionCard label="AI Coaching Note">
                 <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{an?.coachNote}</div>
               </SectionCard>
+              {log?.strava_data && <StravaCard data={log.strava_data} />}
               <SectionCard label="Athlete's Feedback">
                 <div style={{ fontSize:13, color:"#777", lineHeight:1.7, fontStyle:"italic" }}>"{log.feedback}"</div>
               </SectionCard>
@@ -521,6 +642,24 @@ Return JSON:
             <div style={{ fontSize:18, fontWeight:900 }}>{athleteData.goal}</div>
             <div style={{ fontSize:12, color:"#555", marginTop:3 }}>Current PB: {athleteData.current}</div>
           </div>
+
+          {/* Strava connect banner */}
+          {!stravaConnected && (
+            <div onClick={connectStrava} style={{ margin:"0 16px 16px", background:"#1a1000", border:"1px solid #f97316", borderRadius:8, padding:"12px 16px", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>
+              <span style={{ fontSize:20 }}>🔗</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:"#f97316" }}>Connect Strava</div>
+                <div style={{ fontSize:11, color:"#666", marginTop:2 }}>Link your runs to session feedback</div>
+              </div>
+              <span style={{ color:"#f97316", fontSize:16 }}>›</span>
+            </div>
+          )}
+          {stravaConnected && (
+            <div style={{ margin:"0 16px 16px", background:"#0a1a0a", border:"1px solid #166534", borderRadius:8, padding:"10px 16px", display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:16 }}>🟠</span>
+              <div style={{ fontSize:12, color:"#4ade80", fontWeight:600 }}>Strava connected</div>
+            </div>
+          )}
 
           <div style={{ display:"flex", gap:8, padding:"0 16px", marginBottom:16, overflowX:"auto" }}>
             {weeks.map((w,i)=>(
@@ -591,6 +730,59 @@ Return JSON:
         <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)}
           placeholder="Tell me about the session... how did it feel? Did you hit the paces? Any soreness or highlights?"
           style={S.textarea}/>
+
+        {/* Strava Activity Linker */}
+        {stravaConnected && (
+          <div style={{ marginBottom:14 }}>
+            {!selectedStrava ? (
+              <button onClick={loadStravaActivities} disabled={stravaLoading}
+                style={{ width:"100%", background:"#1a1000", border:"1px solid #f97316", borderRadius:12, padding:"14px", fontSize:14, fontWeight:600, color: stravaLoading?"#555":"#f97316", cursor: stravaLoading?"not-allowed":"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                <span>🔗</span>
+                {stravaLoading ? "Loading activities..." : "Link a Strava run (optional)"}
+              </button>
+            ) : (
+              <div style={{ background:"#1a1000", border:"1px solid #f97316", borderRadius:12, padding:"14px 16px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                  <div>
+                    <div style={{ fontSize:12, color:"#f97316", fontWeight:700, marginBottom:4 }}>🟠 Linked Activity</div>
+                    <div style={{ fontSize:14, fontWeight:700 }}>{selectedStrava.name}</div>
+                    <div style={{ fontSize:12, color:"#888", marginTop:3 }}>
+                      {formatDist(selectedStrava.distance)} · {formatTime(selectedStrava.moving_time)} · {formatPace(selectedStrava.average_speed)}
+                    </div>
+                  </div>
+                  <button onClick={()=>setSelectedStrava(null)} style={{ background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:18, padding:0 }}>✕</button>
+                </div>
+              </div>
+            )}
+
+            {showActivityPicker && (
+              <div style={{ marginTop:8, background:"#111", border:"1px solid #222", borderRadius:12, overflow:"hidden" }}>
+                <div style={{ padding:"10px 14px", borderBottom:"1px solid #1a1a1a", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ fontSize:11, letterSpacing:2, color:"#555", textTransform:"uppercase" }}>Recent Runs</div>
+                  <button onClick={()=>setShowActivityPicker(false)} style={{ background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:16 }}>✕</button>
+                </div>
+                <div style={{ maxHeight:280, overflowY:"auto" }}>
+                  {stravaActivities.length === 0
+                    ? <div style={{ padding:20, textAlign:"center", color:"#444", fontSize:13 }}>No recent runs found</div>
+                    : stravaActivities.map(a => (
+                      <div key={a.id} onClick={()=>{ setSelectedStrava(a); setShowActivityPicker(false); }}
+                        style={{ padding:"12px 14px", borderBottom:"1px solid #1a1a1a", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:600 }}>{a.name}</div>
+                          <div style={{ fontSize:11, color:"#666", marginTop:3 }}>
+                            {formatDate(a.start_date_local)} · {formatDist(a.distance)} · {formatPace(a.average_speed)}
+                          </div>
+                        </div>
+                        <div style={{ fontSize:12, color:"#f97316" }}>{formatTime(a.moving_time)}</div>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <button onClick={handleSubmitFeedback} disabled={!feedbackText.trim()||aiLoading}
           style={S.primaryBtn("#E06666", !feedbackText.trim()||aiLoading)}>
           {aiLoading ? "Analysing your session..." : "Submit Feedback →"}
@@ -622,6 +814,7 @@ Return JSON:
           <SectionCard label="Coach's Note">
             <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{an?.coachNote}</div>
           </SectionCard>
+          {log?.strava_data && <StravaCard data={log.strava_data} />}
           {log?.coach_reply && (
             <SectionCard label="💬 Message from Coach" accent="#3b82f6">
               <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{log.coach_reply}</div>
@@ -740,6 +933,62 @@ function MiniStat({ label, val, color }) {
     <div>
       <div style={{ fontSize:10, color:"#444", letterSpacing:2, textTransform:"uppercase", marginBottom:3 }}>{label}</div>
       <div style={{ fontSize:13, color:color||"#f0ece4", fontWeight:600 }}>{val}</div>
+    </div>
+  );
+}
+
+function StravaCard({ data }) {
+  const splits = data.splits_metric?.slice(0,10) || [];
+  return (
+    <div style={{ background:"#1a0f00", border:"1px solid #f97316", borderRadius:10, padding:"16px 18px", marginBottom:14 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:18 }}>🟠</span>
+          <div>
+            <div style={{ fontSize:10, letterSpacing:2, color:"#f97316", textTransform:"uppercase" }}>Strava Activity</div>
+            <div style={{ fontSize:14, fontWeight:700, marginTop:1 }}>{data.name}</div>
+          </div>
+        </div>
+        <a href={data.url} target="_blank" rel="noreferrer"
+          style={{ fontSize:11, color:"#f97316", textDecoration:"none", border:"1px solid #f97316", borderRadius:6, padding:"4px 8px" }}>
+          View ↗
+        </a>
+      </div>
+
+      {/* Key stats */}
+      <div style={{ display:"flex", gap:8, marginBottom: splits.length ? 12 : 0, flexWrap:"wrap" }}>
+        {[
+          { label:"Distance",  val: formatDist(data.distance) },
+          { label:"Time",      val: formatTime(data.moving_time) },
+          { label:"Avg Pace",  val: formatPace(data.average_speed) },
+          data.average_heartrate && { label:"Avg HR",   val: `${Math.round(data.average_heartrate)} bpm` },
+          data.max_heartrate    && { label:"Max HR",   val: `${Math.round(data.max_heartrate)} bpm` },
+          { label:"Elevation", val: `${Math.round(data.total_elevation_gain)}m` },
+        ].filter(Boolean).map((s,i) => (
+          <div key={i} style={{ background:"#111", borderRadius:8, padding:"8px 12px", minWidth:80, flex:1, textAlign:"center" }}>
+            <div style={{ fontSize:9, color:"#555", letterSpacing:2, textTransform:"uppercase", marginBottom:4 }}>{s.label}</div>
+            <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Splits */}
+      {splits.length > 0 && (
+        <div>
+          <div style={{ fontSize:9, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Splits</div>
+          <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+            {splits.map((sp, i) => {
+              const pace = formatPace(sp.average_speed);
+              return (
+                <div key={i} style={{ background:"#111", borderRadius:6, padding:"5px 8px", textAlign:"center", minWidth:50 }}>
+                  <div style={{ fontSize:9, color:"#555" }}>km {i+1}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#f97316", marginTop:2 }}>{pace.split(" ")[0]}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
