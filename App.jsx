@@ -339,7 +339,7 @@ export default function App() {
     if (!feedbackText.trim() || !activeSession) return;
     setAiLoading(true);
     const s = activeSession;
-    const sys = `You are an elite running coach's AI assistant. Analyse athlete feedback. Respond ONLY with valid JSON, no markdown, no backticks.`;
+    const sys = `You are an elite running coach's assistant. Analyse athlete feedback. Respond ONLY with valid JSON, no markdown, no backticks.`;
     const msg = `Athlete: ${athleteData?.name} | Goal: ${athleteData?.goal} | PB: ${athleteData?.current}
 Session: ${s.type} — ${s.day}
 Prescribed: ${s.desc}
@@ -421,7 +421,7 @@ Return JSON:
         <div style={{ fontSize:11, letterSpacing:5, color:"#E06666", textTransform:"uppercase", marginBottom:16 }}>Training Platform</div>
         <div style={{ fontSize:42, fontWeight:900, fontFamily:"'Georgia',serif", lineHeight:1.0, marginBottom:8 }}>FORM<br/>&amp; PACE</div>
         <div style={{ fontSize:14, color:"#555", marginBottom:56, lineHeight:1.6 }}>
-          AI-powered coaching for<br/>distance runners
+          Expert coaching for<br/>distance runners
         </div>
 
         <button onClick={signInWithGoogle} style={{
@@ -634,7 +634,7 @@ Return JSON:
               <SectionCard label="Key Insight">
                 <div style={{ fontSize:16, fontWeight:700, lineHeight:1.5 }}>{an?.keyInsight}</div>
               </SectionCard>
-              <SectionCard label="AI Coaching Note">
+              <SectionCard label="Coaching Note">
                 <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{an?.coachNote}</div>
               </SectionCard>
               {log?.strava_data && <StravaCard data={log.strava_data} />}
