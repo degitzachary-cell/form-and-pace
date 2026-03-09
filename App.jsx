@@ -15,7 +15,7 @@ const COACH_EMAILS = [
 
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
 const ATHLETE_PROGRAMS = {
-  "siouxsie@email.com": {
+  "suzy0913@gmail.com": {
     name: "Siouxsie Sioux", goal: "1:50 HM", current: "1:55", avatar: "SS",
     weeks: [
       {
@@ -297,7 +297,7 @@ export default function App() {
       client_id: STRAVA_CLIENT_ID,
       redirect_uri: window.location.origin,
       response_type: "code",
-      scope: "activity:read_all",
+      scope: "activity:read",
     });
     window.location.href = `https://www.strava.com/oauth/authorize?${params}`;
   };
