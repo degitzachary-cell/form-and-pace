@@ -100,7 +100,7 @@ const ATHLETE_PROGRAMS = {
     ]
   },
   "jeremy@muchogroup.com.au": {
-    name: "Jeremy Blackmore", goal: "1:23 HM / 3:00 M", current: "TBC", avatar: "JB",
+    name: "Jeremy Blackmore", goal: "1:23 HM / 3:00 M", current: "1:24 HM / 3:09 M", avatar: "JB",
     weeks: [
       {
         weekLabel: "Week 1 · 16–22 Mar", weekStart: "2026-03-16",
