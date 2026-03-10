@@ -1125,6 +1125,31 @@ Return JSON with exactly these keys:
                 </div>
               );
             })}
+            {(() => {
+              if (!week) return null;
+              const scheduledDates = new Set(week.sessions.map(s => sessionDateStr(week.weekStart, s.day)));
+              const wkEnd = (() => { const d = new Date(week.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return d.toISOString().split("T")[0]; })();
+              const extraActs = activities.filter(a =>
+                a.athlete_email === user.email?.toLowerCase() &&
+                a.activity_date >= week.weekStart &&
+                a.activity_date <= wkEnd &&
+                !scheduledDates.has(a.activity_date)
+              );
+              return extraActs.map(act => (
+                <div key={act.id} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:12, padding:"16px 18px", marginBottom:10, display:"flex", alignItems:"center", gap:14 }}>
+                  <div style={{ width:42, height:42, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>➕</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between" }}>
+                      <div style={{ fontSize:12, color:"#888" }}>{act.activity_date.slice(5).replace("-"," ")}</div>
+                      <div style={{ fontSize:11, color:"#E06666" }}>EXTRA RUN</div>
+                    </div>
+                    <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
+                    <div style={{ fontSize:11, color:"#888", marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
+                    {act.notes && <div style={{ fontSize:11, color:"#666", marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
       </div>
