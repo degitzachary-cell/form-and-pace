@@ -291,7 +291,7 @@ export default function App() {
   const saveActivity = async (form) => {
     setLogSaving(true);
     const payload = {
-      athlete_email: user.email,
+      athlete_email: user.email?.toLowerCase(),
       athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
       activity_date: form.date,
       distance_km: parseFloat(form.distanceKm),
@@ -314,7 +314,7 @@ export default function App() {
     const existing = logs[sessionId];
     const payload = {
       session_id: sessionId,
-      athlete_email: user.email,
+      athlete_email: user.email?.toLowerCase(),
       athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
       ...existing,
       ...updates,
