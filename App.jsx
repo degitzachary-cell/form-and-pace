@@ -244,6 +244,7 @@ export default function App() {
     if (!user) return;
     loadLogs();
     loadActivities();
+    loadMonthlySummaries();
     const pendingCode = sessionStorage.getItem("strava_pending_code");
     if (pendingCode) {
       sessionStorage.removeItem("strava_pending_code");
@@ -272,6 +273,19 @@ export default function App() {
       .select("*")
       .order("activity_date", { ascending: false });
     if (!error && data) setActivities(data);
+  };
+
+  const loadMonthlySummaries = async () => {
+    const { data, error } = await supabase
+      .from("monthly_summaries")
+      .select("*");
+    if (!error && data) {
+      const map = {};
+      data.forEach(row => {
+        map[row.athlete_email] = { ...row.summary, generatedAt: row.generated_at };
+      });
+      setMonthlySummaries(map);
+    }
   };
 
   const saveActivity = async (form) => {
@@ -451,6 +465,88 @@ Return JSON:
       setScreen("result");
     } catch(e) { console.error(e); }
     setAiLoading(false);
+  };
+
+  // ── Monthly block summary ──
+  const [monthlySummaries, setMonthlySummaries] = useState({});
+  const [summaryLoading,   setSummaryLoading]   = useState(false);
+
+  const generateMonthlySummary = async (email) => {
+    const da = ATHLETE_PROGRAMS[email];
+    if (!da) return;
+    setSummaryLoading(true);
+
+    const allSessions = da.weeks.flatMap(w => w.sessions);
+    const sessionData = allSessions.map(s => {
+      const log = logs[s.id];
+      const weekNum = da.weeks.findIndex(w => w.sessions.some(ws => ws.id === s.id)) + 1;
+      return {
+        weekNum,
+        day: s.day,
+        type: s.type,
+        compliance: log?.analysis?.compliance || "pending",
+        rpe: log?.analysis?.rpe || null,
+        paceStatus: log?.analysis?.paceStatus || null,
+        keyInsight: log?.analysis?.keyInsight || null,
+      };
+    });
+
+    const weeklyKm = [3,2,1,0].map((ago, i) => ({
+      label: `Week ${i + 1}`,
+      km: weekKm(activities, email, ago).toFixed(1),
+    }));
+
+    const logged    = sessionData.filter(s => s.compliance !== "pending").length;
+    const completed = sessionData.filter(s => s.compliance === "completed").length;
+    const missed    = sessionData.filter(s => s.compliance === "missed").length;
+    const partial   = sessionData.filter(s => s.compliance === "partial").length;
+
+    const systemPrompt = `You are an expert running coach writing a concise 4-week block review for an athlete. Be specific, encouraging but honest. Respond ONLY with valid JSON, no markdown, no backticks.`;
+
+    const userMsg = `Athlete: ${da.name}
+Goal: ${da.goal} | Current PB: ${da.current}
+
+4-WEEK BLOCK — SESSION COMPLIANCE
+Total: ${logged}/${allSessions.length} logged | Completed: ${completed} | Missed: ${missed} | Partial: ${partial}
+
+Session Breakdown:
+${sessionData.map(s =>
+  `  Wk${s.weekNum} ${s.day} ${s.type}: ${s.compliance}` +
+  (s.paceStatus ? ` | pace ${s.paceStatus}` : "") +
+  (s.rpe        ? ` | RPE ${s.rpe}` : "") +
+  (s.keyInsight ? ` | "${s.keyInsight}"` : "")
+).join("\n")}
+
+Weekly Volume:
+${weeklyKm.map(w => `  ${w.label}: ${w.km}km`).join("\n")}
+
+Return JSON with exactly these keys:
+{
+  "headline": "one punchy sentence summarising the block (max 12 words)",
+  "wins": ["win 1", "win 2"],
+  "watchPoints": ["concern 1"],
+  "nextBlockFocus": "one clear coaching priority for the next 4 weeks",
+  "volumeTrend": "brief 1-sentence description of km progression"
+}`;
+
+    try {
+      const raw = await callClaude(systemPrompt, userMsg);
+      const parsed = JSON.parse(raw);
+      const generatedAt = new Date().toISOString();
+      const blockStart = da.weeks[0]?.weekStart || "";
+      await supabase.from("monthly_summaries").upsert(
+        { athlete_email: email, block_start: blockStart, summary: parsed, generated_at: generatedAt },
+        { onConflict: "athlete_email,block_start" }
+      );
+      setMonthlySummaries(prev => ({
+        ...prev,
+        [email]: { ...parsed, generatedAt },
+      }));
+    } catch (e) {
+      console.error("Summary parse error", e);
+    } finally {
+      setSummaryLoading(false);
+    }
   };
 
   // ── Coach reply ──
@@ -645,6 +741,13 @@ Return JSON:
             ))}
           </div>
 
+          <MonthlySummaryCard
+            summary={monthlySummaries[dashAthlete]}
+            loading={summaryLoading}
+            onGenerate={() => generateMonthlySummary(dashAthlete)}
+            isCoach={true}
+          />
+
           {da.weeks.map((wk,wi) => (
             <div key={wi} style={{ marginBottom:20 }}>
               <div style={{ fontSize:11, letterSpacing:3, color:"#444", textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
@@ -806,6 +909,17 @@ Return JSON:
             <div style={{ margin:"0 16px 16px", background:"#0a1a0a", border:"1px solid #166534", borderRadius:8, padding:"10px 16px", display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:16 }}>🟠</span>
               <div style={{ fontSize:12, color:"#4ade80", fontWeight:600 }}>Strava connected</div>
+            </div>
+          )}
+
+          {/* Monthly block summary (read-only for athlete) */}
+          {monthlySummaries[user.email] && (
+            <div style={{ margin:"0 16px 16px" }}>
+              <MonthlySummaryCard
+                summary={monthlySummaries[user.email]}
+                loading={false}
+                isCoach={false}
+              />
             </div>
           )}
 
@@ -1152,6 +1266,65 @@ function MiniStat({ label, val, color }) {
     <div>
       <div style={{ fontSize:10, color:"#444", letterSpacing:2, textTransform:"uppercase", marginBottom:3 }}>{label}</div>
       <div style={{ fontSize:13, color:color||"#f0ece4", fontWeight:600 }}>{val}</div>
+    </div>
+  );
+}
+
+function MonthlySummaryCard({ summary, loading, onGenerate, isCoach }) {
+  if (loading) return (
+    <div style={{ background:"#161616", border:"1px solid #222", borderRadius:10, padding:"20px 18px", marginBottom:20, textAlign:"center" }}>
+      <div style={{ fontSize:13, color:"#555" }}>Generating block summary...</div>
+    </div>
+  );
+  if (!summary) {
+    if (!isCoach) return null;
+    return (
+      <button onClick={onGenerate}
+        style={{ width:"100%", background:"#161616", border:"1px dashed #333", borderRadius:10, padding:"16px", marginBottom:20, color:"#555", fontSize:12, cursor:"pointer", letterSpacing:1, textTransform:"uppercase" }}>
+        + Generate 4-Week Block Summary
+      </button>
+    );
+  }
+  return (
+    <div style={{ background:"#161616", border:"1px solid #222", borderLeft:"3px solid #E06666", borderRadius:10, padding:"18px", marginBottom:20 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+        <div style={{ fontSize:10, letterSpacing:3, color:"#E06666", textTransform:"uppercase" }}>4-Week Block Summary</div>
+        {isCoach && (
+          <button onClick={onGenerate}
+            style={{ background:"none", border:"none", color:"#444", fontSize:11, cursor:"pointer", padding:0 }}>
+            Regenerate
+          </button>
+        )}
+      </div>
+      <div style={{ fontSize:15, fontWeight:700, color:"#f0ece4", marginBottom:14, lineHeight:1.4 }}>{summary.headline}</div>
+
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontSize:10, letterSpacing:2, color:"#444", textTransform:"uppercase", marginBottom:6 }}>Wins</div>
+        {summary.wins?.map((w, i) => (
+          <div key={i} style={{ fontSize:12, color:"#4ade80", marginBottom:4 }}>✓ {w}</div>
+        ))}
+      </div>
+
+      {summary.watchPoints?.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:10, letterSpacing:2, color:"#444", textTransform:"uppercase", marginBottom:6 }}>Watch</div>
+          {summary.watchPoints.map((w, i) => (
+            <div key={i} style={{ fontSize:12, color:"#fbbf24", marginBottom:4 }}>⚠ {w}</div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ borderTop:"1px solid #1e1e1e", paddingTop:12, marginTop:4 }}>
+        <div style={{ fontSize:10, letterSpacing:2, color:"#444", textTransform:"uppercase", marginBottom:4 }}>Next Block Focus</div>
+        <div style={{ fontSize:13, color:"#f0ece4", lineHeight:1.5 }}>{summary.nextBlockFocus}</div>
+      </div>
+
+      <div style={{ marginTop:10, fontSize:11, color:"#555", fontStyle:"italic" }}>{summary.volumeTrend}</div>
+      {summary.generatedAt && (
+        <div style={{ marginTop:8, fontSize:10, color:"#333" }}>
+          Generated {new Date(summary.generatedAt).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}
+        </div>
+      )}
     </div>
   );
 }
