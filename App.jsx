@@ -412,19 +412,29 @@ export default function App() {
 
   const saveLog = async (sessionId, updates) => {
     const existing = logs[sessionId];
-    const payload = {
-      session_id: sessionId,
-      athlete_email: user.email?.toLowerCase(),
-      athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
-      ...existing,
-      ...updates,
-      updated_at: new Date().toISOString(),
-    };
-    const { data, error } = await supabase
-      .from("session_logs")
-      .upsert(payload, { onConflict: "session_id" })
-      .select()
-      .single();
+    let data, error;
+    if (existing?.id) {
+      // Row exists — update only the changed fields
+      ({ data, error } = await supabase
+        .from("session_logs")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", existing.id)
+        .select()
+        .single());
+    } else {
+      // No row yet — insert (upsert in case of race condition)
+      ({ data, error } = await supabase
+        .from("session_logs")
+        .upsert({
+          session_id: sessionId,
+          athlete_email: user.email?.toLowerCase(),
+          athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
+          ...updates,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "session_id" })
+        .select()
+        .single());
+    }
     if (!error && data) {
       setLogs(prev => ({ ...prev, [sessionId]: data }));
     }
