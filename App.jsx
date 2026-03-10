@@ -185,6 +185,15 @@ function weekKm(activities, email, weeksAgo = 0) {
     .reduce((sum, a) => sum + parseFloat(a.distance_km || 0), 0);
 }
 
+// ─── SESSION DATE HELPER ──────────────────────────────────────────────────────
+function sessionDateStr(weekStart, dayAbbrev) {
+  const DAY_OFFSET = { Mon:0, Tue:1, Wed:2, Thu:3, Fri:4, Sat:5, Sun:6 };
+  const offset = DAY_OFFSET[dayAbbrev.slice(0, 3)] ?? 0;
+  const d = new Date(weekStart + "T00:00:00");
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().split("T")[0];
+}
+
 // ─── STRAVA HELPERS ───────────────────────────────────────────────────────────
 function formatTime(seconds) {
   const h = Math.floor(seconds / 3600);
@@ -365,6 +374,29 @@ export default function App() {
     const { data, error } = await supabase.from("activities").insert(payload).select().single();
     if (!error && data) {
       setActivities(prev => [data, ...prev]);
+      // Auto-link to matching scheduled session for this date
+      if (programEntry) {
+        const allSessionsWithDate = programEntry.weeks.flatMap(w =>
+          w.sessions.map(s => ({ ...s, weekStart: w.weekStart }))
+        );
+        const matchedSession = allSessionsWithDate.find(
+          s => sessionDateStr(s.weekStart, s.day) === form.date
+        );
+        if (matchedSession && !logs[matchedSession.id]) {
+          const TAG_EMOJI = { speed:"⚡", tempo:"🎯", easy:"🏃" };
+          const autoAnalysis = {
+            compliance: "completed",
+            emoji: TAG_EMOJI[matchedSession.tag] || "🏃",
+            keyInsight: `${form.distanceKm}km logged`,
+            coachNote: `Run logged: ${form.distanceKm}km${form.durationMin ? ` in ${form.durationMin}min` : ""}. Add session notes for full AI coaching feedback.`,
+            paceStatus: "unknown",
+            feelStatus: "unknown",
+            rpe: null,
+            autoLogged: true,
+          };
+          await saveLog(matchedSession.id, { analysis: autoAnalysis });
+        }
+      }
       setLogForm({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
       setScreen("home");
     }
@@ -620,9 +652,17 @@ Return JSON with exactly these keys:
 
   // ── Compliance stats ──
   const getStats = (email) => {
-    const sessions = (ATHLETE_PROGRAMS[email]?.weeks || []).flatMap(w => w.sessions);
-    const total  = sessions.length;
-    const done   = sessions.filter(s => logs[s.id]?.analysis?.compliance === "completed").length;
+    const program = ATHLETE_PROGRAMS[email];
+    const sessions = (program?.weeks || []).flatMap(w =>
+      w.sessions.map(s => ({ ...s, sessionDate: sessionDateStr(w.weekStart, s.day) }))
+    );
+    const total = sessions.length;
+    const athActDates = new Set(
+      activities.filter(a => a.athlete_email === email?.toLowerCase()).map(a => a.activity_date)
+    );
+    const done   = sessions.filter(s =>
+      logs[s.id]?.analysis?.compliance === "completed" || athActDates.has(s.sessionDate)
+    ).length;
     const missed = sessions.filter(s => logs[s.id]?.analysis?.compliance === "missed").length;
     const rate   = total ? Math.round((done/total)*100) : 0;
     return { total, done, missed, rate };
@@ -810,12 +850,17 @@ Return JSON with exactly these keys:
             isCoach={true}
           />
 
-          {da.weeks.map((wk,wi) => (
-            <div key={wi} style={{ marginBottom:20 }}>
-              <div style={{ fontSize:11, letterSpacing:3, color:"#444", textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
-              {wk.sessions.map(s => {
+          {(() => {
+            const athActDates = new Set(
+              activities.filter(a => a.athlete_email === dashAthlete?.toLowerCase()).map(a => a.activity_date)
+            );
+            return da.weeks.map((wk,wi) => (
+              <div key={wi} style={{ marginBottom:20 }}>
+                <div style={{ fontSize:11, letterSpacing:3, color:"#444", textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
+                {wk.sessions.map(s => {
                 const log    = logs[s.id];
-                const comply = log?.analysis?.compliance || "pending";
+                const sDate  = sessionDateStr(wk.weekStart, s.day);
+                const comply = log?.analysis?.compliance || (athActDates.has(sDate) ? "completed" : "pending");
                 return (
                   <div key={s.id}
                     onClick={()=>{ setActiveSession({...s, athleteEmail: dashAthlete}); setCoachScreen("session"); }}
@@ -836,7 +881,8 @@ Return JSON with exactly these keys:
                 );
               })}
             </div>
-          ))}
+          ));
+          })()}
         </div>
       </div>
     );
@@ -918,6 +964,10 @@ Return JSON with exactly these keys:
     const weekBars = [3,2,1,0].map(ago => ({ km: weekKm(activities, user.email, ago), weeksAgo: ago }));
     const maxBarKm = Math.max(...weekBars.map(b => b.km), 1);
     const thisWeekKm = weekBars[3].km;
+    const actByDate = {};
+    activities.filter(a => a.athlete_email === user.email?.toLowerCase()).forEach(a => {
+      if (!actByDate[a.activity_date]) actByDate[a.activity_date] = a;
+    });
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -1007,20 +1057,25 @@ Return JSON with exactly these keys:
             {week?.sessions.map(s => {
               const log = logs[s.id];
               const ts  = TAG_STYLE[s.tag];
+              const sDate = week ? sessionDateStr(week.weekStart, s.day) : null;
+              const linkedAct = sDate ? actByDate[sDate] : null;
+              const isLogged = !!log || !!linkedAct;
+              const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
               return (
                 <div key={s.id}
-                  onClick={()=>{ setActiveSession(s); setFeedbackText(""); setScreen(log?"result":"session"); }}
-                  style={{ background:log?"#0d1f0d":"#161616", border:`1px solid ${log?"#166534":"#1e1e1e"}`, borderRadius:12, padding:"16px 18px", marginBottom:10, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
+                  onClick={()=>{ setActiveSession(s); setFeedbackText(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
+                  style={{ background:isLogged?"#0d1f0d":"#161616", border:`1px solid ${isLogged?"#166534":"#1e1e1e"}`, borderRadius:12, padding:"16px 18px", marginBottom:10, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
                   <div style={{ width:42, height:42, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>
                     {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
                   </div>
                   <div style={{ flex:1 }}>
                     <div style={{ display:"flex", justifyContent:"space-between" }}>
                       <div style={{ fontSize:12, color:"#555" }}>{s.day}</div>
-                      {log && <div style={{ fontSize:11, color:"#4ade80" }}>✓ LOGGED</div>}
+                      {isLogged && <div style={{ fontSize:11, color:"#4ade80" }}>✓ LOGGED</div>}
                     </div>
                     <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
                     <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
+                    {linkedAct && <div style={{ fontSize:11, color:"#888", marginTop:3 }}>{linkedAct.distance_km}km{linkedAct.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : ""}</div>}
                     {log?.coach_reply && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 Coach replied</div>}
                   </div>
                   <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
@@ -1215,9 +1270,11 @@ Return JSON with exactly these keys:
               <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{log.coach_reply}</div>
             </SectionCard>
           )}
-          <SectionCard label="Your Feedback">
-            <div style={{ fontSize:13, color:"#555", lineHeight:1.7, fontStyle:"italic" }}>"{log?.feedback}"</div>
-          </SectionCard>
+          {log?.feedback ? (
+            <SectionCard label="Your Feedback">
+              <div style={{ fontSize:13, color:"#555", lineHeight:1.7, fontStyle:"italic" }}>"{log.feedback}"</div>
+            </SectionCard>
+          ) : null}
           <button onClick={()=>setScreen("home")} style={S.ghostBtn}>← Back to week</button>
         </div>
       </div>
