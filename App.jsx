@@ -861,45 +861,64 @@ Return JSON with exactly these keys:
           />
 
           {(() => {
-            const athActDates = new Set(
-              activities.filter(a => a.athlete_email === dashAthlete?.toLowerCase()).map(a => a.activity_date)
-            );
-            return da.weeks.map((wk,wi) => (
-              <div key={wi} style={{ marginBottom:20 }}>
-                <div style={{ fontSize:11, letterSpacing:3, color:"#444", textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
-                {wk.sessions.map(s => {
-                const log    = logs[s.id];
-                const sDate  = sessionDateStr(wk.weekStart, s.day);
-                const comply = log?.analysis?.compliance || (athActDates.has(sDate) ? "completed" : "pending");
-                return (
-                  <div key={s.id}
-                    onClick={()=>{
-                      const sess = {...s, weekStart: wk.weekStart, athleteEmail: dashAthlete};
-                      setActiveSession(sess);
-                      setCoachScreen("session");
-                      // Refresh this session's log fresh from DB in case athlete logged after coach loaded
-                      supabase.from("session_logs").select("*").eq("session_id", s.id).single().then(({ data }) => {
-                        if (data) setLogs(prev => ({ ...prev, [s.id]: data }));
-                      });
-                    }}
-                    style={{ ...S.card, marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:12 }}>
-                    <div style={{ fontSize:22 }}>{log?.analysis?.emoji || "⏳"}</div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                        <div style={{ fontWeight:700, fontSize:14 }}>{s.day} · {s.type}</div>
-                        <div style={{ fontSize:11, color: COMPLY_COLOR[comply], fontWeight:700 }}>{COMPLY_LABEL[comply]}</div>
+            const athActs    = activities.filter(a => a.athlete_email === dashAthlete?.toLowerCase());
+            const athActDates = new Set(athActs.map(a => a.activity_date));
+            return da.weeks.map((wk,wi) => {
+              // Find extra runs: activities in this week range that don't match a scheduled session date
+              const scheduledDates = new Set(wk.sessions.map(s => sessionDateStr(wk.weekStart, s.day)));
+              const wkEnd = (() => { const d = new Date(wk.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return d.toISOString().split("T")[0]; })();
+              const extraActs = athActs.filter(a => a.activity_date >= wk.weekStart && a.activity_date <= wkEnd && !scheduledDates.has(a.activity_date));
+              return (
+                <div key={wi} style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:11, letterSpacing:3, color:"#444", textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
+                  {wk.sessions.map(s => {
+                    const log    = logs[s.id];
+                    const sDate  = sessionDateStr(wk.weekStart, s.day);
+                    const comply = log?.analysis?.compliance || (athActDates.has(sDate) ? "completed" : "pending");
+                    return (
+                      <div key={s.id}
+                        onClick={()=>{
+                          const sess = {...s, weekStart: wk.weekStart, athleteEmail: dashAthlete};
+                          setActiveSession(sess);
+                          setCoachScreen("session");
+                          supabase.from("session_logs").select("*").eq("session_id", s.id).single().then(({ data }) => {
+                            if (data) setLogs(prev => ({ ...prev, [s.id]: data }));
+                          });
+                        }}
+                        style={{ ...S.card, marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:12 }}>
+                        <div style={{ fontSize:22 }}>{log?.analysis?.emoji || "⏳"}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                            <div style={{ fontWeight:700, fontSize:14 }}>{s.day} · {s.type}</div>
+                            <div style={{ fontSize:11, color: COMPLY_COLOR[comply], fontWeight:700 }}>{COMPLY_LABEL[comply]}</div>
+                          </div>
+                          {log?.analysis?.distance_km && (
+                            <div style={{ fontSize:12, color:"#666", marginTop:3 }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>
+                          )}
+                          {log?.coach_reply && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 You replied</div>}
+                        </div>
+                        <div style={{ color:"#333" }}>›</div>
                       </div>
-                      {log?.analysis?.distance_km && (
-                        <div style={{ fontSize:12, color:"#666", marginTop:3 }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>
-                      )}
-                      {log?.coach_reply && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 You replied</div>}
+                    );
+                  })}
+                  {extraActs.map(act => (
+                    <div key={act.id} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, borderColor:"#2a2a2a", opacity:0.85 }}>
+                      <div style={{ fontSize:22 }}>➕</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                          <div style={{ fontWeight:700, fontSize:14 }}>{act.activity_date.slice(5).replace("-"," ")} · Extra Run</div>
+                          <div style={{ fontSize:11, color:"#888", fontWeight:700 }}>EXTRA</div>
+                        </div>
+                        <div style={{ fontSize:12, color:"#666", marginTop:3 }}>
+                          {act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}
+                          {act.notes ? ` — ${act.notes}` : ""}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ color:"#333" }}>›</div>
-                  </div>
-                );
-              })}
-            </div>
-          ));
+                  ))}
+                </div>
+              );
+            });
           })()}
         </div>
       </div>
