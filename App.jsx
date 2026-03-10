@@ -99,6 +99,55 @@ const ATHLETE_PROGRAMS = {
       },
     ]
   },
+  "jeremy@muchogroup.com.au": {
+    name: "Jeremy Blackmore", goal: "1:23 HM / 3:00 M", current: "1:24 HM / 3:09 M", avatar: "JB",
+    weeks: [
+      {
+        weekLabel: "Week 1 · 16–22 Mar", weekStart: "2026-03-16",
+        sessions: [
+          { id:"jb-s1", day:"Mon 16", type:"RECOVERY", tag:"easy",  desc:"4km Easy w/ Son\n+ 20min Easy Extension (~4km)\nTotal ~8km Recovery",                               pace:"5:10–5:20 /km",        terrain:"FLAT/ROAD" },
+          { id:"jb-s2", day:"Tue 17", type:"SPEED",    tag:"speed", desc:"WU 15min (~3km)\n5 × 800m @ 3:50–3:55 /km\n90sec standing rest\nCD 15min (~3km)\nTotal ~10km",      pace:"3:50–3:55 /km",        terrain:"TRACK OR ROAD" },
+          { id:"jb-s3", day:"Wed 18", type:"EASY",     tag:"easy",  desc:"50min Easy Run\n(4:50–5:10 /km)\n~10km\nStrength: Weights",                                         pace:"4:50–5:10 /km",        terrain:"FLAT/ROAD" },
+          { id:"jb-s4", day:"Thu 19", type:"TEMPO",    tag:"tempo", desc:"WU 15min (~3km)\n3 × 10min @ MP (4:10 /km)\n2min jog recovery\nCD 15min (~3km)\nTotal ~16km",       pace:"MP: 4:10 /km",         terrain:"ROAD" },
+          { id:"jb-s5", day:"Fri 20", type:"EASY",     tag:"easy",  desc:"45min Easy (~9km)\n6 × 15sec Strides\n30sec rest\nStrength: Mobility",                              pace:"Easy: 4:50–5:10 /km",  terrain:"FLAT" },
+          { id:"jb-s6", day:"Sat 21", type:"LONG RUN", tag:"easy",  desc:"75min Easy\n(4:50–5:05 /km)\n~15km",                                                                pace:"4:50–5:05 /km",        terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 2 · 23–29 Mar", weekStart: "2026-03-23",
+        sessions: [
+          { id:"jb-s7",  day:"Mon 23", type:"RECOVERY", tag:"easy",  desc:"4km Easy w/ Son\n+ 25min Easy Extension (~5km)\nTotal ~9km — Recovery",                                  pace:"5:10–5:20 /km",       terrain:"FLAT/ROAD" },
+          { id:"jb-s8",  day:"Tue 24", type:"SPEED",    tag:"speed", desc:"WU 15min (~3km)\n25min @ 4:10 /km, 6% incline\n(Aerobic strength ~6km)\nCD 15min (~3km)\nTotal ~12km",   pace:"4:10 /km @ 6% incline", terrain:"TREADMILL" },
+          { id:"jb-s9",  day:"Wed 25", type:"EASY",     tag:"easy",  desc:"55min Easy Run\n(4:50–5:10 /km)\n~11km\nStrength: Weights",                                               pace:"4:50–5:10 /km",       terrain:"FLAT/ROAD" },
+          { id:"jb-s10", day:"Thu 26", type:"TEMPO",    tag:"tempo", desc:"WU 15min (~3km)\n4 × 8min @ HMP (3:55–4:00 /km)\n90sec jog recovery\nCD 15min (~3km)\nTotal ~15km",      pace:"HMP: 3:55–4:00 /km",  terrain:"FLAT/ROAD" },
+          { id:"jb-s11", day:"Fri 27", type:"EASY",     tag:"easy",  desc:"45min Easy (~9km)\n6 × 15sec Strides\n30sec rest\nStrength: Mobility",                                    pace:"Easy: 4:50–5:10 /km", terrain:"FLAT" },
+          { id:"jb-s12", day:"Sat 28", type:"LONG RUN", tag:"tempo", desc:"70min Easy (4:50–5:05 /km) ~14km\nFinal 10min @ 4:20 /km",                                               pace:"Easy → 4:20 /km",     terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 3 · 30 Mar–5 Apr", weekStart: "2026-03-30",
+        sessions: [
+          { id:"jb-s13", day:"Mon 30", type:"RECOVERY", tag:"easy",  desc:"4km Easy w/ Son\n+ 25min Easy Extension (~5km)\nTotal ~9km — Recovery",                               pace:"5:10–5:20 /km",      terrain:"FLAT/ROAD" },
+          { id:"jb-s14", day:"Tue 31", type:"SPEED",    tag:"speed", desc:"WU 15min (~3km)\n6 × 1km @ 3:50 /km (10k Pace)\n2min standing rest\nCD 15min (~3km)\nTotal ~12km",    pace:"10k: 3:50 /km",      terrain:"TRACK OR ROAD" },
+          { id:"jb-s15", day:"Wed 01", type:"EASY",     tag:"easy",  desc:"55min Easy Run\n(4:50–5:05 /km)\n~11km\nStrength: Weights",                                           pace:"4:50–5:05 /km",      terrain:"FLAT/ROAD" },
+          { id:"jb-s16", day:"Thu 02", type:"TEMPO",    tag:"tempo", desc:"WU 15min (~3km)\n5km @ HMP (3:55–4:00 /km)\n3min jog\n5km @ HMP\nCD 15min (~3km)\nTotal ~18km",      pace:"HMP: 3:55–4:00 /km", terrain:"FLAT/ROAD" },
+          { id:"jb-s17", day:"Fri 03", type:"EASY",     tag:"easy",  desc:"50min Easy (~10km)\n6 × 20sec Strides\n40sec rest\nStrength: Mobility",                               pace:"Easy: 4:50–5:10 /km", terrain:"FLAT" },
+          { id:"jb-s18", day:"Sat 04", type:"LONG RUN", tag:"easy",  desc:"85min Easy\n(4:50–5:05 /km)\n~17km",                                                                  pace:"4:50–5:05 /km",      terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 4 · Deload · 6–12 Apr", weekStart: "2026-04-06",
+        sessions: [
+          { id:"jb-s19", day:"Mon 06", type:"RECOVERY", tag:"easy",  desc:"4km Easy w/ Son\n+ 20min Easy Extension (~4km)\nTotal ~8km — Recovery",                                   pace:"5:10–5:20 /km",          terrain:"FLAT/ROAD" },
+          { id:"jb-s20", day:"Tue 07", type:"SPEED",    tag:"speed", desc:"WU 15min (~3km)\n8 × 3min @ 4:00 /km, 5–7% incline\n90sec standing rest\nCD 15min (~3km)\nTotal ~10km",  pace:"4:00 /km @ 5–7% incline", terrain:"TREADMILL" },
+          { id:"jb-s21", day:"Wed 08", type:"EASY",     tag:"easy",  desc:"45min Easy Run\n(5:00–5:10 /km)\n~9km\nStrength: Weights (lighter)",                                      pace:"5:00–5:10 /km",          terrain:"FLAT/ROAD" },
+          { id:"jb-s22", day:"Thu 09", type:"TEMPO",    tag:"tempo", desc:"WU 15min (~3km)\n3 × 2km @ HMP (3:55–4:00 /km)\n2min jog recovery\nCD 15min (~3km)\nTotal ~12km",        pace:"HMP: 3:55–4:00 /km",     terrain:"FLAT/ROAD" },
+          { id:"jb-s23", day:"Fri 10", type:"EASY",     tag:"easy",  desc:"40min Easy (~8km)\n4 × 15sec Strides\n30sec rest\nStrength: Mobility",                                    pace:"Easy: 4:55–5:10 /km",    terrain:"FLAT" },
+          { id:"jb-s24", day:"Sat 11", type:"LONG RUN", tag:"easy",  desc:"60min Easy\n(4:55–5:10 /km)\n~12km",                                                                      pace:"4:55–5:10 /km",          terrain:"FLAT/ROAD" },
+        ]
+      },
+    ]
+  },
   // Add more athletes here by email
 };
 
@@ -219,11 +268,24 @@ export default function App() {
   const resolveUser = async (u) => {
     const email = u.email?.toLowerCase();
     setUser(u);
-    const { data: profileData } = await supabase
+    let { data: profileData } = await supabase
       .from("profiles")
       .select("*")
       .eq("email", email)
       .maybeSingle();
+    if (!profileData) {
+      const prog = ATHLETE_PROGRAMS[email];
+      const newProfile = {
+        email,
+        role: "athlete",
+        name: prog?.name || u.user_metadata?.full_name || email,
+        avatar: prog?.avatar || (u.user_metadata?.full_name || email).slice(0,2).toUpperCase(),
+        goal: prog?.goal || null,
+        current_pb: prog?.current || null,
+      };
+      const { data: created } = await supabase.from("profiles").insert(newProfile).select().maybeSingle();
+      profileData = created || newProfile;
+    }
     setProfile(profileData);
     setRole(profileData?.role || "athlete");
     setAuthLoading(false);
