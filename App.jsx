@@ -521,7 +521,7 @@ export default function App() {
 
   // ── AI analysis ──
   const handleSubmitFeedback = async () => {
-    if (!feedbackText.trim() || !sessionDistKm || !activeSession) return;
+    if (!sessionDistKm || !activeSession) return;
     setAiLoading(true);
     const s = activeSession;
     try {
@@ -863,7 +863,15 @@ Return JSON with exactly these keys:
                 const comply = log?.analysis?.compliance || (athActDates.has(sDate) ? "completed" : "pending");
                 return (
                   <div key={s.id}
-                    onClick={()=>{ setActiveSession({...s, weekStart: wk.weekStart, athleteEmail: dashAthlete}); setCoachScreen("session"); }}
+                    onClick={()=>{
+                      const sess = {...s, weekStart: wk.weekStart, athleteEmail: dashAthlete};
+                      setActiveSession(sess);
+                      setCoachScreen("session");
+                      // Refresh this session's log fresh from DB in case athlete logged after coach loaded
+                      supabase.from("session_logs").select("*").eq("session_id", s.id).single().then(({ data }) => {
+                        if (data) setLogs(prev => ({ ...prev, [s.id]: data }));
+                      });
+                    }}
                     style={{ ...S.card, marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:12 }}>
                     <div style={{ fontSize:22 }}>{log?.analysis?.emoji || "⏳"}</div>
                     <div style={{ flex:1 }}>
@@ -1253,7 +1261,7 @@ Return JSON with exactly these keys:
         )}
 
         <button onClick={handleSubmitFeedback}
-          disabled={!feedbackText.trim()||!sessionDistKm||aiLoading}
+          disabled={!sessionDistKm||aiLoading}
           style={S.primaryBtn("#E06666", !feedbackText.trim()||!sessionDistKm||aiLoading)}>
           {aiLoading ? "Saving..." : "Save Session →"}
         </button>
