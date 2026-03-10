@@ -117,6 +117,31 @@ const TAG_STYLE = {
 const COMPLY_COLOR = { completed:"#4ade80", missed:"#f87171", partial:"#fbbf24", pending:"#555" };
 const COMPLY_LABEL = { completed:"✓ Done", missed:"✗ Missed", partial:"~ Partial", pending:"Pending" };
 
+// ─── WEEK HELPERS ─────────────────────────────────────────────────────────────
+function getWeekBounds(weeksAgo = 0) {
+  const now = new Date();
+  const day = now.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + mondayOffset - weeksAgo * 7);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return { monday, sunday };
+}
+
+function weekKm(activities, email, weeksAgo = 0) {
+  const { monday, sunday } = getWeekBounds(weeksAgo);
+  return activities
+    .filter(a => {
+      if (email && a.athlete_email !== email) return false;
+      const d = new Date(a.activity_date);
+      return d >= monday && d <= sunday;
+    })
+    .reduce((sum, a) => sum + parseFloat(a.distance_km || 0), 0);
+}
+
 // ─── STRAVA HELPERS ───────────────────────────────────────────────────────────
 function formatTime(seconds) {
   const h = Math.floor(seconds / 3600);
@@ -176,6 +201,11 @@ export default function App() {
   const [selectedStrava,        setSelectedStrava]        = useState(null);
   const [showActivityPicker,    setShowActivityPicker]    = useState(false);
 
+  // Activities (manual logging + future Strava sync)
+  const [activities,  setActivities]  = useState([]);
+  const [logForm,     setLogForm]     = useState({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
+  const [logSaving,   setLogSaving]   = useState(false);
+
   // ── Auth: listen for session changes ──
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -211,6 +241,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     loadLogs();
+    loadActivities();
     const pendingCode = sessionStorage.getItem("strava_pending_code");
     if (pendingCode) {
       sessionStorage.removeItem("strava_pending_code");
@@ -231,6 +262,36 @@ export default function App() {
       setLogs(map);
     }
     setLogsLoading(false);
+  };
+
+  const loadActivities = async () => {
+    const { data, error } = await supabase
+      .from("activities")
+      .select("*")
+      .order("activity_date", { ascending: false });
+    if (!error && data) setActivities(data);
+  };
+
+  const saveActivity = async (form) => {
+    setLogSaving(true);
+    const payload = {
+      athlete_email: user.email,
+      athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
+      activity_date: form.date,
+      distance_km: parseFloat(form.distanceKm),
+      duration_seconds: form.durationMin ? Math.round(parseFloat(form.durationMin) * 60) : null,
+      activity_type: form.type,
+      notes: form.notes || null,
+      source: "manual",
+    };
+    const { data, error } = await supabase.from("activities").insert(payload).select().single();
+    if (!error && data) {
+      setActivities(prev => [data, ...prev]);
+      setLogForm({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
+      setScreen("home");
+    }
+    setLogSaving(false);
+    return !error;
   };
 
   const saveLog = async (sessionId, updates) => {
@@ -265,7 +326,7 @@ export default function App() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setUser(null); setRole(null); setLogs({});
+    setUser(null); setRole(null); setLogs({}); setActivities([]);
     setStravaConnected(false); setStravaActivities([]); setSelectedStrava(null);
   };
 
@@ -503,6 +564,7 @@ Return JSON:
           {athletes.map(([email, data]) => {
             const st = getStats(email);
             const recentSessions = data.weeks.flatMap(w=>w.sessions).filter(s=>logs[s.id]).slice(-3);
+            const thisWeekKm = weekKm(activities, email, 0);
             return (
               <div key={email} onClick={()=>{ setDashAthlete(email); setCoachScreen("athlete"); }}
                 style={{ ...S.card, marginBottom:12, cursor:"pointer" }}>
@@ -513,6 +575,10 @@ Return JSON:
                   <div style={{ flex:1 }}>
                     <div style={{ fontWeight:700, fontSize:16 }}>{data.name}</div>
                     <div style={{ fontSize:12, color:"#555", marginTop:2 }}>Goal: {data.goal} · PB: {data.current}</div>
+                  </div>
+                  <div style={{ textAlign:"right" }}>
+                    <div style={{ fontSize:16, fontWeight:900, color:"#f0ece4" }}>{thisWeekKm.toFixed(1)}</div>
+                    <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase" }}>km/wk</div>
                   </div>
                   <div style={{ color:"#333", fontSize:20 }}>›</div>
                 </div>
@@ -547,6 +613,7 @@ Return JSON:
   if (role === "coach" && coachScreen === "athlete" && dashAthlete) {
     const da  = ATHLETE_PROGRAMS[dashAthlete];
     const st  = getStats(dashAthlete);
+    const athWeekKm = weekKm(activities, dashAthlete, 0);
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -559,6 +626,7 @@ Return JSON:
               { label:"Compliance", val:`${st.rate}%`, color: st.rate>75?"#4ade80":st.rate>40?"#fbbf24":"#f87171" },
               { label:"Completed",  val: st.done,   color:"#4ade80" },
               { label:"Missed",     val: st.missed,  color: st.missed>0?"#f87171":"#888" },
+              { label:"Km This Wk", val:`${athWeekKm.toFixed(1)}`, color:"#f0ece4" },
             ].map((s,i)=>(
               <div key={i} style={S.statBox}>
                 <div style={{ fontSize:24, fontWeight:900, color:s.color||"#f0ece4" }}>{s.val}</div>
@@ -672,6 +740,9 @@ Return JSON:
   // ────────────────────────────────────────────────────────────
   if (role === "athlete" && screen === "home") {
     const week = weeks[activeWeekIdx];
+    const weekBars = [3,2,1,0].map(ago => ({ km: weekKm(activities, user.email, ago), weeksAgo: ago }));
+    const maxBarKm = Math.max(...weekBars.map(b => b.km), 1);
+    const thisWeekKm = weekBars[3].km;
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -686,6 +757,38 @@ Return JSON:
             <div style={{ fontSize:10, letterSpacing:3, color:"#E06666", textTransform:"uppercase", marginBottom:4 }}>Season Goal</div>
             <div style={{ fontSize:18, fontWeight:900 }}>{athleteData.goal}</div>
             <div style={{ fontSize:12, color:"#555", marginTop:3 }}>Current PB: {athleteData.current}</div>
+          </div>
+
+          {/* Weekly Progress */}
+          <div style={{ margin:"0 16px 16px", background:"#161616", border:"1px solid #1e1e1e", borderRadius:8, padding:"14px 18px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+              <div>
+                <div style={{ fontSize:10, letterSpacing:3, color:"#555", textTransform:"uppercase", marginBottom:4 }}>This Week</div>
+                <div style={{ fontSize:26, fontWeight:900, color:"#f0ece4" }}>{thisWeekKm.toFixed(1)} <span style={{ fontSize:14, color:"#555", fontWeight:400 }}>km</span></div>
+              </div>
+              <button onClick={()=>{ setLogForm({ date: new Date().toISOString().split("T")[0], distanceKm:"", durationMin:"", type:"Run", notes:"" }); setScreen("log-activity"); }}
+                style={{ background:"#E06666", border:"none", borderRadius:8, padding:"8px 14px", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", letterSpacing:1 }}>
+                + LOG RUN
+              </button>
+            </div>
+            <div style={{ display:"flex", gap:4, alignItems:"flex-end", height:48 }}>
+              {weekBars.map((b, i) => {
+                const pct = maxBarKm > 0 ? (b.km / maxBarKm) : 0;
+                const isCurrent = b.weeksAgo === 0;
+                return (
+                  <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+                    <div style={{ fontSize:9, color:isCurrent?"#f0ece4":"#444" }}>{b.km > 0 ? b.km.toFixed(0) : ""}</div>
+                    <div style={{ width:"100%", height:32, display:"flex", alignItems:"flex-end" }}>
+                      <div style={{ width:"100%", height:`${Math.max(pct*100,4)}%`, background:isCurrent?"#E06666":"#2a2a2a", borderRadius:"3px 3px 0 0", transition:"height 0.4s" }}/>
+                    </div>
+                    <div style={{ fontSize:8, color:"#444", letterSpacing:1 }}>{["W-3","W-2","W-1","NOW"][i]}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {activities.filter(a=>a.athlete_email===user.email).length===0 && (
+              <div style={{ marginTop:10, fontSize:11, color:"#444", textAlign:"center" }}>Log your first run to start tracking km</div>
+            )}
           </div>
 
           {/* Strava connect banner */}
@@ -739,6 +842,77 @@ Return JSON:
               );
             })}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  ATHLETE — LOG ACTIVITY
+  // ────────────────────────────────────────────────────────────
+  if (role === "athlete" && screen === "log-activity") {
+    const activityTypes = ["Run","Long Run","Easy Run","Tempo","Speed","Trail Run","Race","Strength","Cross-train","Other"];
+    const canSubmit = logForm.distanceKm && parseFloat(logForm.distanceKm) > 0 && logForm.date;
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title="Log Activity" subtitle="Manual Entry" onBack={()=>setScreen("home")}/>
+        <div style={{ maxWidth:500, margin:"0 auto", padding:"20px 16px 80px" }}>
+          <SectionCard label="Activity Details">
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Date</div>
+              <input
+                type="date"
+                value={logForm.date}
+                onChange={e=>setLogForm(f=>({...f, date:e.target.value}))}
+                style={{ ...S.input }}
+              />
+            </div>
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Activity Type</div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {activityTypes.map(t=>(
+                  <button key={t} onClick={()=>setLogForm(f=>({...f, type:t}))}
+                    style={{ background:logForm.type===t?"#E06666":"#1a1a1a", border:`1px solid ${logForm.type===t?"#E06666":"#2a2a2a"}`, borderRadius:20, padding:"5px 12px", color:logForm.type===t?"white":"#888", fontSize:12, cursor:"pointer" }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:12, marginBottom:14 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
+                <input
+                  type="number" step="0.01" min="0" placeholder="e.g. 10.5"
+                  value={logForm.distanceKm}
+                  onChange={e=>setLogForm(f=>({...f, distanceKm:e.target.value}))}
+                  style={{ ...S.input }}
+                />
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
+                <input
+                  type="number" step="1" min="0" placeholder="e.g. 55"
+                  value={logForm.durationMin}
+                  onChange={e=>setLogForm(f=>({...f, durationMin:e.target.value}))}
+                  style={{ ...S.input }}
+                />
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Notes (optional)</div>
+              <textarea
+                placeholder="How did it feel? Any highlights?"
+                value={logForm.notes}
+                onChange={e=>setLogForm(f=>({...f, notes:e.target.value}))}
+                style={{ ...S.textarea, minHeight:80 }}
+              />
+            </div>
+          </SectionCard>
+          <button onClick={()=>saveActivity(logForm)} disabled={!canSubmit||logSaving}
+            style={S.primaryBtn("#E06666", !canSubmit||logSaving)}>
+            {logSaving ? "Saving..." : "Save Activity →"}
+          </button>
         </div>
       </div>
     );
@@ -1035,6 +1209,7 @@ const S = {
   card:       { background:"#161616", border:"1px solid #1a1a1a", borderRadius:12, padding:"16px 18px" },
   statBox:    { flex:1, background:"#161616", border:"1px solid #1a1a1a", borderRadius:10, padding:"14px 10px", textAlign:"center" },
   textarea:   { width:"100%", background:"#161616", border:"1px solid #222", borderRadius:12, padding:"16px", color:"#f0ece4", fontSize:15, lineHeight:1.7, resize:"none", minHeight:130, boxSizing:"border-box", fontFamily:"Georgia,serif", outline:"none", marginBottom:14, display:"block" },
+  input:      { width:"100%", background:"#161616", border:"1px solid #222", borderRadius:10, padding:"12px 14px", color:"#f0ece4", fontSize:15, boxSizing:"border-box", fontFamily:"Georgia,serif", outline:"none", display:"block", colorScheme:"dark" },
   primaryBtn: (c, dis) => ({ width:"100%", background:dis?"#1a1a1a":c, color:dis?"#333":"white", border:"none", borderRadius:12, padding:"17px", fontSize:15, fontWeight:700, cursor:dis?"not-allowed":"pointer", letterSpacing:1, display:"block" }),
   ghostBtn:   { width:"100%", background:"#161616", border:"1px solid #1e1e1e", borderRadius:12, padding:"15px", color:"#666", fontSize:14, cursor:"pointer", marginTop:8, fontFamily:"Georgia,serif", display:"block" },
   signOutBtn: { background:"none", border:"1px solid #2a2a2a", borderRadius:8, padding:"5px 12px", color:"#555", fontSize:11, cursor:"pointer", letterSpacing:1 },
