@@ -239,6 +239,8 @@ export default function App() {
   const [activeSession, setActiveSession] = useState(null);
   const [activeWeekIdx, setActiveWeekIdx] = useState(0);
   const [feedbackText,  setFeedbackText]  = useState("");
+  const [sessionDistKm, setSessionDistKm] = useState("");
+  const [sessionDurMin, setSessionDurMin] = useState("");
   const [aiLoading,     setAiLoading]     = useState(false);
 
   // Coach state
@@ -522,11 +524,14 @@ export default function App() {
     if (!feedbackText.trim() || !activeSession) return;
     setAiLoading(true);
     const s = activeSession;
+    const distStr = sessionDistKm ? `${sessionDistKm}km` : "unknown distance";
+    const durStr  = sessionDurMin ? `${sessionDurMin}min` : "";
     const sys = `You are an elite running coach's assistant. Analyse athlete feedback. Respond ONLY with valid JSON, no markdown, no backticks.`;
     const msg = `Athlete: ${athleteData?.name} | Goal: ${athleteData?.goal} | PB: ${athleteData?.current}
 Session: ${s.type} — ${s.day}
 Prescribed: ${s.desc}
 Target pace: ${s.pace}
+Actual: ${distStr}${durStr ? ` in ${durStr}` : ""}
 Athlete feedback: "${feedbackText}"
 
 Return JSON:
@@ -559,7 +564,32 @@ Return JSON:
         };
       }
       await saveLog(s.id, updates);
+
+      // Save to activities so distance counts toward weekly total
+      if (sessionDistKm && parseFloat(sessionDistKm) > 0) {
+        const sessionDate = s.weekStart
+          ? sessionDateStr(s.weekStart, s.day)
+          : (() => { const d = new Date(); const y = d.getFullYear(); const mo = String(d.getMonth()+1).padStart(2,"0"); const dy = String(d.getDate()).padStart(2,"0"); return `${y}-${mo}-${dy}`; })();
+        const existing = activities.find(a => a.athlete_email === user.email?.toLowerCase() && a.activity_date === sessionDate);
+        if (!existing) {
+          const payload = {
+            athlete_email: user.email?.toLowerCase(),
+            athlete_name: athleteData?.name || user.email,
+            activity_date: sessionDate,
+            distance_km: parseFloat(sessionDistKm),
+            duration_seconds: sessionDurMin ? Math.round(parseFloat(sessionDurMin) * 60) : null,
+            activity_type: s.type || "Run",
+            notes: feedbackText || null,
+            source: "session",
+          };
+          const { data: actData } = await supabase.from("activities").insert(payload).select().single();
+          if (actData) setActivities(prev => [actData, ...prev]);
+        }
+      }
+
       setSelectedStrava(null);
+      setSessionDistKm("");
+      setSessionDurMin("");
       setScreen("result");
     } catch(e) { console.error(e); }
     setAiLoading(false);
@@ -867,7 +897,7 @@ Return JSON with exactly these keys:
                 const comply = log?.analysis?.compliance || (athActDates.has(sDate) ? "completed" : "pending");
                 return (
                   <div key={s.id}
-                    onClick={()=>{ setActiveSession({...s, athleteEmail: dashAthlete}); setCoachScreen("session"); }}
+                    onClick={()=>{ setActiveSession({...s, weekStart: wk.weekStart, athleteEmail: dashAthlete}); setCoachScreen("session"); }}
                     style={{ ...S.card, marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:12 }}>
                     <div style={{ fontSize:22 }}>{log?.analysis?.emoji || "⏳"}</div>
                     <div style={{ flex:1 }}>
@@ -898,6 +928,9 @@ Return JSON with exactly these keys:
   if (role === "coach" && coachScreen === "session" && activeSession) {
     const log = logs[activeSession.id];
     const an  = log?.analysis;
+    const coachSDate = activeSession.weekStart ? sessionDateStr(activeSession.weekStart, activeSession.day) : null;
+    const linkedAthAct = coachSDate ? activities.find(a => a.athlete_email === activeSession.athleteEmail?.toLowerCase() && a.activity_date === coachSDate) : null;
+    const sessionLogged = !!log || !!linkedAthAct;
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -914,10 +947,17 @@ Return JSON with exactly these keys:
             </div>
           </SectionCard>
 
-          {!log ? (
+          {!sessionLogged ? (
             <div style={{ textAlign:"center", padding:"40px 0", color:"#444", fontSize:14 }}>Athlete hasn't logged this session yet.</div>
           ) : (
             <>
+              {linkedAthAct && (
+                <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+                  <StatPill label="Distance" val={`${linkedAthAct.distance_km}km`} color="#4ade80"/>
+                  {linkedAthAct.duration_seconds && <StatPill label="Duration" val={`${Math.round(linkedAthAct.duration_seconds/60)}min`}/>}
+                </div>
+              )}
+              {an && <>
               <div style={{ textAlign:"center", fontSize:56, margin:"16px 0 8px" }}>{an?.emoji}</div>
               <div style={{ display:"flex", gap:10, marginBottom:16 }}>
                 {an?.rpe && <StatPill label="RPE" val={`${an.rpe}/10`}/>}
@@ -931,11 +971,16 @@ Return JSON with exactly these keys:
                 <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{an?.coachNote}</div>
               </SectionCard>
               {log?.strava_data && <StravaCard data={log.strava_data} />}
-              <SectionCard label="Athlete's Feedback">
-                <div style={{ fontSize:13, color:"#777", lineHeight:1.7, fontStyle:"italic" }}>"{log.feedback}"</div>
-              </SectionCard>
+              {log?.feedback ? (
+                <SectionCard label="Athlete's Feedback">
+                  <div style={{ fontSize:13, color:"#777", lineHeight:1.7, fontStyle:"italic" }}>"{log.feedback}"</div>
+                </SectionCard>
+              ) : (
+                <div style={{ fontSize:13, color:"#444", textAlign:"center", padding:"8px 0 16px" }}>No written feedback submitted.</div>
+              )}
+              </>}
 
-              <SectionCard label="💬 Your Reply">
+              {log && <SectionCard label="💬 Your Reply">
                 {log.coach_reply ? (
                   <>
                     <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, marginBottom:12 }}>{log.coach_reply}</div>
@@ -952,7 +997,7 @@ Return JSON with exactly these keys:
                     </button>
                   </>
                 )}
-              </SectionCard>
+              </SectionCard>}
             </>
           )}
         </div>
@@ -1067,7 +1112,7 @@ Return JSON with exactly these keys:
               const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
               return (
                 <div key={s.id}
-                  onClick={()=>{ setActiveSession(s); setFeedbackText(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
+                  onClick={()=>{ setActiveSession({...s, weekStart: week.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
                   style={{ background:isLogged?"#0d1f0d":"#161616", border:`1px solid ${isLogged?"#166534":"#1e1e1e"}`, borderRadius:12, padding:"16px 18px", marginBottom:10, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
                   <div style={{ width:42, height:42, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>
                     {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
@@ -1180,6 +1225,20 @@ Return JSON with exactly these keys:
             <MiniStat label="Target Pace" val={activeSession.pace} color="#E06666"/>
           </div>
         </SectionCard>
+        <div style={{ display:"flex", gap:12, marginBottom:14 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
+            <input type="number" step="0.01" min="0" placeholder="e.g. 10.5"
+              value={sessionDistKm} onChange={e=>setSessionDistKm(e.target.value)}
+              style={S.input}/>
+          </div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
+            <input type="number" step="1" min="0" placeholder="e.g. 55"
+              value={sessionDurMin} onChange={e=>setSessionDurMin(e.target.value)}
+              style={S.input}/>
+          </div>
+        </div>
         <div style={{ fontSize:11, letterSpacing:2, color:"#666", textTransform:"uppercase", marginBottom:10 }}>How did it go?</div>
         <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)}
           placeholder="Tell me about the session... how did it feel? Did you hit the paces? Any soreness or highlights?"
@@ -1237,8 +1296,9 @@ Return JSON with exactly these keys:
           </div>
         )}
 
-        <button onClick={handleSubmitFeedback} disabled={!feedbackText.trim()||aiLoading}
-          style={S.primaryBtn("#E06666", !feedbackText.trim()||aiLoading)}>
+        <button onClick={handleSubmitFeedback}
+          disabled={!feedbackText.trim()||!sessionDistKm||aiLoading}
+          style={S.primaryBtn("#E06666", !feedbackText.trim()||!sessionDistKm||aiLoading)}>
           {aiLoading ? "Analysing your session..." : "Submit Feedback →"}
         </button>
       </div>
