@@ -864,10 +864,8 @@ Return JSON with exactly these keys:
             const athActs    = activities.filter(a => a.athlete_email === dashAthlete?.toLowerCase());
             const athActDates = new Set(athActs.map(a => a.activity_date));
             return da.weeks.map((wk,wi) => {
-              // Find extra runs: activities in this week range that don't match a scheduled session date
-              const scheduledDates = new Set(wk.sessions.map(s => sessionDateStr(wk.weekStart, s.day)));
-              const wkEnd = (() => { const d = new Date(wk.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return d.toISOString().split("T")[0]; })();
-              const extraActs = athActs.filter(a => a.activity_date >= wk.weekStart && a.activity_date <= wkEnd && !scheduledDates.has(a.activity_date));
+              const wkEnd = (() => { const d = new Date(wk.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+              const extraActs = athActs.filter(a => a.source === "manual" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
               return (
                 <div key={wi} style={{ marginBottom:20 }}>
                   <div style={{ fontSize:11, letterSpacing:3, color:"#444", textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
@@ -1127,13 +1125,12 @@ Return JSON with exactly these keys:
             })}
             {(() => {
               if (!week) return null;
-              const scheduledDates = new Set(week.sessions.map(s => sessionDateStr(week.weekStart, s.day)));
-              const wkEnd = (() => { const d = new Date(week.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return d.toISOString().split("T")[0]; })();
+              const wkEnd = (() => { const d = new Date(week.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
               const extraActs = activities.filter(a =>
                 a.athlete_email === user.email?.toLowerCase() &&
+                a.source === "manual" &&
                 a.activity_date >= week.weekStart &&
-                a.activity_date <= wkEnd &&
-                !scheduledDates.has(a.activity_date)
+                a.activity_date <= wkEnd
               );
               return extraActs.map(act => (
                 <div key={act.id} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:12, padding:"16px 18px", marginBottom:10, display:"flex", alignItems:"center", gap:14 }}>
