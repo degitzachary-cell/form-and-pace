@@ -939,20 +939,21 @@ Return JSON with exactly these keys:
                 const distKm   = an?.distance_km ?? linkedAthAct?.distance_km;
                 const durSecs  = linkedAthAct?.duration_seconds;
                 const durMin   = an?.duration_min ?? (durSecs ? Math.round(durSecs / 60) : null);
-                return (
+                const notes    = log?.feedback || linkedAthAct?.notes;
+                return (<>
                   <div style={{ display:"flex", gap:10, marginBottom:16 }}>
                     {distKm  && <StatPill label="Distance" val={`${distKm}km`}  color="#4ade80"/>}
                     {durMin  && <StatPill label="Duration" val={`${durMin}min`}/>}
                   </div>
-                );
+                  {notes ? (
+                    <SectionCard label="Athlete's Notes">
+                      <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{notes}"</div>
+                    </SectionCard>
+                  ) : (
+                    <div style={{ fontSize:13, color:"#444", textAlign:"center", padding:"8px 0 16px" }}>No notes submitted.</div>
+                  )}
+                </>);
               })()}
-              {log?.feedback ? (
-                <SectionCard label="Athlete's Notes">
-                  <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{log.feedback}"</div>
-                </SectionCard>
-              ) : (
-                <div style={{ fontSize:13, color:"#444", textAlign:"center", padding:"8px 0 16px" }}>No notes submitted.</div>
-              )}
 
               {log && <SectionCard label="💬 Your Reply">
                 {log.coach_reply ? (
@@ -1272,7 +1273,7 @@ Return JSON with exactly these keys:
 
         <button onClick={handleSubmitFeedback}
           disabled={!sessionDistKm||aiLoading}
-          style={S.primaryBtn("#E06666", !feedbackText.trim()||!sessionDistKm||aiLoading)}>
+          style={S.primaryBtn("#E06666", !sessionDistKm||aiLoading)}>
           {aiLoading ? "Saving..." : "Save Session →"}
         </button>
       </div>
@@ -1296,9 +1297,9 @@ Return JSON with exactly these keys:
             {an?.distance_km && <StatPill label="Distance" val={`${an.distance_km}km`} color="#4ade80"/>}
             {an?.duration_min && <StatPill label="Duration" val={`${an.duration_min}min`}/>}
           </div>
-          {log?.feedback && (
+          {(log?.feedback || feedbackText) && (
             <SectionCard label="Your Notes">
-              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{log.feedback}"</div>
+              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{log?.feedback || feedbackText}"</div>
             </SectionCard>
           )}
           {log?.coach_reply && (
