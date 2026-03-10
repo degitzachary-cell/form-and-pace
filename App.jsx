@@ -7,12 +7,6 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const STRAVA_CLIENT_ID = import.meta.env.VITE_STRAVA_CLIENT_ID;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ─── COACH EMAILS ─────────────────────────────────────────────────────────────
-// Add your email here — anyone not on this list is treated as an athlete
-const COACH_EMAILS = [
-  "degitzachary@gmail.com",
-];
-
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
 const ATHLETE_PROGRAMS = {
   "suzy0913@gmail.com": {
@@ -190,6 +184,9 @@ export default function App() {
   const [dashAthlete,   setDashAthlete]   = useState(null);
   const [coachReply,    setCoachReply]    = useState("");
 
+  // Profile (loaded from DB on login — determines role)
+  const [profile,       setProfile]       = useState(null);
+
   // Logs stored in Supabase — keyed by session_id
   const [logs,          setLogs]          = useState({});
   const [logsLoading,   setLogsLoading]   = useState(false);
@@ -219,11 +216,16 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  const resolveUser = (u) => {
+  const resolveUser = async (u) => {
     const email = u.email?.toLowerCase();
-    const r = COACH_EMAILS.includes(email) ? "coach" : "athlete";
     setUser(u);
-    setRole(r);
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("email", email)
+      .maybeSingle();
+    setProfile(profileData);
+    setRole(profileData?.role || "athlete");
     setAuthLoading(false);
   };
 
@@ -326,7 +328,7 @@ export default function App() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setUser(null); setRole(null); setLogs({}); setActivities([]);
+    setUser(null); setRole(null); setProfile(null); setLogs({}); setActivities([]);
     setStravaConnected(false); setStravaActivities([]); setSelectedStrava(null);
   };
 
@@ -390,8 +392,16 @@ export default function App() {
   };
 
   // ── Resolve athlete program ──
-  const athleteEmail = user?.email?.toLowerCase();
-  const athleteData  = ATHLETE_PROGRAMS[athleteEmail] || null;
+  const athleteEmail   = user?.email?.toLowerCase();
+  const programEntry   = ATHLETE_PROGRAMS[athleteEmail] || null;
+  // Profile is the source of truth for identity; program provides weeks
+  const athleteData    = programEntry ? {
+    name:    profile?.name    || programEntry.name,
+    goal:    profile?.goal    || programEntry.goal,
+    current: profile?.current_pb || programEntry.current,
+    avatar:  profile?.avatar  || programEntry.avatar,
+    weeks:   programEntry.weeks,
+  } : null;
   const weeks        = athleteData?.weeks || [];
   const allSessions  = weeks.flatMap(w => w.sessions);
 
