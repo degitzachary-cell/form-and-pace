@@ -268,11 +268,24 @@ export default function App() {
   const resolveUser = async (u) => {
     const email = u.email?.toLowerCase();
     setUser(u);
-    const { data: profileData } = await supabase
+    let { data: profileData } = await supabase
       .from("profiles")
       .select("*")
       .eq("email", email)
       .maybeSingle();
+    if (!profileData) {
+      const prog = ATHLETE_PROGRAMS[email];
+      const newProfile = {
+        email,
+        role: "athlete",
+        name: prog?.name || u.user_metadata?.full_name || email,
+        avatar: prog?.avatar || (u.user_metadata?.full_name || email).slice(0,2).toUpperCase(),
+        goal: prog?.goal || null,
+        current_pb: prog?.current || null,
+      };
+      const { data: created } = await supabase.from("profiles").insert(newProfile).select().maybeSingle();
+      profileData = created || newProfile;
+    }
     setProfile(profileData);
     setRole(profileData?.role || "athlete");
     setAuthLoading(false);
