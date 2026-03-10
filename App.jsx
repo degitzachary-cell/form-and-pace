@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_URL    = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const STRAVA_CLIENT_ID  = import.meta.env.VITE_STRAVA_CLIENT_ID;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
@@ -471,6 +472,12 @@ export default function App() {
       const d = await res.json();
       if (d.success) setStravaConnected(true);
     } catch (e) { console.error("Strava exchange error", e); }
+  };
+
+  const connectStrava = () => {
+    const redirectUri = encodeURIComponent(window.location.origin);
+    const scope = "read,activity:read";
+    window.location.href = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&approval_prompt=auto&scope=${scope}`;
   };
 
 
@@ -1110,6 +1117,23 @@ Return JSON with exactly these keys:
               />
             </div>
           )}
+
+          {/* Strava connect / connected status */}
+          <div style={{ margin:"0 16px 14px" }}>
+            {stravaConnected ? (
+              <div style={{ display:"flex", alignItems:"center", gap:8, background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:8, padding:"10px 14px" }}>
+                <span style={{ fontSize:16 }}>🟠</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Strava Connected</div>
+                  <div style={{ fontSize:11, color:"#555" }}>Import runs when logging a session</div>
+                </div>
+              </div>
+            ) : (
+              <button onClick={connectStrava} style={{ width:"100%", background:"#FC4C02", border:"none", borderRadius:8, padding:"12px 16px", color:"white", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, letterSpacing:0.5 }}>
+                <span style={{ fontSize:18 }}>🟠</span> Connect Strava
+              </button>
+            )}
+          </div>
 
           <div style={{ display:"flex", gap:8, padding:"0 16px", marginBottom:16, overflowX:"auto" }}>
             {weeks.map((w,i)=>(
