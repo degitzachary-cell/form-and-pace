@@ -902,7 +902,7 @@ Return JSON with exactly these keys:
                     );
                   })}
                   {extraActs.map(act => (
-                    <div key={act.id} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, borderColor:"#2a2a2a", opacity:0.85 }}>
+                    <div key={act.id} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, background:"#1a0505", borderColor:"#7f1d1d" }}>
                       <div style={{ fontSize:22 }}>➕</div>
                       <div style={{ flex:1 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
