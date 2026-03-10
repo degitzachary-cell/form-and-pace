@@ -191,7 +191,11 @@ function sessionDateStr(weekStart, dayAbbrev) {
   const offset = DAY_OFFSET[dayAbbrev.slice(0, 3)] ?? 0;
   const d = new Date(weekStart + "T00:00:00");
   d.setDate(d.getDate() + offset);
-  return d.toISOString().split("T")[0];
+  // Use local date parts to avoid UTC offset shifting the date
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const dy = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${dy}`;
 }
 
 // ─── STRAVA HELPERS ───────────────────────────────────────────────────────────
