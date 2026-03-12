@@ -918,7 +918,7 @@ Return JSON with exactly these keys:
             const athActDates = new Set(athActs.map(a => a.activity_date));
             return da.weeks.map((wk,wi) => {
               const wkEnd = (() => { const d = new Date(wk.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
-              const extraActs = athActs.filter(a => a.source === "manual" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
+              const extraActs = athActs.filter(a => a.source !== "session" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
               return (
                 <div key={wi} style={{ marginBottom:20 }}>
                   <div style={{ fontSize:11, letterSpacing:3, color:"#444", textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
@@ -1192,7 +1192,7 @@ Return JSON with exactly these keys:
               const wkEnd = (() => { const d = new Date(week.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
               const extraActs = activities.filter(a =>
                 a.athlete_email === user.email?.toLowerCase() &&
-                a.source === "manual" &&
+                a.source !== "session" &&
                 a.activity_date >= week.weekStart &&
                 a.activity_date <= wkEnd
               );
