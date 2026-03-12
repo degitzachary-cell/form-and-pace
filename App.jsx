@@ -556,6 +556,7 @@ export default function App() {
       if (data?.id) {
         const extracted = extractStravaData(data);
         setStravaDetail(extracted);
+        setStravaDetailLoading(false);
         return extracted;
       }
     } catch(e) { console.error("strava get error", e); }
@@ -710,7 +711,7 @@ Return JSON with exactly these keys:
   // ── Coach reply ──
   const handleCoachReply = async (sessionId) => {
     if (!coachReply.trim()) return;
-    await saveLog(sessionId, { ...logs[sessionId], coach_reply: coachReply });
+    await saveLog(sessionId, { coach_reply: coachReply });
     setCoachReply("");
   };
 
@@ -1237,7 +1238,7 @@ Return JSON with exactly these keys:
                     </div>
                     <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
                     <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
-                    {linkedAct && <div style={{ fontSize:11, color:"#888", marginTop:3 }}>{linkedAct.distance_km}km{linkedAct.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : ""}</div>}
+                    {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:"#888", marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
                     {log?.coach_reply && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 Coach replied</div>}
                   </div>
                   <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
