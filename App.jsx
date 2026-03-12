@@ -399,7 +399,10 @@ export default function App() {
             distance_km: parseFloat(form.distanceKm),
             duration_min: form.durationMin ? parseFloat(form.durationMin) : null,
           };
-          await saveLog(matchedSession.id, { analysis: autoAnalysis });
+          await saveLog(matchedSession.id, {
+            analysis: autoAnalysis,
+            ...(stravaDetailData ? { strava_data: stravaDetailData } : {}),
+          });
         }
       }
       setLogForm({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
@@ -623,7 +626,8 @@ export default function App() {
           duration_seconds: sessionDurMin ? Math.round(parseFloat(sessionDurMin) * 60) : null,
           activity_type: s.type || "Run",
           notes: feedbackText || null,
-          source: "session",
+          source: stravaDetail ? "strava" : "session",
+          ...(stravaDetail ? { strava_data: stravaDetail } : {}),
         };
         const { data: actData } = await supabase.from("activities").insert(payload).select().single();
         if (actData) setActivities(prev => [actData, ...prev]);
@@ -1045,12 +1049,17 @@ Return JSON with exactly these keys:
               })()}
 
               <SectionCard label="💬 Your Reply">
-                {log?.coach_reply ? (
+                {(log?.coach_reply || linkedAthAct?.coach_reply) ? (
                   <>
-                    <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, marginBottom:12 }}>{log.coach_reply}</div>
+                    <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, marginBottom:12 }}>{log?.coach_reply || linkedAthAct?.coach_reply}</div>
                     <button onClick={async ()=>{
-                      const { data: updated } = await supabase.from("session_logs").update({ coach_reply: "", updated_at: new Date().toISOString() }).eq("session_id", activeSession.id).select().maybeSingle();
-                      if (updated) setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
+                      if (log?.coach_reply) {
+                        const { data: updated } = await supabase.from("session_logs").update({ coach_reply: "", updated_at: new Date().toISOString() }).eq("session_id", activeSession.id).select().maybeSingle();
+                        if (updated) setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
+                      } else if (linkedAthAct) {
+                        const { data: actUpd } = await supabase.from("activities").update({ coach_reply: "" }).eq("id", linkedAthAct.id).select().maybeSingle();
+                        if (actUpd) setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a));
+                      }
                     }} style={S.ghostBtn}>Edit reply</button>
                   </>
                 ) : (
@@ -1061,6 +1070,7 @@ Return JSON with exactly these keys:
                     <button onClick={async ()=>{
                       if (!coachReply.trim()) return;
                       const ts = new Date().toISOString();
+                      // Try updating session_log first (handles sessions logged via session screen)
                       const { data: updated, error: updateErr } = await supabase
                         .from("session_logs")
                         .update({ coach_reply: coachReply, updated_at: ts })
@@ -1072,16 +1082,25 @@ Return JSON with exactly these keys:
                         return;
                       }
                       if (updateErr) {
-                        alert("UPDATE error: " + updateErr.message + " | code: " + updateErr.code);
+                        alert("UPDATE error: " + updateErr.message);
                         return;
                       }
-                      // No existing row — create one
-                      const { data: inserted, error: insertErr } = await supabase
-                        .from("session_logs")
-                        .insert({ session_id: activeSession.id, athlete_email: activeSession.athleteEmail?.toLowerCase(), coach_reply: coachReply, updated_at: ts })
-                        .select().maybeSingle();
-                      if (inserted) { setLogs(prev => ({ ...prev, [activeSession.id]: inserted })); setCoachReply(""); return; }
-                      alert("INSERT error: " + (insertErr?.message || "no row returned") + " | session_id: " + activeSession.id + " | athlete: " + activeSession.athleteEmail);
+                      // No session_log row — fall back to updating the linked activity
+                      if (linkedAthAct) {
+                        const { data: actUpd, error: actErr } = await supabase
+                          .from("activities")
+                          .update({ coach_reply: coachReply })
+                          .eq("id", linkedAthAct.id)
+                          .select().maybeSingle();
+                        if (actUpd) {
+                          setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a));
+                          setCoachReply("");
+                          return;
+                        }
+                        alert("Activity update error: " + (actErr?.message || "no row returned"));
+                        return;
+                      }
+                      alert("No session log or activity found for this session.");
                     }} disabled={!coachReply.trim()} style={S.primaryBtn("#3b82f6", !coachReply.trim())}>
                       Send Reply →
                     </button>
