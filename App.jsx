@@ -364,7 +364,6 @@ export default function App() {
       activity_type: form.type,
       notes: form.notes || null,
       source: stravaDetailData ? "strava" : "manual",
-      ...(stravaDetailData ? { strava_data: stravaDetailData } : {}),
     };
     const { data, error } = await supabase.from("activities").insert(payload).select().single();
     if (error) { console.error("saveActivity error:", error); setLogError(error.message); }
