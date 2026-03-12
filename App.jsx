@@ -148,7 +148,7 @@ const ATHLETE_PROGRAMS = {
       },
     ]
   },
-  "smithatv14@gmail.com": {
+  "smithavt14@gmail.com": {
     name: "Alex Smith", goal: "1:23 HM / 3:00 M", current: "1:24 HM / 3:09 M", avatar: "AS",
     weeks: [
       {
