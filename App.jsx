@@ -319,6 +319,18 @@ export default function App() {
     }
   }, [user]);
 
+  // ── Refresh session log + activities whenever coach opens a session detail ──
+  // Ensures strava_data and latest feedback are always current regardless of
+  // when the athlete logged relative to the coach's login time.
+  useEffect(() => {
+    if (role !== "coach" || coachScreen !== "session" || !activeSession?.id) return;
+    supabase.from("session_logs").select("*")
+      .eq("session_id", activeSession.id).maybeSingle()
+      .then(({ data }) => { if (data) setLogs(prev => ({ ...prev, [activeSession.id]: data })); });
+    supabase.from("activities").select("*").order("activity_date", { ascending: false })
+      .then(({ data }) => { if (data) setActivities(data); });
+  }, [coachScreen, activeSession?.id, role]);
+
   const loadLogs = async () => {
     setLogsLoading(true);
     const { data, error } = await supabase
@@ -1032,7 +1044,10 @@ Return JSON with exactly these keys:
                 {log?.coach_reply ? (
                   <>
                     <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, marginBottom:12 }}>{log.coach_reply}</div>
-                    <button onClick={()=>{ saveLog(activeSession.id, { coach_reply: "" }); }} style={S.ghostBtn}>Edit reply</button>
+                    <button onClick={async ()=>{
+                      const { data: updated } = await supabase.from("session_logs").update({ coach_reply: "", updated_at: new Date().toISOString() }).eq("session_id", activeSession.id).select().maybeSingle();
+                      if (updated) setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
+                    }} style={S.ghostBtn}>Edit reply</button>
                   </>
                 ) : (
                   <>
@@ -1041,20 +1056,24 @@ Return JSON with exactly these keys:
                       style={{ ...S.textarea, minHeight:90 }}/>
                     <button onClick={async ()=>{
                       if (!coachReply.trim()) return;
-                      if (log?.id) {
-                        await handleCoachReply(activeSession.id);
-                      } else {
-                        const { data: newLog } = await supabase
-                          .from("session_logs")
-                          .upsert({
-                            session_id: activeSession.id,
-                            athlete_email: activeSession.athleteEmail?.toLowerCase(),
-                            coach_reply: coachReply,
-                            updated_at: new Date().toISOString(),
-                          }, { onConflict: "session_id" })
-                          .select().single();
-                        if (newLog) { setLogs(prev => ({ ...prev, [activeSession.id]: newLog })); setCoachReply(""); }
+                      const ts = new Date().toISOString();
+                      // Always update by session_id — no dependency on local state id
+                      const { data: updated } = await supabase
+                        .from("session_logs")
+                        .update({ coach_reply: coachReply, updated_at: ts })
+                        .eq("session_id", activeSession.id)
+                        .select().maybeSingle();
+                      if (updated) {
+                        setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
+                        setCoachReply("");
+                        return;
                       }
+                      // No existing row — create one
+                      const { data: inserted } = await supabase
+                        .from("session_logs")
+                        .insert({ session_id: activeSession.id, athlete_email: activeSession.athleteEmail?.toLowerCase(), coach_reply: coachReply, updated_at: ts })
+                        .select().single();
+                      if (inserted) { setLogs(prev => ({ ...prev, [activeSession.id]: inserted })); setCoachReply(""); }
                     }} disabled={!coachReply.trim()} style={S.primaryBtn("#3b82f6", !coachReply.trim())}>
                       Send Reply →
                     </button>
