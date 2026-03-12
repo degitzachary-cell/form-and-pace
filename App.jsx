@@ -1030,6 +1030,10 @@ Return JSON with exactly these keys:
                     {durMin  && <StatPill label="Duration" val={`${durMin}min`}/>}
                   </div>
                   {(log?.strava_data || linkedAthAct?.strava_data) && <StravaDataCard data={log?.strava_data || linkedAthAct?.strava_data}/>}
+                  {/* DEBUG: remove once issues resolved */}
+                  <div style={{ fontSize:10, color:"#555", marginBottom:8, wordBreak:"break-all" }}>
+                    dbg: session_id={activeSession.id} | log={log ? "✓" : "null"} | log.strava={log?.strava_data ? "✓" : "null"} | act={linkedAthAct ? "✓" : "null"} | act.strava={linkedAthAct?.strava_data ? "✓" : "null"} | act_date={coachSDate} | act_email={activeSession.athleteEmail?.toLowerCase()}
+                  </div>
                   {notes ? (
                     <SectionCard label="Athlete's Notes">
                       <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{notes}"</div>
@@ -1057,8 +1061,7 @@ Return JSON with exactly these keys:
                     <button onClick={async ()=>{
                       if (!coachReply.trim()) return;
                       const ts = new Date().toISOString();
-                      // Always update by session_id — no dependency on local state id
-                      const { data: updated } = await supabase
+                      const { data: updated, error: updateErr } = await supabase
                         .from("session_logs")
                         .update({ coach_reply: coachReply, updated_at: ts })
                         .eq("session_id", activeSession.id)
@@ -1068,12 +1071,17 @@ Return JSON with exactly these keys:
                         setCoachReply("");
                         return;
                       }
+                      if (updateErr) {
+                        alert("UPDATE error: " + updateErr.message + " | code: " + updateErr.code);
+                        return;
+                      }
                       // No existing row — create one
-                      const { data: inserted } = await supabase
+                      const { data: inserted, error: insertErr } = await supabase
                         .from("session_logs")
                         .insert({ session_id: activeSession.id, athlete_email: activeSession.athleteEmail?.toLowerCase(), coach_reply: coachReply, updated_at: ts })
-                        .select().single();
-                      if (inserted) { setLogs(prev => ({ ...prev, [activeSession.id]: inserted })); setCoachReply(""); }
+                        .select().maybeSingle();
+                      if (inserted) { setLogs(prev => ({ ...prev, [activeSession.id]: inserted })); setCoachReply(""); return; }
+                      alert("INSERT error: " + (insertErr?.message || "no row returned") + " | session_id: " + activeSession.id + " | athlete: " + activeSession.athleteEmail);
                     }} disabled={!coachReply.trim()} style={S.primaryBtn("#3b82f6", !coachReply.trim())}>
                       Send Reply →
                     </button>
