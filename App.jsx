@@ -274,6 +274,7 @@ export default function App() {
   const [sessionDistKm, setSessionDistKm] = useState("");
   const [sessionDurMin, setSessionDurMin] = useState("");
   const [isSaving,     setIsSaving]      = useState(false);
+  const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
 
   // Coach state
   const [coachScreen,   setCoachScreen]   = useState("dashboard");
@@ -1218,9 +1219,9 @@ Return JSON with exactly these keys:
   // ────────────────────────────────────────────────────────────
   if (role === "athlete" && screen === "home") {
     const week = weeks[activeWeekIdx];
-    const weekBars = [3,2,1,0].map(ago => ({ km: weekKm(activities, user.email, ago), weeksAgo: ago }));
+    const weekBars = [7,6,5,4,3,2,1,0].map(ago => ({ km: weekKm(activities, user.email, ago), weeksAgo: ago, label: ago === 0 ? "NOW" : `W-${ago}` }));
     const maxBarKm = Math.max(...weekBars.map(b => b.km), 1);
-    const thisWeekKm = weekBars[3].km;
+    const thisWeekKm = weekBars[7].km;
     const actByDate = {};
     activities.filter(a => a.athlete_email === user.email?.toLowerCase() && a.source === "session").forEach(a => {
       if (!actByDate[a.activity_date]) actByDate[a.activity_date] = a;
@@ -1241,29 +1242,52 @@ Return JSON with exactly these keys:
             <div style={{ fontSize:12, color:"#555", marginTop:3 }}>Current PB: {athleteData.current}</div>
           </div>
 
-          {/* Weekly Progress */}
+          {/* 8-Week Rolling Volume */}
           <div style={{ margin:"0 16px 16px", background:"#161616", border:"1px solid #1e1e1e", borderRadius:8, padding:"14px 18px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
               <div>
                 <div style={{ fontSize:10, letterSpacing:3, color:"#555", textTransform:"uppercase", marginBottom:4 }}>This Week</div>
-                <div style={{ fontSize:26, fontWeight:900, color:"#f0ece4" }}>{thisWeekKm.toFixed(1)} <span style={{ fontSize:14, color:"#555", fontWeight:400 }}>km</span></div>
+                <div style={{ fontSize:26, fontWeight:900, color:"#f0ece4" }}>
+                  {hoveredWeekIdx !== null ? weekBars[hoveredWeekIdx].km.toFixed(1) : thisWeekKm.toFixed(1)}
+                  <span style={{ fontSize:14, color:"#555", fontWeight:400 }}> km</span>
+                  {hoveredWeekIdx !== null && hoveredWeekIdx !== 7 && (
+                    <span style={{ fontSize:11, color:"#555", fontWeight:400, marginLeft:8 }}>{weekBars[hoveredWeekIdx].label}</span>
+                  )}
+                </div>
               </div>
               <button onClick={()=>{ setLogForm({ date: new Date().toISOString().split("T")[0], distanceKm:"", durationMin:"", type:"Run", notes:"" }); setScreen("log-activity"); }}
                 style={{ background:"#E06666", border:"none", borderRadius:8, padding:"8px 14px", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", letterSpacing:1 }}>
                 + LOG RUN
               </button>
             </div>
-            <div style={{ display:"flex", gap:4, alignItems:"flex-end", height:48 }}>
+            <div style={{ display:"flex", gap:3, alignItems:"flex-end", height:72 }}>
               {weekBars.map((b, i) => {
-                const pct = maxBarKm > 0 ? (b.km / maxBarKm) : 0;
+                const pct = maxBarKm > 0 ? b.km / maxBarKm : 0;
                 const isCurrent = b.weeksAgo === 0;
+                const isHovered = hoveredWeekIdx === i;
                 return (
-                  <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                    <div style={{ fontSize:9, color:isCurrent?"#f0ece4":"#444" }}>{b.km > 0 ? b.km.toFixed(0) : ""}</div>
-                    <div style={{ width:"100%", height:32, display:"flex", alignItems:"flex-end" }}>
-                      <div style={{ width:"100%", height:`${Math.max(pct*100,4)}%`, background:isCurrent?"#E06666":"#2a2a2a", borderRadius:"3px 3px 0 0", transition:"height 0.4s" }}/>
+                  <div key={i}
+                    onMouseEnter={() => setHoveredWeekIdx(i)}
+                    onMouseLeave={() => setHoveredWeekIdx(null)}
+                    onTouchStart={() => setHoveredWeekIdx(hoveredWeekIdx === i ? null : i)}
+                    style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer", userSelect:"none" }}>
+                    <div style={{ fontSize:9, color: isHovered ? "#f0ece4" : "transparent", marginBottom:3, fontWeight:600, minHeight:12, lineHeight:1 }}>
+                      {b.km > 0 ? b.km.toFixed(1) : ""}
                     </div>
-                    <div style={{ fontSize:8, color:"#444", letterSpacing:1 }}>{["W-3","W-2","W-1","NOW"][i]}</div>
+                    <div style={{ width:"100%", flex:1, display:"flex", alignItems:"flex-end" }}>
+                      <div style={{
+                        width:"100%",
+                        height: b.km > 0 ? `${Math.max(pct * 100, 6)}%` : "2px",
+                        background: isCurrent ? "#E06666" : isHovered ? "#666" : "#2a2a2a",
+                        borderRadius:"3px 3px 0 0",
+                        transition:"background 0.15s",
+                        opacity: b.km === 0 ? 0.4 : 1,
+                      }}/>
+                    </div>
+                    <div style={{ width:"100%", height:1, background:"#2a2a2a", margin:"3px 0" }}/>
+                    <div style={{ fontSize:7, color: isCurrent ? "#888" : "#3a3a3a", letterSpacing:0.5, textTransform:"uppercase", whiteSpace:"nowrap" }}>
+                      {b.label}
+                    </div>
                   </div>
                 );
               })}
