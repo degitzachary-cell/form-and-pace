@@ -1269,26 +1269,28 @@ Return JSON with exactly these keys:
                 ))}
               </div>
             </div>
-            <div style={{ display:"flex", gap:12, marginBottom:14 }}>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
-                <input
-                  type="number" step="0.01" min="0" placeholder="e.g. 10.5"
-                  value={logForm.distanceKm}
-                  onChange={e=>setLogForm(f=>({...f, distanceKm:e.target.value}))}
-                  style={{ ...S.input }}
-                />
+            {!stravaDetail && (
+              <div style={{ display:"flex", gap:12, marginBottom:14 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
+                  <input
+                    type="number" step="0.01" min="0" placeholder="e.g. 10.5"
+                    value={logForm.distanceKm}
+                    onChange={e=>setLogForm(f=>({...f, distanceKm:e.target.value}))}
+                    style={{ ...S.input }}
+                  />
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
+                  <input
+                    type="number" step="1" min="0" placeholder="e.g. 55"
+                    value={logForm.durationMin}
+                    onChange={e=>setLogForm(f=>({...f, durationMin:e.target.value}))}
+                    style={{ ...S.input }}
+                  />
+                </div>
               </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
-                <input
-                  type="number" step="1" min="0" placeholder="e.g. 55"
-                  value={logForm.durationMin}
-                  onChange={e=>setLogForm(f=>({...f, durationMin:e.target.value}))}
-                  style={{ ...S.input }}
-                />
-              </div>
-            </div>
+            )}
             <div>
               <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Notes (optional)</div>
               <textarea
@@ -1348,20 +1350,22 @@ Return JSON with exactly these keys:
           />
         )}
 
-        <div style={{ display:"flex", gap:12, marginBottom:14 }}>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
-            <input type="number" step="0.01" min="0" placeholder="e.g. 10.5"
-              value={sessionDistKm} onChange={e=>setSessionDistKm(e.target.value)}
-              style={S.input}/>
+        {!stravaDetail && (
+          <div style={{ display:"flex", gap:12, marginBottom:14 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
+              <input type="number" step="0.01" min="0" placeholder="e.g. 10.5"
+                value={sessionDistKm} onChange={e=>setSessionDistKm(e.target.value)}
+                style={S.input}/>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
+              <input type="number" step="1" min="0" placeholder="e.g. 55"
+                value={sessionDurMin} onChange={e=>setSessionDurMin(e.target.value)}
+                style={S.input}/>
+            </div>
           </div>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
-            <input type="number" step="1" min="0" placeholder="e.g. 55"
-              value={sessionDurMin} onChange={e=>setSessionDurMin(e.target.value)}
-              style={S.input}/>
-          </div>
-        </div>
+        )}
         <div style={{ fontSize:11, letterSpacing:2, color:"#666", textTransform:"uppercase", marginBottom:10 }}>How did it go?</div>
         <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)}
           placeholder="Tell me about the session... how did it feel? Did you hit the paces? Any soreness or highlights?"
