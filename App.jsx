@@ -1017,7 +1017,7 @@ Return JSON with exactly these keys:
                     {distKm  && <StatPill label="Distance" val={`${distKm}km`}  color="#4ade80"/>}
                     {durMin  && <StatPill label="Duration" val={`${durMin}min`}/>}
                   </div>
-                  {log?.strava_data && <StravaDataCard data={log.strava_data}/>}
+                  {(log?.strava_data || linkedAthAct?.strava_data) && <StravaDataCard data={log?.strava_data || linkedAthAct?.strava_data}/>}
                   {notes ? (
                     <SectionCard label="Athlete's Notes">
                       <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{notes}"</div>
@@ -1028,24 +1028,39 @@ Return JSON with exactly these keys:
                 </>);
               })()}
 
-              {log && <SectionCard label="💬 Your Reply">
-                {log.coach_reply ? (
+              <SectionCard label="💬 Your Reply">
+                {log?.coach_reply ? (
                   <>
                     <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, marginBottom:12 }}>{log.coach_reply}</div>
-                    <button onClick={()=>{ saveLog(activeSession.id,{...log,coach_reply:""}); }} style={S.ghostBtn}>Edit reply</button>
+                    <button onClick={()=>{ saveLog(activeSession.id, { coach_reply: "" }); }} style={S.ghostBtn}>Edit reply</button>
                   </>
                 ) : (
                   <>
                     <textarea value={coachReply} onChange={e=>setCoachReply(e.target.value)}
                       placeholder="Write a note back to the athlete..."
                       style={{ ...S.textarea, minHeight:90 }}/>
-                    <button onClick={()=>handleCoachReply(activeSession.id)} disabled={!coachReply.trim()}
-                      style={S.primaryBtn("#3b82f6", !coachReply.trim())}>
+                    <button onClick={async ()=>{
+                      if (!coachReply.trim()) return;
+                      if (log?.id) {
+                        await handleCoachReply(activeSession.id);
+                      } else {
+                        const { data: newLog } = await supabase
+                          .from("session_logs")
+                          .upsert({
+                            session_id: activeSession.id,
+                            athlete_email: activeSession.athleteEmail?.toLowerCase(),
+                            coach_reply: coachReply,
+                            updated_at: new Date().toISOString(),
+                          }, { onConflict: "session_id" })
+                          .select().single();
+                        if (newLog) { setLogs(prev => ({ ...prev, [activeSession.id]: newLog })); setCoachReply(""); }
+                      }
+                    }} disabled={!coachReply.trim()} style={S.primaryBtn("#3b82f6", !coachReply.trim())}>
                       Send Reply →
                     </button>
                   </>
                 )}
-              </SectionCard>}
+              </SectionCard>
             </>
           )}
         </div>
