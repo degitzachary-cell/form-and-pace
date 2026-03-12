@@ -1796,6 +1796,7 @@ function MonthlySummaryCard({ summary, loading, onGenerate, isCoach }) {
 
 // ─── STRAVA ACTIVITY PICKER ───────────────────────────────────────────────────
 function StravaDetailCard({ detail, onClear }) {
+  const [showHRGraph, setShowHRGraph] = useState(false);
   const fmtPace = (mps) => {
     if (!mps || mps <= 0) return "–";
     const s = 1000 / mps;
@@ -1811,6 +1812,10 @@ function StravaDetailCard({ detail, onClear }) {
   const hasLaps = detail.laps?.length > 1;
   const splits  = hasLaps ? detail.laps : detail.splits;
   const splitLabel = hasLaps ? "Laps" : "Splits (1km)";
+  const hrGraphData = splits?.filter(sp => sp.avg_heartrate) || [];
+  const maxHRVal = hrGraphData.length ? Math.max(...hrGraphData.map(sp => sp.avg_heartrate)) : 0;
+  const minHRVal = hrGraphData.length ? Math.min(...hrGraphData.map(sp => sp.avg_heartrate)) : 0;
+  const hrColor = (hr) => hr > 170 ? "#f87171" : hr > 155 ? "#fb923c" : hr > 140 ? "#fbbf24" : "#4ade80";
   return (
     <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
@@ -1829,17 +1834,45 @@ function StravaDetailCard({ detail, onClear }) {
           { label:"Moving Time", val:fmtTime(detail.moving_time_s) },
           { label:"Elapsed",     val:fmtTime(detail.elapsed_time_s) },
           { label:"Avg Pace",    val:fmtPace(detail.avg_speed_mps) },
-          ...(detail.avg_heartrate ? [{ label:"Avg HR",   val:detail.avg_heartrate+"bpm" }] : []),
-          ...(detail.max_heartrate ? [{ label:"Max HR",   val:detail.max_heartrate+"bpm" }] : []),
+          ...(detail.avg_heartrate ? [{ label:"Avg HR", val:Math.round(detail.avg_heartrate)+"bpm", hrTile:true }] : []),
+          ...(detail.max_heartrate ? [{ label:"Max HR", val:Math.round(detail.max_heartrate)+"bpm" }] : []),
           ...(detail.elevation_gain_m != null ? [{ label:"Elevation", val:detail.elevation_gain_m+"m" }] : []),
           ...(detail.avg_cadence ? [{ label:"Cadence",  val:detail.avg_cadence+"spm" }] : []),
         ].map((s,i)=>(
-          <div key={i} style={{ background:"#161616", borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
-            <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{s.val}</div>
-            <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}</div>
+          <div key={i} onClick={s.hrTile && hrGraphData.length ? ()=>setShowHRGraph(v=>!v) : undefined}
+            style={{ background: s.hrTile && showHRGraph ? "#0a2a0a" : "#161616", borderRadius:8, padding:"8px 10px", textAlign:"center", cursor: s.hrTile && hrGraphData.length ? "pointer" : "default", border: s.hrTile && showHRGraph ? "1px solid #1a5a1a" : "1px solid transparent" }}>
+            <div style={{ fontSize:13, fontWeight:700, color: s.hrTile ? "#f87171" : "#f0ece4" }}>{s.val}</div>
+            <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}{s.hrTile && hrGraphData.length ? (showHRGraph ? " ▴" : " ▾") : ""}</div>
           </div>
         ))}
       </div>
+      {showHRGraph && hrGraphData.length > 0 && (
+        <div style={{ background:"#0a120a", borderRadius:8, border:"1px solid #1a3a1a", padding:"12px", marginBottom:14 }}>
+          <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:10 }}>HR per {hasLaps ? "Lap" : "Split"}</div>
+          <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:64 }}>
+            {splits.map((sp, i) => {
+              const hr = sp.avg_heartrate;
+              if (!hr) return <div key={i} style={{ flex:1 }}/>;
+              const pct = maxHRVal > minHRVal ? 0.3 + ((hr - minHRVal) / (maxHRVal - minHRVal)) * 0.7 : 0.5;
+              return (
+                <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+                  <div style={{ fontSize:8, color:"#888", lineHeight:1 }}>{Math.round(hr)}</div>
+                  <div style={{ width:"100%", height:`${pct * 100}%`, background:hrColor(hr), borderRadius:"2px 2px 0 0", minHeight:4 }}/>
+                  <div style={{ fontSize:8, color:"#444", lineHeight:1 }}>{sp.split ?? sp.lap_index ?? i+1}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display:"flex", gap:10, marginTop:8, justifyContent:"center" }}>
+            {[["#4ade80","< 140"],["#fbbf24","140–155"],["#fb923c","155–170"],["#f87171","> 170"]].map(([c,l])=>(
+              <div key={l} style={{ display:"flex", alignItems:"center", gap:3 }}>
+                <div style={{ width:7, height:7, background:c, borderRadius:2 }}/>
+                <div style={{ fontSize:9, color:"#555" }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {splits?.length > 0 && (
         <div>
           <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>{splitLabel}</div>
@@ -1862,7 +1895,7 @@ function StravaDetailCard({ detail, onClear }) {
                     <td style={{ padding:"5px 6px" }}>{(sp.distance_m/1000).toFixed(2)}km</td>
                     <td style={{ padding:"5px 6px" }}>{fmtTime(sp.moving_time_s)}</td>
                     <td style={{ padding:"5px 6px", color:"#E06666", fontWeight:600 }}>{fmtPace(sp.avg_speed_mps)}</td>
-                    {hasHR  && <td style={{ padding:"5px 6px" }}>{sp.avg_heartrate ? sp.avg_heartrate+"bpm" : "–"}</td>}
+                    {hasHR  && <td style={{ padding:"5px 6px" }}>{sp.avg_heartrate ? Math.round(sp.avg_heartrate)+"bpm" : "–"}</td>}
                     {hasCad && <td style={{ padding:"5px 6px" }}>{sp.avg_cadence ? sp.avg_cadence+"spm" : "–"}</td>}
                   </tr>
                 ))}
@@ -1932,6 +1965,7 @@ function StravaActivityPicker({ activities, loading, selectedId, detail, detailL
 
 // ─── STRAVA DATA CARD ─────────────────────────────────────────────────────────
 function StravaDataCard({ data }) {
+  const [showHRGraph, setShowHRGraph] = useState(false);
   if (!data) return null;
   const fmtPace = (mps) => {
     if (!mps || mps <= 0) return "–";
@@ -1949,6 +1983,10 @@ function StravaDataCard({ data }) {
   const hasLaps  = data.laps?.length > 1;
   const splits   = hasLaps ? data.laps : data.splits;
   const splitLabel = hasLaps ? "Laps" : "Splits (1km)";
+  const hrGraphData = splits?.filter(sp => sp.avg_heartrate) || [];
+  const maxHRVal = hrGraphData.length ? Math.max(...hrGraphData.map(sp => sp.avg_heartrate)) : 0;
+  const minHRVal = hrGraphData.length ? Math.min(...hrGraphData.map(sp => sp.avg_heartrate)) : 0;
+  const hrColor = (hr) => hr > 170 ? "#f87171" : hr > 155 ? "#fb923c" : hr > 140 ? "#fbbf24" : "#4ade80";
 
   return (
     <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
@@ -1967,17 +2005,46 @@ function StravaDataCard({ data }) {
           { label:"Moving Time", val:fmtTime(data.moving_time_s) },
           { label:"Elapsed",     val:fmtTime(data.elapsed_time_s) },
           { label:"Avg Pace",    val:fmtPace(data.avg_speed_mps)+"/km" },
-          ...(data.avg_heartrate ? [{ label:"Avg HR", val:data.avg_heartrate+"bpm" }] : []),
-          ...(data.max_heartrate ? [{ label:"Max HR", val:data.max_heartrate+"bpm" }] : []),
+          ...(data.avg_heartrate ? [{ label:"Avg HR", val:Math.round(data.avg_heartrate)+"bpm", hrTile:true }] : []),
+          ...(data.max_heartrate ? [{ label:"Max HR", val:Math.round(data.max_heartrate)+"bpm" }] : []),
           ...(data.elevation_gain_m != null ? [{ label:"Elevation", val:data.elevation_gain_m+"m" }] : []),
           ...(data.avg_cadence ? [{ label:"Cadence", val:data.avg_cadence+"spm" }] : []),
         ].map((s,i)=>(
-          <div key={i} style={{ background:"#161616", borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
-            <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{s.val}</div>
-            <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}</div>
+          <div key={i} onClick={s.hrTile && hrGraphData.length ? ()=>setShowHRGraph(v=>!v) : undefined}
+            style={{ background: s.hrTile && showHRGraph ? "#0a2a0a" : "#161616", borderRadius:8, padding:"8px 10px", textAlign:"center", cursor: s.hrTile && hrGraphData.length ? "pointer" : "default", border: s.hrTile && showHRGraph ? "1px solid #1a5a1a" : "1px solid transparent" }}>
+            <div style={{ fontSize:13, fontWeight:700, color: s.hrTile ? "#f87171" : "#f0ece4" }}>{s.val}</div>
+            <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}{s.hrTile && hrGraphData.length ? (showHRGraph ? " ▴" : " ▾") : ""}</div>
           </div>
         ))}
       </div>
+
+      {showHRGraph && hrGraphData.length > 0 && (
+        <div style={{ background:"#0a120a", borderRadius:8, border:"1px solid #1a3a1a", padding:"12px", marginBottom:14 }}>
+          <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:10 }}>HR per {hasLaps ? "Lap" : "Split"}</div>
+          <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:64 }}>
+            {splits.map((sp, i) => {
+              const hr = sp.avg_heartrate;
+              if (!hr) return <div key={i} style={{ flex:1 }}/>;
+              const pct = maxHRVal > minHRVal ? 0.3 + ((hr - minHRVal) / (maxHRVal - minHRVal)) * 0.7 : 0.5;
+              return (
+                <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+                  <div style={{ fontSize:8, color:"#888", lineHeight:1 }}>{Math.round(hr)}</div>
+                  <div style={{ width:"100%", height:`${pct * 100}%`, background:hrColor(hr), borderRadius:"2px 2px 0 0", minHeight:4 }}/>
+                  <div style={{ fontSize:8, color:"#444", lineHeight:1 }}>{sp.split ?? sp.lap_index ?? i+1}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display:"flex", gap:10, marginTop:8, justifyContent:"center" }}>
+            {[["#4ade80","< 140"],["#fbbf24","140–155"],["#fb923c","155–170"],["#f87171","> 170"]].map(([c,l])=>(
+              <div key={l} style={{ display:"flex", alignItems:"center", gap:3 }}>
+                <div style={{ width:7, height:7, background:c, borderRadius:2 }}/>
+                <div style={{ fontSize:9, color:"#555" }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Splits/Laps table */}
       {splits?.length > 0 && (
@@ -2002,7 +2069,7 @@ function StravaDataCard({ data }) {
                     <td style={{ padding:"5px 6px" }}>{(sp.distance_m/1000).toFixed(2)}km</td>
                     <td style={{ padding:"5px 6px" }}>{fmtTime(sp.moving_time_s)}</td>
                     <td style={{ padding:"5px 6px", color:"#E06666", fontWeight:600 }}>{fmtPace(sp.avg_speed_mps)}/km</td>
-                    {hasHR  && <td style={{ padding:"5px 6px" }}>{sp.avg_heartrate ? sp.avg_heartrate+"bpm" : "–"}</td>}
+                    {hasHR  && <td style={{ padding:"5px 6px" }}>{sp.avg_heartrate ? Math.round(sp.avg_heartrate)+"bpm" : "–"}</td>}
                     {hasCad && <td style={{ padding:"5px 6px" }}>{sp.avg_cadence ? sp.avg_cadence+"spm" : "–"}</td>}
                   </tr>
                 ))}
