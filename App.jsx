@@ -1228,6 +1228,7 @@ Return JSON with exactly these keys:
 
           {stravaConnected && (
             <StravaActivityPicker
+              compact={true}
               activities={stravaActivities}
               loading={stravaActivitiesLoading}
               selectedId={selectedStravaId}
@@ -1255,7 +1256,7 @@ Return JSON with exactly these keys:
                 type="date"
                 value={logForm.date}
                 onChange={e=>setLogForm(f=>({...f, date:e.target.value}))}
-                style={{ ...S.input }}
+                style={{ ...S.input, width:"auto" }}
               />
             </div>
             <div style={{ marginBottom:14 }}>
@@ -1270,7 +1271,7 @@ Return JSON with exactly these keys:
               </div>
             </div>
             {!stravaDetail && (
-              <div style={{ display:"flex", gap:12, marginBottom:14 }}>
+              <div style={{ display:"flex", gap:12 }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
                   <input
@@ -1291,16 +1292,20 @@ Return JSON with exactly these keys:
                 </div>
               </div>
             )}
-            <div>
-              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Notes (optional)</div>
-              <textarea
-                placeholder="How did it feel? Any highlights?"
-                value={logForm.notes}
-                onChange={e=>setLogForm(f=>({...f, notes:e.target.value}))}
-                style={{ ...S.textarea, minHeight:80 }}
-              />
-            </div>
           </SectionCard>
+
+          {stravaDetail && <StravaDetailCard detail={stravaDetail} />}
+
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Notes (optional)</div>
+            <textarea
+              placeholder="How did it feel? Any highlights?"
+              value={logForm.notes}
+              onChange={e=>setLogForm(f=>({...f, notes:e.target.value}))}
+              style={{ ...S.textarea, minHeight:80 }}
+            />
+          </div>
+
           <button onClick={()=>saveActivity(logForm, stravaDetail)} disabled={!canSubmit||logSaving}
             style={S.primaryBtn("#E06666", !canSubmit||logSaving)}>
             {logSaving ? "Saving..." : "Save Activity →"}
@@ -1586,7 +1591,7 @@ function MonthlySummaryCard({ summary, loading, onGenerate, isCoach }) {
 
 
 // ─── STRAVA ACTIVITY PICKER ───────────────────────────────────────────────────
-function StravaActivityPicker({ activities, loading, selectedId, detail, detailLoading, onOpen, onSelect, onClear }) {
+function StravaDetailCard({ detail, onClear }) {
   const fmtPace = (mps) => {
     if (!mps || mps <= 0) return "–";
     const s = 1000 / mps;
@@ -1597,75 +1602,92 @@ function StravaActivityPicker({ activities, loading, selectedId, detail, detailL
     const h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60), s = Math.round(secs%60).toString().padStart(2,"0");
     return h > 0 ? `${h}:${m.toString().padStart(2,"0")}:${s}` : `${m}:${s}`;
   };
-
-  if (detail) {
-    const hasHR   = detail.splits?.some(s => s.avg_heartrate);
-    const hasCad  = detail.splits?.some(s => s.avg_cadence);
-    const hasLaps = detail.laps?.length > 1;
-    const splits  = hasLaps ? detail.laps : detail.splits;
-    const splitLabel = hasLaps ? "Laps" : "Splits (1km)";
-    return (
-      <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontSize:16 }}>🟠</span>
-            <div>
-              <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{detail.name}</div>
-              <div style={{ fontSize:11, color:"#4ade80", letterSpacing:1 }}>STRAVA IMPORTED</div>
-            </div>
-          </div>
-          <button onClick={onClear} style={{ background:"none", border:"1px solid #2a2a2a", borderRadius:6, padding:"4px 10px", color:"#666", fontSize:11, cursor:"pointer" }}>✕ Clear</button>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom: splits?.length > 0 ? 14 : 0 }}>
-          {[
-            { label:"Distance",    val:(detail.distance_m/1000).toFixed(2)+"km" },
-            { label:"Moving Time", val:fmtTime(detail.moving_time_s) },
-            { label:"Elapsed",     val:fmtTime(detail.elapsed_time_s) },
-            { label:"Avg Pace",    val:fmtPace(detail.avg_speed_mps) },
-            ...(detail.avg_heartrate ? [{ label:"Avg HR",   val:detail.avg_heartrate+"bpm" }] : []),
-            ...(detail.max_heartrate ? [{ label:"Max HR",   val:detail.max_heartrate+"bpm" }] : []),
-            ...(detail.elevation_gain_m != null ? [{ label:"Elevation", val:detail.elevation_gain_m+"m" }] : []),
-            ...(detail.avg_cadence ? [{ label:"Cadence",  val:detail.avg_cadence+"spm" }] : []),
-          ].map((s,i)=>(
-            <div key={i} style={{ background:"#161616", borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
-              <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{s.val}</div>
-              <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-        {splits?.length > 0 && (
+  const hasHR   = detail.splits?.some(s => s.avg_heartrate);
+  const hasCad  = detail.splits?.some(s => s.avg_cadence);
+  const hasLaps = detail.laps?.length > 1;
+  const splits  = hasLaps ? detail.laps : detail.splits;
+  const splitLabel = hasLaps ? "Laps" : "Splits (1km)";
+  return (
+    <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:16 }}>🟠</span>
           <div>
-            <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>{splitLabel}</div>
-            <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                <thead>
-                  <tr style={{ color:"#555", textAlign:"left" }}>
-                    <th style={{ padding:"4px 6px", fontWeight:400 }}>#</th>
-                    <th style={{ padding:"4px 6px", fontWeight:400 }}>Dist</th>
-                    <th style={{ padding:"4px 6px", fontWeight:400 }}>Time</th>
-                    <th style={{ padding:"4px 6px", fontWeight:400 }}>Pace</th>
-                    {hasHR  && <th style={{ padding:"4px 6px", fontWeight:400 }}>HR</th>}
-                    {hasCad && <th style={{ padding:"4px 6px", fontWeight:400 }}>Cad</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {splits.map((sp, i) => (
-                    <tr key={i} style={{ borderTop:"1px solid #1a1a1a", color:"#ccc" }}>
-                      <td style={{ padding:"5px 6px", color:"#555" }}>{sp.split ?? sp.lap_index ?? i+1}</td>
-                      <td style={{ padding:"5px 6px" }}>{(sp.distance_m/1000).toFixed(2)}km</td>
-                      <td style={{ padding:"5px 6px" }}>{fmtTime(sp.moving_time_s)}</td>
-                      <td style={{ padding:"5px 6px", color:"#E06666", fontWeight:600 }}>{fmtPace(sp.avg_speed_mps)}</td>
-                      {hasHR  && <td style={{ padding:"5px 6px" }}>{sp.avg_heartrate ? sp.avg_heartrate+"bpm" : "–"}</td>}
-                      {hasCad && <td style={{ padding:"5px 6px" }}>{sp.avg_cadence ? sp.avg_cadence+"spm" : "–"}</td>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{detail.name}</div>
+            <div style={{ fontSize:11, color:"#4ade80", letterSpacing:1 }}>STRAVA IMPORTED</div>
           </div>
-        )}
+        </div>
+        {onClear && <button onClick={onClear} style={{ background:"none", border:"1px solid #2a2a2a", borderRadius:6, padding:"4px 10px", color:"#666", fontSize:11, cursor:"pointer" }}>✕ Clear</button>}
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom: splits?.length > 0 ? 14 : 0 }}>
+        {[
+          { label:"Distance",    val:(detail.distance_m/1000).toFixed(2)+"km" },
+          { label:"Moving Time", val:fmtTime(detail.moving_time_s) },
+          { label:"Elapsed",     val:fmtTime(detail.elapsed_time_s) },
+          { label:"Avg Pace",    val:fmtPace(detail.avg_speed_mps) },
+          ...(detail.avg_heartrate ? [{ label:"Avg HR",   val:detail.avg_heartrate+"bpm" }] : []),
+          ...(detail.max_heartrate ? [{ label:"Max HR",   val:detail.max_heartrate+"bpm" }] : []),
+          ...(detail.elevation_gain_m != null ? [{ label:"Elevation", val:detail.elevation_gain_m+"m" }] : []),
+          ...(detail.avg_cadence ? [{ label:"Cadence",  val:detail.avg_cadence+"spm" }] : []),
+        ].map((s,i)=>(
+          <div key={i} style={{ background:"#161616", borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{s.val}</div>
+            <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      {splits?.length > 0 && (
+        <div>
+          <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>{splitLabel}</div>
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead>
+                <tr style={{ color:"#555", textAlign:"left" }}>
+                  <th style={{ padding:"4px 6px", fontWeight:400 }}>#</th>
+                  <th style={{ padding:"4px 6px", fontWeight:400 }}>Dist</th>
+                  <th style={{ padding:"4px 6px", fontWeight:400 }}>Time</th>
+                  <th style={{ padding:"4px 6px", fontWeight:400 }}>Pace</th>
+                  {hasHR  && <th style={{ padding:"4px 6px", fontWeight:400 }}>HR</th>}
+                  {hasCad && <th style={{ padding:"4px 6px", fontWeight:400 }}>Cad</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {splits.map((sp, i) => (
+                  <tr key={i} style={{ borderTop:"1px solid #1a1a1a", color:"#ccc" }}>
+                    <td style={{ padding:"5px 6px", color:"#555" }}>{sp.split ?? sp.lap_index ?? i+1}</td>
+                    <td style={{ padding:"5px 6px" }}>{(sp.distance_m/1000).toFixed(2)}km</td>
+                    <td style={{ padding:"5px 6px" }}>{fmtTime(sp.moving_time_s)}</td>
+                    <td style={{ padding:"5px 6px", color:"#E06666", fontWeight:600 }}>{fmtPace(sp.avg_speed_mps)}</td>
+                    {hasHR  && <td style={{ padding:"5px 6px" }}>{sp.avg_heartrate ? sp.avg_heartrate+"bpm" : "–"}</td>}
+                    {hasCad && <td style={{ padding:"5px 6px" }}>{sp.avg_cadence ? sp.avg_cadence+"spm" : "–"}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StravaActivityPicker({ activities, loading, selectedId, detail, detailLoading, onOpen, onSelect, onClear, compact }) {
+  if (detail && compact) {
+    return (
+      <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:10, padding:"12px 14px", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:16 }}>🟠</span>
+          <div>
+            <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{detail.name}</div>
+            <div style={{ fontSize:11, color:"#4ade80", letterSpacing:1 }}>STRAVA IMPORTED · {(detail.distance_m/1000).toFixed(2)}km</div>
+          </div>
+        </div>
+        <button onClick={onClear} style={{ background:"none", border:"1px solid #2a2a2a", borderRadius:6, padding:"4px 10px", color:"#666", fontSize:11, cursor:"pointer" }}>✕ Clear</button>
       </div>
     );
+  }
+  if (detail) {
+    return <StravaDetailCard detail={detail} onClear={onClear} />;
   }
 
   return (
