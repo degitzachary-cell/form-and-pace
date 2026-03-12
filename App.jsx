@@ -250,6 +250,7 @@ export default function App() {
   const [activities,  setActivities]  = useState([]);
   const [logForm,     setLogForm]     = useState({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
   const [logSaving,   setLogSaving]   = useState(false);
+  const [logError,    setLogError]    = useState(null);
 
   // ── Auth: listen for session changes ──
   useEffect(() => {
@@ -353,6 +354,7 @@ export default function App() {
 
   const saveActivity = async (form, stravaDetailData = null) => {
     setLogSaving(true);
+    setLogError(null);
     const payload = {
       athlete_email: user.email?.toLowerCase(),
       athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
@@ -365,6 +367,7 @@ export default function App() {
       ...(stravaDetailData ? { strava_data: stravaDetailData } : {}),
     };
     const { data, error } = await supabase.from("activities").insert(payload).select().single();
+    if (error) { console.error("saveActivity error:", error); setLogError(error.message); }
     if (!error && data) {
       setActivities(prev => [data, ...prev]);
       // Auto-link to matching scheduled session for this date
@@ -1306,6 +1309,7 @@ Return JSON with exactly these keys:
             />
           </div>
 
+          {logError && <div style={{ color:"#ef4444", fontSize:13, marginBottom:10, textAlign:"center", padding:"8px", background:"#1a0000", borderRadius:8, border:"1px solid #3a0000" }}>{logError}</div>}
           <button onClick={()=>saveActivity(logForm, stravaDetail)} disabled={!canSubmit||logSaving}
             style={S.primaryBtn("#E06666", !canSubmit||logSaving)}>
             {logSaving ? "Saving..." : "Save Activity →"}
