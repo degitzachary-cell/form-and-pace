@@ -626,7 +626,7 @@ export default function App() {
           duration_seconds: sessionDurMin ? Math.round(parseFloat(sessionDurMin) * 60) : null,
           activity_type: s.type || "Run",
           notes: feedbackText || null,
-          source: stravaDetail ? "strava" : "session",
+          source: "session",
           ...(stravaDetail ? { strava_data: stravaDetail } : {}),
         };
         const { data: actData } = await supabase.from("activities").insert(payload).select().single();
@@ -1300,7 +1300,7 @@ Return JSON with exactly these keys:
                     <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
                     <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
                     {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:"#888", marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
-                    {log?.coach_reply && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 Coach replied</div>}
+                    {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 Coach replied</div>}
                   </div>
                   <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
                 </div>
@@ -1515,6 +1515,8 @@ Return JSON with exactly these keys:
   if (role === "athlete" && screen === "result" && activeSession) {
     const log = logs[activeSession.id];
     const an  = log?.analysis;
+    const resultSDate = activeSession.weekStart ? sessionDateStr(activeSession.weekStart, activeSession.day) : null;
+    const resultLinkedAct = resultSDate ? activities.find(a => a.athlete_email === user.email?.toLowerCase() && a.activity_date === resultSDate) : null;
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -1532,9 +1534,9 @@ Return JSON with exactly these keys:
               <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{log?.feedback || feedbackText}"</div>
             </SectionCard>
           )}
-          {log?.coach_reply && (
+          {(log?.coach_reply || resultLinkedAct?.coach_reply) && (
             <SectionCard label="💬 Message from Coach" accent="#3b82f6">
-              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{log.coach_reply}</div>
+              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{log?.coach_reply || resultLinkedAct?.coach_reply}</div>
             </SectionCard>
           )}
           <button onClick={()=>setScreen("home")} style={S.ghostBtn}>← Back to week</button>
