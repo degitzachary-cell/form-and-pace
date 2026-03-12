@@ -365,6 +365,7 @@ export default function App() {
       activity_type: form.type,
       notes: form.notes || null,
       source: stravaDetailData ? "strava" : "manual",
+      ...(stravaDetailData ? { strava_data: stravaDetailData } : {}),
     };
     const { data, error } = await supabase.from("activities").insert(payload).select().single();
     if (error) { console.error("saveActivity error:", error); setLogError(error.message); }
@@ -953,7 +954,7 @@ Return JSON with exactly these keys:
                     );
                   })}
                   {extraActs.map(act => (
-                    <div key={act.id} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, background:"#1a0505", border:"1px solid #7f1d1d" }}>
+                    <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setCoachScreen("extra-activity"); }} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, background:"#1a0505", border:"1px solid #7f1d1d", cursor:"pointer" }}>
                       <div style={{ fontSize:22 }}>➕</div>
                       <div style={{ flex:1 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -1046,6 +1047,38 @@ Return JSON with exactly these keys:
               </SectionCard>}
             </>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  COACH — EXTRA ACTIVITY DETAIL
+  // ────────────────────────────────────────────────────────────
+  if (role === "coach" && coachScreen === "extra-activity" && activeExtraActivity) {
+    const act = activeExtraActivity;
+    const durMin = act.duration_seconds ? Math.round(act.duration_seconds / 60) : null;
+    const dateLabel = act.activity_date ? act.activity_date.slice(5).replace("-", " ") : "";
+    const da = ATHLETE_PROGRAMS[dashAthlete];
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }}/>
+        <div style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}>
+          <div style={{ fontSize:13, color:"#888", marginBottom:16 }}>{da?.name}</div>
+          <div style={{ textAlign:"center", fontSize:48, margin:"20px 0 8px" }}>➕</div>
+          <div style={{ textAlign:"center", fontSize:14, color:"#E06666", fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
+          <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+            {act.distance_km && <StatPill label="Distance" val={`${act.distance_km}km`} color="#4ade80"/>}
+            {durMin && <StatPill label="Duration" val={`${durMin}min`}/>}
+          </div>
+          {act.strava_data && <StravaDataCard data={act.strava_data}/>}
+          {act.notes && (
+            <SectionCard label="Athlete Notes">
+              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{act.notes}"</div>
+            </SectionCard>
+          )}
+          <button onClick={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }} style={S.ghostBtn}>← Back to athlete</button>
         </div>
       </div>
     );
