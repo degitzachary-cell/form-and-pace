@@ -219,6 +219,7 @@ export default function App() {
   // Athlete state
   const [screen,        setScreen]        = useState("home");
   const [activeSession, setActiveSession] = useState(null);
+  const [activeExtraActivity, setActiveExtraActivity] = useState(null);
   const [activeWeekIdx, setActiveWeekIdx] = useState(0);
   const [feedbackText,  setFeedbackText]  = useState("");
   const [sessionDistKm, setSessionDistKm] = useState("");
@@ -1059,7 +1060,7 @@ Return JSON with exactly these keys:
     const maxBarKm = Math.max(...weekBars.map(b => b.km), 1);
     const thisWeekKm = weekBars[3].km;
     const actByDate = {};
-    activities.filter(a => a.athlete_email === user.email?.toLowerCase()).forEach(a => {
+    activities.filter(a => a.athlete_email === user.email?.toLowerCase() && a.source === "session").forEach(a => {
       if (!actByDate[a.activity_date]) actByDate[a.activity_date] = a;
     });
     return (
@@ -1196,7 +1197,7 @@ Return JSON with exactly these keys:
                 a.activity_date <= wkEnd
               );
               return extraActs.map(act => (
-                <div key={act.id} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:12, padding:"16px 18px", marginBottom:10, display:"flex", alignItems:"center", gap:14 }}>
+                <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:12, padding:"16px 18px", marginBottom:10, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
                   <div style={{ width:42, height:42, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>➕</div>
                   <div style={{ flex:1 }}>
                     <div style={{ display:"flex", justifyContent:"space-between" }}>
@@ -1417,6 +1418,36 @@ Return JSON with exactly these keys:
             </SectionCard>
           )}
           <button onClick={()=>setScreen("home")} style={S.ghostBtn}>← Back to week</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  ATHLETE — EXTRA ACTIVITY DETAIL
+  // ────────────────────────────────────────────────────────────
+  if (role === "athlete" && screen === "extra-activity" && activeExtraActivity) {
+    const act = activeExtraActivity;
+    const durMin = act.duration_seconds ? Math.round(act.duration_seconds / 60) : null;
+    const dateLabel = act.activity_date ? act.activity_date.slice(5).replace("-", " ") : "";
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setScreen("home"); }}/>
+        <div style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}>
+          <div style={{ textAlign:"center", fontSize:48, margin:"20px 0 8px" }}>➕</div>
+          <div style={{ textAlign:"center", fontSize:14, color:"#E06666", fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
+          <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+            {act.distance_km && <StatPill label="Distance" val={`${act.distance_km}km`} color="#4ade80"/>}
+            {durMin && <StatPill label="Duration" val={`${durMin}min`}/>}
+          </div>
+          {act.strava_data && <StravaDataCard data={act.strava_data}/>}
+          {act.notes && (
+            <SectionCard label="Your Notes">
+              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{act.notes}"</div>
+            </SectionCard>
+          )}
+          <button onClick={()=>{ setActiveExtraActivity(null); setScreen("home"); }} style={S.ghostBtn}>← Back to week</button>
         </div>
       </div>
     );
