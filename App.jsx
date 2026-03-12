@@ -294,7 +294,9 @@ export default function App() {
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const code = p.get("code");
-    if (code && p.get("scope")?.includes("activity")) {
+    const scope = p.get("scope") ?? "";
+    // Strava always returns a "scope" param; Supabase OAuth does not
+    if (code && scope.length > 0) {
       window.history.replaceState({}, "", window.location.pathname);
       sessionStorage.setItem("strava_pending_code", code);
     }
