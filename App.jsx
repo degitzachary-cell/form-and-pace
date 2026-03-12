@@ -1245,11 +1245,6 @@ Return JSON with exactly these keys:
                 } else clearStravaSelection();
               }}
               onClear={() => { clearStravaSelection(); }}
-              onAutoFill={() => {
-                if (stravaDetail) {
-                  setLogForm(f=>({ ...f, distanceKm: (stravaDetail.distance_m/1000).toFixed(2), durationMin: Math.round(stravaDetail.moving_time_s/60).toString() }));
-                }
-              }}
             />
           )}
 
@@ -1341,16 +1336,15 @@ Return JSON with exactly these keys:
             onOpen={() => { fetchStravaActivities(); }}
             onSelect={async (id) => {
               setSelectedStravaId(id);
-              if (id) await fetchStravaDetail(id);
-              else clearStravaSelection();
+              if (id) {
+                const d = await fetchStravaDetail(id);
+                if (d) {
+                  setSessionDistKm((d.distance_m / 1000).toFixed(2));
+                  setSessionDurMin(Math.round(d.moving_time_s / 60).toString());
+                }
+              } else clearStravaSelection();
             }}
             onClear={() => { clearStravaSelection(); }}
-            onAutoFill={() => {
-              if (stravaDetail) {
-                setSessionDistKm((stravaDetail.distance_m / 1000).toFixed(2));
-                setSessionDurMin(Math.round(stravaDetail.moving_time_s / 60).toString());
-              }
-            }}
           />
         )}
 
@@ -1588,7 +1582,7 @@ function MonthlySummaryCard({ summary, loading, onGenerate, isCoach }) {
 
 
 // ─── STRAVA ACTIVITY PICKER ───────────────────────────────────────────────────
-function StravaActivityPicker({ activities, loading, selectedId, detail, detailLoading, onOpen, onSelect, onClear, onAutoFill }) {
+function StravaActivityPicker({ activities, loading, selectedId, detail, detailLoading, onOpen, onSelect, onClear }) {
   const fmtPace = (mps) => {
     if (!mps || mps <= 0) return "–";
     const s = 1000 / mps;
@@ -1601,9 +1595,14 @@ function StravaActivityPicker({ activities, loading, selectedId, detail, detailL
   };
 
   if (detail) {
+    const hasHR   = detail.splits?.some(s => s.avg_heartrate);
+    const hasCad  = detail.splits?.some(s => s.avg_cadence);
+    const hasLaps = detail.laps?.length > 1;
+    const splits  = hasLaps ? detail.laps : detail.splits;
+    const splitLabel = hasLaps ? "Laps" : "Splits (1km)";
     return (
-      <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+      <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ fontSize:16 }}>🟠</span>
             <div>
@@ -1613,24 +1612,54 @@ function StravaActivityPicker({ activities, loading, selectedId, detail, detailL
           </div>
           <button onClick={onClear} style={{ background:"none", border:"1px solid #2a2a2a", borderRadius:6, padding:"4px 10px", color:"#666", fontSize:11, cursor:"pointer" }}>✕ Clear</button>
         </div>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom: splits?.length > 0 ? 14 : 0 }}>
           {[
-            { label:"Distance", val:(detail.distance_m/1000).toFixed(2)+"km" },
-            { label:"Moving", val:fmtTime(detail.moving_time_s) },
-            { label:"Elapsed", val:fmtTime(detail.elapsed_time_s) },
-            { label:"Avg Pace", val:fmtPace(detail.avg_speed_mps) },
-            ...(detail.avg_heartrate ? [{ label:"Avg HR", val:detail.avg_heartrate+"bpm" }] : []),
-            ...(detail.elevation_gain_m ? [{ label:"Elevation", val:detail.elevation_gain_m+"m" }] : []),
+            { label:"Distance",    val:(detail.distance_m/1000).toFixed(2)+"km" },
+            { label:"Moving Time", val:fmtTime(detail.moving_time_s) },
+            { label:"Elapsed",     val:fmtTime(detail.elapsed_time_s) },
+            { label:"Avg Pace",    val:fmtPace(detail.avg_speed_mps) },
+            ...(detail.avg_heartrate ? [{ label:"Avg HR",   val:detail.avg_heartrate+"bpm" }] : []),
+            ...(detail.max_heartrate ? [{ label:"Max HR",   val:detail.max_heartrate+"bpm" }] : []),
+            ...(detail.elevation_gain_m != null ? [{ label:"Elevation", val:detail.elevation_gain_m+"m" }] : []),
+            ...(detail.avg_cadence ? [{ label:"Cadence",  val:detail.avg_cadence+"spm" }] : []),
           ].map((s,i)=>(
-            <div key={i} style={{ background:"#161616", borderRadius:8, padding:"6px 10px", textAlign:"center" }}>
-              <div style={{ fontSize:12, fontWeight:700, color:"#f0ece4" }}>{s.val}</div>
-              <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase" }}>{s.label}</div>
+            <div key={i} style={{ background:"#161616", borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{s.val}</div>
+              <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}</div>
             </div>
           ))}
         </div>
-        <button onClick={onAutoFill} style={{ marginTop:10, width:"100%", background:"#1a2e1a", border:"1px solid #2a4a2a", borderRadius:8, padding:"9px", color:"#4ade80", fontSize:12, cursor:"pointer", letterSpacing:1 }}>
-          ↑ Auto-fill distance & duration from Strava
-        </button>
+        {splits?.length > 0 && (
+          <div>
+            <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>{splitLabel}</div>
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                <thead>
+                  <tr style={{ color:"#555", textAlign:"left" }}>
+                    <th style={{ padding:"4px 6px", fontWeight:400 }}>#</th>
+                    <th style={{ padding:"4px 6px", fontWeight:400 }}>Dist</th>
+                    <th style={{ padding:"4px 6px", fontWeight:400 }}>Time</th>
+                    <th style={{ padding:"4px 6px", fontWeight:400 }}>Pace</th>
+                    {hasHR  && <th style={{ padding:"4px 6px", fontWeight:400 }}>HR</th>}
+                    {hasCad && <th style={{ padding:"4px 6px", fontWeight:400 }}>Cad</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {splits.map((sp, i) => (
+                    <tr key={i} style={{ borderTop:"1px solid #1a1a1a", color:"#ccc" }}>
+                      <td style={{ padding:"5px 6px", color:"#555" }}>{sp.split ?? sp.lap_index ?? i+1}</td>
+                      <td style={{ padding:"5px 6px" }}>{(sp.distance_m/1000).toFixed(2)}km</td>
+                      <td style={{ padding:"5px 6px" }}>{fmtTime(sp.moving_time_s)}</td>
+                      <td style={{ padding:"5px 6px", color:"#E06666", fontWeight:600 }}>{fmtPace(sp.avg_speed_mps)}</td>
+                      {hasHR  && <td style={{ padding:"5px 6px" }}>{sp.avg_heartrate ? sp.avg_heartrate+"bpm" : "–"}</td>}
+                      {hasCad && <td style={{ padding:"5px 6px" }}>{sp.avg_cadence ? sp.avg_cadence+"spm" : "–"}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
