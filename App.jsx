@@ -556,6 +556,7 @@ export default function App() {
       if (data?.id) {
         const extracted = extractStravaData(data);
         setStravaDetail(extracted);
+        setStravaDetailLoading(false);
         return extracted;
       }
     } catch(e) { console.error("strava get error", e); }
@@ -710,7 +711,7 @@ Return JSON with exactly these keys:
   // ── Coach reply ──
   const handleCoachReply = async (sessionId) => {
     if (!coachReply.trim()) return;
-    await saveLog(sessionId, { ...logs[sessionId], coach_reply: coachReply });
+    await saveLog(sessionId, { coach_reply: coachReply });
     setCoachReply("");
   };
 
@@ -1079,11 +1080,11 @@ Return JSON with exactly these keys:
             </SectionCard>
           )}
           <SectionCard label="💬 Your Reply">
-            {act.coach_notes ? (
+            {act.coach_reply ? (
               <>
-                <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, marginBottom:12 }}>{act.coach_notes}</div>
+                <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, marginBottom:12 }}>{act.coach_reply}</div>
                 <button onClick={async ()=>{
-                  const { data } = await supabase.from("activities").update({ coach_notes: "" }).eq("id", act.id).select().single();
+                  const { data } = await supabase.from("activities").update({ coach_reply: "" }).eq("id", act.id).select().single();
                   if (data) { setActiveExtraActivity(data); setActivities(prev => prev.map(a => a.id === data.id ? data : a)); }
                 }} style={S.ghostBtn}>Edit reply</button>
               </>
@@ -1094,7 +1095,7 @@ Return JSON with exactly these keys:
                   style={{ ...S.textarea, minHeight:90 }}/>
                 <button onClick={async ()=>{
                   if (!coachReply.trim()) return;
-                  const { data } = await supabase.from("activities").update({ coach_notes: coachReply }).eq("id", act.id).select().single();
+                  const { data } = await supabase.from("activities").update({ coach_reply: coachReply }).eq("id", act.id).select().single();
                   if (data) { setActiveExtraActivity(data); setActivities(prev => prev.map(a => a.id === data.id ? data : a)); setCoachReply(""); }
                 }} disabled={!coachReply.trim()} style={S.primaryBtn("#3b82f6", !coachReply.trim())}>
                   Send Reply →
@@ -1237,7 +1238,7 @@ Return JSON with exactly these keys:
                     </div>
                     <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
                     <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
-                    {linkedAct && <div style={{ fontSize:11, color:"#888", marginTop:3 }}>{linkedAct.distance_km}km{linkedAct.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : ""}</div>}
+                    {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:"#888", marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
                     {log?.coach_reply && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 Coach replied</div>}
                   </div>
                   <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
@@ -1264,7 +1265,7 @@ Return JSON with exactly these keys:
                     <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
                     <div style={{ fontSize:11, color:"#888", marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
                     {act.notes && <div style={{ fontSize:11, color:"#666", marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
-                    {act.coach_notes && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 Coach replied</div>}
+                    {act.coach_reply && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 Coach replied</div>}
                   </div>
                 </div>
               ));
@@ -1505,9 +1506,9 @@ Return JSON with exactly these keys:
               <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{act.notes}"</div>
             </SectionCard>
           )}
-          {act.coach_notes && (
+          {act.coach_reply && (
             <SectionCard label="💬 Message from Coach" accent="#3b82f6">
-              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{act.coach_notes}</div>
+              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{act.coach_reply}</div>
             </SectionCard>
           )}
           <button onClick={()=>{ setActiveExtraActivity(null); setScreen("home"); }} style={S.ghostBtn}>← Back to week</button>
