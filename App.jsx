@@ -202,11 +202,11 @@ const ATHLETE_PROGRAMS = {
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const TAG_STYLE = {
-  easy:  { bg:"#0d2818", accent:"#4ade80" },
-  speed: { bg:"#2d1500", accent:"#fb923c" },
-  tempo: { bg:"#2d0a0a", accent:"#f87171" },
+  easy:  { bg:"#e6f0e3", accent:"#2a5c27", border:"#b8d4b4" },
+  speed: { bg:"#e2eaf5", accent:"#14365f", border:"#b0c8e8" },
+  tempo: { bg:"#f5e4e4", accent:"#7a1a1a", border:"#e0b8b8" },
 };
-const COMPLY_COLOR = { completed:"#4ade80", missed:"#f87171", partial:"#fbbf24", pending:"#555" };
+const COMPLY_COLOR = { completed:"#2a6e27", missed:"#8b1c1c", partial:"#8b6914", pending:"#9a8a7a" };
 const COMPLY_LABEL = { completed:"✓ Done", missed:"✗ Missed", partial:"~ Partial", pending:"Pending" };
 
 // ─── WEEK HELPERS ─────────────────────────────────────────────────────────────
@@ -804,7 +804,7 @@ Return JSON with exactly these keys:
     <div style={{ ...S.page, display:"flex", alignItems:"center", justifyContent:"center" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ fontSize:32, marginBottom:16 }}>⏳</div>
-        <div style={{ color:"#555", fontSize:14 }}>Loading...</div>
+        <div style={{ color:C.mid, fontSize:14 }}>Loading...</div>
       </div>
     </div>
   );
@@ -816,17 +816,21 @@ Return JSON with exactly these keys:
     <div style={S.page}>
       <div style={S.grain}/>
       <div style={{ maxWidth:400, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
-        <div style={{ fontSize:11, letterSpacing:5, color:"#E06666", textTransform:"uppercase", marginBottom:16 }}>Training Platform</div>
-        <div style={{ fontSize:42, fontWeight:900, fontFamily:"'Georgia',serif", lineHeight:1.0, marginBottom:8 }}>FORM<br/>&amp; PACE</div>
-        <div style={{ fontSize:14, color:"#555", marginBottom:56, lineHeight:1.6 }}>
+        <div style={{ fontSize:11, letterSpacing:5, color:C.crimson, textTransform:"uppercase", marginBottom:16, fontFamily:S.bodyFont }}>Training Platform</div>
+        <div style={{ borderTop:`1px solid ${C.rule}`, width:48, margin:"0 auto 24px" }}/>
+        <div style={{ fontSize:48, fontWeight:900, fontFamily:S.displayFont, lineHeight:1.0, marginBottom:6, color:C.navy }}>Form</div>
+        <div style={{ fontSize:14, color:C.mid, fontFamily:S.bodyFont, letterSpacing:4, textTransform:"uppercase", marginBottom:6 }}>&amp;</div>
+        <div style={{ fontSize:48, fontWeight:900, fontFamily:S.displayFont, lineHeight:1.0, marginBottom:24, color:C.navy }}>Pace</div>
+        <div style={{ borderBottom:`1px solid ${C.rule}`, width:48, margin:"0 auto 32px" }}/>
+        <div style={{ fontSize:14, color:C.mid, marginBottom:56, lineHeight:1.6, fontFamily:S.bodyFont }}>
           Expert coaching for<br/>distance runners
         </div>
 
         <button onClick={signInWithGoogle} style={{
-          background:"white", color:"#111", border:"none", borderRadius:12,
-          padding:"16px 28px", fontSize:15, fontWeight:700, cursor:"pointer",
+          background:C.navy, color:C.cream, border:"none", borderRadius:2,
+          padding:"16px 28px", fontSize:13, fontWeight:600, cursor:"pointer",
           display:"flex", alignItems:"center", gap:12, margin:"0 auto",
-          boxShadow:"0 2px 20px rgba(0,0,0,0.4)",
+          letterSpacing:2, textTransform:"uppercase", fontFamily:S.bodyFont,
         }}>
           <svg width="20" height="20" viewBox="0 0 48 48">
             <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -838,10 +842,10 @@ Return JSON with exactly these keys:
         </button>
 
         {authError && (
-          <div style={{ marginTop:20, color:"#f87171", fontSize:13 }}>{authError}</div>
+          <div style={{ marginTop:20, color:C.crimson, fontSize:13 }}>{authError}</div>
         )}
 
-        <div style={{ marginTop:48, fontSize:12, color:"#333", lineHeight:1.8 }}>
+        <div style={{ marginTop:48, fontSize:12, color:C.mid, lineHeight:1.8, fontFamily:S.bodyFont }}>
           Athletes are automatically linked to their program.<br/>
           Coaches see all athletes and session data.
         </div>
@@ -857,11 +861,11 @@ Return JSON with exactly these keys:
       <div style={S.grain}/>
       <div style={{ maxWidth:400, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
         <div style={{ fontSize:48, marginBottom:20 }}>👋</div>
-        <div style={{ fontSize:20, fontWeight:700, marginBottom:12 }}>You're not enrolled yet</div>
-        <div style={{ fontSize:14, color:"#666", lineHeight:1.8, marginBottom:32 }}>
+        <div style={{ fontSize:20, fontWeight:700, marginBottom:12, fontFamily:S.displayFont, color:C.navy }}>You're not enrolled yet</div>
+        <div style={{ fontSize:14, color:C.mid, lineHeight:1.8, marginBottom:32, fontFamily:S.bodyFont }}>
           Your coach needs to add you to the platform.<br/>
           Share your email with them:<br/>
-          <span style={{ color:"#E06666", fontFamily:"monospace", fontSize:13, marginTop:8, display:"block" }}>{user.email}</span>
+          <span style={{ color:C.crimson, fontFamily:S.monoFont, fontSize:13, marginTop:8, display:"block" }}>{user.email}</span>
         </div>
         <button onClick={signOut} style={S.ghostBtn}>Sign out</button>
       </div>
@@ -891,8 +895,8 @@ Return JSON with exactly these keys:
               { label:"Avg Compliance", val: athletes.length ? Math.round(athletes.reduce((a,[e])=>a+getStats(e).rate,0)/athletes.length)+"%" : "–" },
             ].map((s,i)=>(
               <div key={i} style={S.statBox}>
-                <div style={{ fontSize:24, fontWeight:900 }}>{s.val}</div>
-                <div style={{ fontSize:9, color:"#555", letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>{s.label}</div>
+                <div style={{ fontSize:24, fontWeight:900, color:C.navy }}>{s.val}</div>
+                <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>{s.label}</div>
               </div>
             ))}
           </div>
@@ -906,34 +910,34 @@ Return JSON with exactly these keys:
               <div key={email} onClick={()=>{ setDashAthlete(email); setCoachScreen("athlete"); }}
                 style={{ ...S.card, marginBottom:12, cursor:"pointer" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:14 }}>
-                  <div style={{ width:46, height:46, borderRadius:"50%", background:"#E06666", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:14, flexShrink:0 }}>
+                  <div style={{ width:46, height:46, borderRadius:"50%", background:C.navy, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:14, flexShrink:0, color:C.cream }}>
                     {data.avatar}
                   </div>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:700, fontSize:16 }}>{data.name}</div>
-                    <div style={{ fontSize:12, color:"#555", marginTop:2 }}>Goal: {data.goal} · PB: {data.current}</div>
+                    <div style={{ fontWeight:700, fontSize:16, color:C.navy, fontFamily:S.displayFont }}>{data.name}</div>
+                    <div style={{ fontSize:12, color:C.mid, marginTop:2 }}>Goal: {data.goal} · PB: {data.current}</div>
                   </div>
                   <div style={{ textAlign:"right" }}>
-                    <div style={{ fontSize:16, fontWeight:900, color:"#f0ece4" }}>{thisWeekKm.toFixed(1)}</div>
-                    <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase" }}>km/wk</div>
+                    <div style={{ fontSize:16, fontWeight:900, color:C.navy }}>{thisWeekKm.toFixed(1)}</div>
+                    <div style={{ fontSize:9, color:C.mid, letterSpacing:1, textTransform:"uppercase" }}>km/wk</div>
                   </div>
-                  <div style={{ color:"#333", fontSize:20 }}>›</div>
+                  <div style={{ color:C.mid, fontSize:20 }}>›</div>
                 </div>
-                <div style={{ background:"#0a0a0a", borderRadius:6, height:5, marginBottom:8 }}>
-                  <div style={{ width:`${st.rate}%`, height:5, borderRadius:6, background: st.rate>75?"#4ade80":st.rate>40?"#fbbf24":"#f87171", transition:"width 0.5s" }}/>
+                <div style={{ background:C.lightRule, borderRadius:2, height:5, marginBottom:8 }}>
+                  <div style={{ width:`${st.rate}%`, height:5, borderRadius:2, background: st.rate>75?C.green:st.rate>40?C.amber:C.crimson, transition:"width 0.5s" }}/>
                 </div>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#555" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:C.mid }}>
                   <span>{st.done}/{st.total} sessions · {st.rate}% compliance</span>
-                  {st.missed > 0 && <span style={{ color:"#f87171" }}>{st.missed} missed</span>}
+                  {st.missed > 0 && <span style={{ color:C.crimson }}>{st.missed} missed</span>}
                 </div>
                 {recentSessions.length > 0 && (
                   <div style={{ marginTop:10, display:"flex", gap:6, alignItems:"center" }}>
                     {recentSessions.map(s=>(
-                      <span key={s.id} style={{ background:"#1a1a1a", borderRadius:6, padding:"3px 8px", fontSize:16 }}>
+                      <span key={s.id} style={{ background:C.lightRule, borderRadius:2, padding:"3px 8px", fontSize:16 }}>
                         {logs[s.id]?.analysis?.emoji || "📝"}
                       </span>
                     ))}
-                    <span style={{ fontSize:11, color:"#444", marginLeft:2 }}>recent</span>
+                    <span style={{ fontSize:11, color:C.mid, marginLeft:2 }}>recent</span>
                   </div>
                 )}
               </div>
@@ -960,14 +964,14 @@ Return JSON with exactly these keys:
 
           <div style={{ display:"flex", gap:10, marginBottom:24 }}>
             {[
-              { label:"Compliance", val:`${st.rate}%`, color: st.rate>75?"#4ade80":st.rate>40?"#fbbf24":"#f87171" },
-              { label:"Completed",  val: st.done,   color:"#4ade80" },
-              { label:"Missed",     val: st.missed,  color: st.missed>0?"#f87171":"#888" },
-              { label:"Km This Wk", val:`${athWeekKm.toFixed(1)}`, color:"#f0ece4" },
+              { label:"Compliance", val:`${st.rate}%`, color: st.rate>75?C.green:st.rate>40?C.amber:C.crimson },
+              { label:"Completed",  val: st.done,   color:C.green },
+              { label:"Missed",     val: st.missed,  color: st.missed>0?C.crimson:C.mid },
+              { label:"Km This Wk", val:`${athWeekKm.toFixed(1)}`, color:C.navy },
             ].map((s,i)=>(
               <div key={i} style={S.statBox}>
-                <div style={{ fontSize:24, fontWeight:900, color:s.color||"#f0ece4" }}>{s.val}</div>
-                <div style={{ fontSize:9, color:"#555", letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>{s.label}</div>
+                <div style={{ fontSize:24, fontWeight:900, color:s.color||C.navy }}>{s.val}</div>
+                <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>{s.label}</div>
               </div>
             ))}
           </div>
@@ -987,7 +991,7 @@ Return JSON with exactly these keys:
               const extraActs = athActs.filter(a => a.source !== "session" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
               return (
                 <div key={wi} style={{ marginBottom:20 }}>
-                  <div style={{ fontSize:11, letterSpacing:3, color:"#444", textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
+                  <div style={{ fontSize:11, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
                   {wk.sessions.map(s => {
                     const log    = logs[s.id];
                     const sDate  = sessionDateStr(wk.weekStart, s.day);
@@ -1010,23 +1014,23 @@ Return JSON with exactly these keys:
                             <div style={{ fontSize:11, color: COMPLY_COLOR[comply], fontWeight:700 }}>{COMPLY_LABEL[comply]}</div>
                           </div>
                           {log?.analysis?.distance_km && (
-                            <div style={{ fontSize:12, color:"#666", marginTop:3 }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>
+                            <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>
                           )}
-                          {log?.coach_reply && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 You replied</div>}
+                          {log?.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 You replied</div>}
                         </div>
-                        <div style={{ color:"#333" }}>›</div>
+                        <div style={{ color:C.mid }}>›</div>
                       </div>
                     );
                   })}
                   {extraActs.map(act => (
-                    <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setCoachScreen("extra-activity"); }} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, background:"#1a0505", border:"1px solid #7f1d1d", cursor:"pointer" }}>
+                    <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setCoachScreen("extra-activity"); }} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, background:"#fdf0f0", border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, cursor:"pointer" }}>
                       <div style={{ fontSize:22 }}>➕</div>
                       <div style={{ flex:1 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                          <div style={{ fontWeight:700, fontSize:14 }}>{act.activity_date.slice(5).replace("-"," ")} · Extra Run</div>
-                          <div style={{ fontSize:11, color:"#888", fontWeight:700 }}>EXTRA</div>
+                          <div style={{ fontWeight:700, fontSize:14, color:C.navy }}>{act.activity_date.slice(5).replace("-"," ")} · Extra Run</div>
+                          <div style={{ fontSize:11, color:C.mid, fontWeight:700 }}>EXTRA</div>
                         </div>
-                        <div style={{ fontSize:12, color:"#666", marginTop:3 }}>
+                        <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>
                           {act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}
                           {act.notes ? ` — ${act.notes}` : ""}
                         </div>
@@ -1059,16 +1063,16 @@ Return JSON with exactly these keys:
 
           <SectionCard label="Prescribed Session">
             {activeSession.desc.split("\n").map((l,i)=>(
-              <div key={i} style={{ fontSize:14, color:i===0?"#f0ece4":"#888", lineHeight:1.9 }}>{l}</div>
+              <div key={i} style={{ fontSize:14, color:i===0?C.navy:C.mid, lineHeight:1.9 }}>{l}</div>
             ))}
-            <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:"1px solid #1e1e1e" }}>
+            <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
               <MiniStat label="Terrain" val={activeSession.terrain}/>
-              <MiniStat label="Target Pace" val={activeSession.pace} color="#E06666"/>
+              <MiniStat label="Target Pace" val={activeSession.pace} color={C.crimson}/>
             </div>
           </SectionCard>
 
           {!sessionLogged ? (
-            <div style={{ textAlign:"center", padding:"40px 0", color:"#444", fontSize:14 }}>Athlete hasn't logged this session yet.</div>
+            <div style={{ textAlign:"center", padding:"40px 0", color:C.mid, fontSize:14 }}>Athlete hasn't logged this session yet.</div>
           ) : (
             <>
               {(() => {
@@ -1078,16 +1082,16 @@ Return JSON with exactly these keys:
                 const notes    = log?.feedback || linkedAthAct?.notes;
                 return (<>
                   <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-                    {distKm  && <StatPill label="Distance" val={`${distKm}km`}  color="#4ade80"/>}
+                    {distKm  && <StatPill label="Distance" val={`${distKm}km`}  color={C.green}/>}
                     {durMin  && <StatPill label="Duration" val={`${durMin}min`}/>}
                   </div>
                   {(log?.strava_data || linkedAthAct?.strava_data) && <StravaDataCard data={log?.strava_data || linkedAthAct?.strava_data}/>}
                   {notes ? (
                     <SectionCard label="Athlete's Notes">
-                      <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{notes}"</div>
+                      <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{notes}"</div>
                     </SectionCard>
                   ) : (
-                    <div style={{ fontSize:13, color:"#444", textAlign:"center", padding:"8px 0 16px" }}>No notes submitted.</div>
+                    <div style={{ fontSize:13, color:C.mid, textAlign:"center", padding:"8px 0 16px" }}>No notes submitted.</div>
                   )}
                 </>);
               })()}
@@ -1095,7 +1099,7 @@ Return JSON with exactly these keys:
               <SectionCard label="💬 Your Reply">
                 {(log?.coach_reply || linkedAthAct?.coach_reply) ? (
                   <>
-                    <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, marginBottom:12 }}>{log?.coach_reply || linkedAthAct?.coach_reply}</div>
+                    <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, marginBottom:12 }}>{log?.coach_reply || linkedAthAct?.coach_reply}</div>
                     <button onClick={async ()=>{
                       if (log?.coach_reply) {
                         const { data: updated } = await supabase.from("session_logs").update({ coach_reply: "", updated_at: new Date().toISOString() }).eq("session_id", activeSession.id).select().maybeSingle();
@@ -1145,7 +1149,7 @@ Return JSON with exactly these keys:
                         return;
                       }
                       alert("No session log or activity found for this session.");
-                    }} disabled={!coachReply.trim()} style={S.primaryBtn("#3b82f6", !coachReply.trim())}>
+                    }} disabled={!coachReply.trim()} style={S.primaryBtn("#14365f", !coachReply.trim())}>
                       Send Reply →
                     </button>
                   </>
@@ -1171,23 +1175,23 @@ Return JSON with exactly these keys:
         <div style={S.grain}/>
         <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }}/>
         <div style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}>
-          <div style={{ fontSize:13, color:"#888", marginBottom:16 }}>{da?.name}</div>
+          <div style={{ fontSize:13, color:C.mid, marginBottom:16 }}>{da?.name}</div>
           <div style={{ textAlign:"center", fontSize:48, margin:"20px 0 8px" }}>➕</div>
-          <div style={{ textAlign:"center", fontSize:14, color:"#E06666", fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
+          <div style={{ textAlign:"center", fontSize:14, color:C.crimson, fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
           <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-            {act.distance_km && <StatPill label="Distance" val={`${act.distance_km}km`} color="#4ade80"/>}
+            {act.distance_km && <StatPill label="Distance" val={`${act.distance_km}km`} color={C.green}/>}
             {durMin && <StatPill label="Duration" val={`${durMin}min`}/>}
           </div>
           {act.strava_data && <StravaDataCard data={act.strava_data}/>}
           {act.notes && (
             <SectionCard label="Athlete Notes">
-              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{act.notes}"</div>
+              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{act.notes}"</div>
             </SectionCard>
           )}
           <SectionCard label="💬 Your Reply">
             {act.coach_reply ? (
               <>
-                <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, marginBottom:12 }}>{act.coach_reply}</div>
+                <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, marginBottom:12 }}>{act.coach_reply}</div>
                 <button onClick={async ()=>{
                   const { data } = await supabase.from("activities").update({ coach_reply: "" }).eq("id", act.id).select().single();
                   if (data) { setActiveExtraActivity(data); setActivities(prev => prev.map(a => a.id === data.id ? data : a)); }
@@ -1202,7 +1206,7 @@ Return JSON with exactly these keys:
                   if (!coachReply.trim()) return;
                   const { data } = await supabase.from("activities").update({ coach_reply: coachReply }).eq("id", act.id).select().single();
                   if (data) { setActiveExtraActivity(data); setActivities(prev => prev.map(a => a.id === data.id ? data : a)); setCoachReply(""); }
-                }} disabled={!coachReply.trim()} style={S.primaryBtn("#3b82f6", !coachReply.trim())}>
+                }} disabled={!coachReply.trim()} style={S.primaryBtn("#14365f", !coachReply.trim())}>
                   Send Reply →
                 </button>
               </>
@@ -1236,27 +1240,27 @@ Return JSON with exactly these keys:
         />
         <div style={{ maxWidth:500, margin:"0 auto", padding:"0 0 80px" }}>
 
-          <div style={{ margin:"20px 16px", background:"#161616", border:"1px solid #222", borderLeft:"3px solid #E06666", borderRadius:8, padding:"14px 18px" }}>
-            <div style={{ fontSize:10, letterSpacing:3, color:"#E06666", textTransform:"uppercase", marginBottom:4 }}>Season Goal</div>
-            <div style={{ fontSize:18, fontWeight:900 }}>{athleteData.goal}</div>
-            <div style={{ fontSize:12, color:"#555", marginTop:3 }}>Current PB: {athleteData.current}</div>
+          <div style={{ margin:"20px 16px", background:C.white, border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, borderRadius:2, padding:"14px 18px" }}>
+            <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>Season Goal</div>
+            <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>{athleteData.goal}</div>
+            <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>Current PB: {athleteData.current}</div>
           </div>
 
           {/* 8-Week Rolling Volume */}
-          <div style={{ margin:"0 16px 16px", background:"#161616", border:"1px solid #1e1e1e", borderRadius:8, padding:"14px 18px" }}>
+          <div style={{ margin:"0 16px 16px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 18px" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
               <div>
-                <div style={{ fontSize:10, letterSpacing:3, color:"#555", textTransform:"uppercase", marginBottom:4 }}>This Week</div>
-                <div style={{ fontSize:26, fontWeight:900, color:"#f0ece4" }}>
+                <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>This Week</div>
+                <div style={{ fontSize:26, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>
                   {hoveredWeekIdx !== null ? weekBars[hoveredWeekIdx].km.toFixed(1) : thisWeekKm.toFixed(1)}
-                  <span style={{ fontSize:14, color:"#555", fontWeight:400 }}> km</span>
+                  <span style={{ fontSize:14, color:C.mid, fontWeight:400 }}> km</span>
                   {hoveredWeekIdx !== null && hoveredWeekIdx !== 7 && (
-                    <span style={{ fontSize:11, color:"#555", fontWeight:400, marginLeft:8 }}>{weekBars[hoveredWeekIdx].label}</span>
+                    <span style={{ fontSize:11, color:C.mid, fontWeight:400, marginLeft:8 }}>{weekBars[hoveredWeekIdx].label}</span>
                   )}
                 </div>
               </div>
               <button onClick={()=>{ setLogForm({ date: new Date().toISOString().split("T")[0], distanceKm:"", durationMin:"", type:"Run", notes:"" }); setScreen("log-activity"); }}
-                style={{ background:"#E06666", border:"none", borderRadius:8, padding:"8px 14px", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", letterSpacing:1 }}>
+                style={{ background:C.crimson, border:"none", borderRadius:2, padding:"8px 14px", color:"#fffdf8", fontSize:12, fontWeight:700, cursor:"pointer", letterSpacing:1, fontFamily:S.bodyFont }}>
                 + LOG RUN
               </button>
             </div>
@@ -1271,21 +1275,21 @@ Return JSON with exactly these keys:
                     onMouseLeave={() => setHoveredWeekIdx(null)}
                     onTouchStart={() => setHoveredWeekIdx(hoveredWeekIdx === i ? null : i)}
                     style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer", userSelect:"none" }}>
-                    <div style={{ fontSize:9, color: isHovered ? "#f0ece4" : "transparent", marginBottom:3, fontWeight:600, minHeight:12, lineHeight:1 }}>
+                    <div style={{ fontSize:9, color: isHovered ? C.navy : "transparent", marginBottom:3, fontWeight:600, minHeight:12, lineHeight:1 }}>
                       {b.km > 0 ? b.km.toFixed(1) : ""}
                     </div>
                     <div style={{ width:"100%", flex:1, display:"flex", alignItems:"flex-end" }}>
                       <div style={{
                         width:"100%",
                         height: b.km > 0 ? `${Math.max(pct * 100, 6)}%` : "2px",
-                        background: isCurrent ? "#E06666" : isHovered ? "#666" : "#2a2a2a",
+                        background: isCurrent ? C.crimson : isHovered ? C.mid : C.lightRule,
                         borderRadius:"3px 3px 0 0",
                         transition:"background 0.15s",
                         opacity: b.km === 0 ? 0.4 : 1,
                       }}/>
                     </div>
-                    <div style={{ width:"100%", height:1, background:"#2a2a2a", margin:"3px 0" }}/>
-                    <div style={{ fontSize:7, color: isCurrent ? "#888" : "#3a3a3a", letterSpacing:0.5, textTransform:"uppercase", whiteSpace:"nowrap" }}>
+                    <div style={{ width:"100%", height:1, background:C.rule, margin:"3px 0" }}/>
+                    <div style={{ fontSize:7, color: isCurrent ? C.mid : C.lightRule, letterSpacing:0.5, textTransform:"uppercase", whiteSpace:"nowrap" }}>
                       {b.label}
                     </div>
                   </div>
@@ -1293,7 +1297,7 @@ Return JSON with exactly these keys:
               })}
             </div>
             {activities.filter(a=>a.athlete_email===user.email).length===0 && (
-              <div style={{ marginTop:10, fontSize:11, color:"#444", textAlign:"center" }}>Log your first run to start tracking km</div>
+              <div style={{ marginTop:10, fontSize:11, color:C.mid, textAlign:"center" }}>Log your first run to start tracking km</div>
             )}
           </div>
 
@@ -1312,15 +1316,15 @@ Return JSON with exactly these keys:
           {/* Strava connect / connected status */}
           <div style={{ margin:"0 16px 14px" }}>
             {stravaConnected ? (
-              <div style={{ display:"flex", alignItems:"center", gap:8, background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:8, padding:"10px 14px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"10px 14px" }}>
                 <span style={{ fontSize:16 }}>🟠</span>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Strava Connected</div>
-                  <div style={{ fontSize:11, color:"#555" }}>Import runs when logging a session</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:C.green }}>Strava Connected</div>
+                  <div style={{ fontSize:11, color:C.mid }}>Import runs when logging a session</div>
                 </div>
               </div>
             ) : (
-              <button onClick={connectStrava} style={{ width:"100%", background:"#FC4C02", border:"none", borderRadius:8, padding:"12px 16px", color:"white", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, letterSpacing:0.5 }}>
+              <button onClick={connectStrava} style={{ width:"100%", background:"#FC4C02", border:"none", borderRadius:2, padding:"12px 16px", color:"white", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, letterSpacing:0.5 }}>
                 <span style={{ fontSize:18 }}>🟠</span> Connect Strava
               </button>
             )}
@@ -1329,20 +1333,20 @@ Return JSON with exactly these keys:
           <div style={{ display:"flex", gap:8, padding:"0 16px", marginBottom:16, overflowX:"auto" }}>
             {weeks.map((w,i)=>(
               <button key={i} onClick={()=>setActiveWeekIdx(i)} style={{
-                background: i===activeWeekIdx?"#E06666":"#161616",
+                background: i===activeWeekIdx?C.crimson:"none",
                 border:`1px solid ${i===activeWeekIdx?"#E06666":"#222"}`,
-                borderRadius:20, padding:"6px 14px",
-                color: i===activeWeekIdx?"white":"#666",
+                borderRadius:2, padding:"6px 14px",
+                color: i===activeWeekIdx?"#fffdf8":C.mid,
                 fontSize:11, cursor:"pointer", whiteSpace:"nowrap", letterSpacing:1,
               }}>WK {i+1}</button>
             ))}
             <button onClick={()=>setScreen("history")} style={{
-              background:"#161616", border:"1px solid #222", borderRadius:20,
-              padding:"6px 14px", color:"#555", fontSize:11, cursor:"pointer", whiteSpace:"nowrap",
+              background:C.white, border:`1px solid ${C.rule}`, borderRadius:2,
+              padding:"6px 14px", color:C.mid, fontSize:11, cursor:"pointer", whiteSpace:"nowrap",
             }}>HISTORY →</button>
           </div>
 
-          <div style={{ padding:"0 16px 10px", fontSize:12, color:"#444" }}>{week?.weekLabel}</div>
+          <div style={{ padding:"0 16px 10px", fontSize:12, color:C.mid }}>{week?.weekLabel}</div>
 
           <div style={{ padding:"0 16px" }}>
             {week?.sessions.map(s => {
@@ -1355,19 +1359,19 @@ Return JSON with exactly these keys:
               return (
                 <div key={s.id}
                   onClick={()=>{ setActiveSession({...s, weekStart: week.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
-                  style={{ background:isLogged?"#0d1f0d":"#161616", border:`1px solid ${isLogged?"#166534":"#1e1e1e"}`, borderRadius:12, padding:"16px 18px", marginBottom:10, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
+                  style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"16px 18px", marginBottom:10, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
                   <div style={{ width:42, height:42, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>
                     {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
                   </div>
                   <div style={{ flex:1 }}>
                     <div style={{ display:"flex", justifyContent:"space-between" }}>
-                      <div style={{ fontSize:12, color:"#555" }}>{s.day}</div>
-                      {isLogged && <div style={{ fontSize:11, color:"#4ade80" }}>✓ LOGGED</div>}
+                      <div style={{ fontSize:12, color:C.mid }}>{s.day}</div>
+                      {isLogged && <div style={{ fontSize:11, color:C.green }}>✓ LOGGED</div>}
                     </div>
                     <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
                     <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
-                    {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:"#888", marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
-                    {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 Coach replied</div>}
+                    {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:C.mid, marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
+                    {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
                   </div>
                   <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
                 </div>
@@ -1383,17 +1387,17 @@ Return JSON with exactly these keys:
                 a.activity_date <= wkEnd
               );
               return extraActs.map(act => (
-                <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:12, padding:"16px 18px", marginBottom:10, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
+                <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:2, padding:"16px 18px", marginBottom:10, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
                   <div style={{ width:42, height:42, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>➕</div>
                   <div style={{ flex:1 }}>
                     <div style={{ display:"flex", justifyContent:"space-between" }}>
-                      <div style={{ fontSize:12, color:"#888" }}>{act.activity_date.slice(5).replace("-"," ")}</div>
-                      <div style={{ fontSize:11, color:"#E06666" }}>EXTRA RUN</div>
+                      <div style={{ fontSize:12, color:C.mid }}>{act.activity_date.slice(5).replace("-"," ")}</div>
+                      <div style={{ fontSize:11, color:C.crimson }}>EXTRA RUN</div>
                     </div>
                     <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
-                    <div style={{ fontSize:11, color:"#888", marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
-                    {act.notes && <div style={{ fontSize:11, color:"#666", marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
-                    {act.coach_reply && <div style={{ fontSize:11, color:"#3b82f6", marginTop:3 }}>💬 Coach replied</div>}
+                    <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
+                    {act.notes && <div style={{ fontSize:11, color:C.mid, marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
+                    {act.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
                   </div>
                 </div>
               ));
@@ -1441,7 +1445,7 @@ Return JSON with exactly these keys:
 
           <SectionCard label="Activity Details">
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Date</div>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Date</div>
               <input
                 type="date"
                 value={logForm.date}
@@ -1450,11 +1454,11 @@ Return JSON with exactly these keys:
               />
             </div>
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Activity Type</div>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Activity Type</div>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 {activityTypes.map(t=>(
                   <button key={t} onClick={()=>setLogForm(f=>({...f, type:t}))}
-                    style={{ background:logForm.type===t?"#E06666":"#1a1a1a", border:`1px solid ${logForm.type===t?"#E06666":"#2a2a2a"}`, borderRadius:20, padding:"5px 12px", color:logForm.type===t?"white":"#888", fontSize:12, cursor:"pointer" }}>
+                    style={{ background:logForm.type===t?C.crimson:C.white, border:`1px solid ${logForm.type===t?C.crimson:C.rule}`, borderRadius:2, padding:"5px 12px", color:logForm.type===t?"#fffdf8":C.mid, fontSize:12, cursor:"pointer" }}>
                     {t}
                   </button>
                 ))}
@@ -1463,7 +1467,7 @@ Return JSON with exactly these keys:
             {!stravaDetail && (
               <div style={{ display:"flex", gap:12 }}>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
+                  <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
                   <input
                     type="number" step="0.01" min="0" placeholder="e.g. 10.5"
                     value={logForm.distanceKm}
@@ -1472,7 +1476,7 @@ Return JSON with exactly these keys:
                   />
                 </div>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
+                  <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
                   <input
                     type="number" step="1" min="0" placeholder="e.g. 55"
                     value={logForm.durationMin}
@@ -1487,7 +1491,7 @@ Return JSON with exactly these keys:
           {stravaDetail && <StravaDetailCard detail={stravaDetail} />}
 
           <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Notes (optional)</div>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Notes (optional)</div>
             <textarea
               placeholder="How did it feel? Any highlights?"
               value={logForm.notes}
@@ -1496,7 +1500,7 @@ Return JSON with exactly these keys:
             />
           </div>
 
-          {logError && <div style={{ color:"#ef4444", fontSize:13, marginBottom:10, textAlign:"center", padding:"8px", background:"#1a0000", borderRadius:8, border:"1px solid #3a0000" }}>{logError}</div>}
+          {logError && <div style={{ color:C.crimson, fontSize:13, marginBottom:10, textAlign:"center", padding:"8px", background:"#1a0000", borderRadius:2, border:"1px solid #3a0000" }}>{logError}</div>}
           <button onClick={()=>saveActivity(logForm, stravaDetail)} disabled={!canSubmit||logSaving}
             style={S.primaryBtn("#E06666", !canSubmit||logSaving)}>
             {logSaving ? "Saving..." : "Save Activity →"}
@@ -1516,9 +1520,9 @@ Return JSON with exactly these keys:
       <div style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}>
         <SectionCard label="Today's Session">
           {activeSession.desc.split("\n").map((l,i)=>(
-            <div key={i} style={{ fontSize:14, color:i===0?"#f0ece4":"#aaa", lineHeight:1.9 }}>{l}</div>
+            <div key={i} style={{ fontSize:14, color:i===0?C.navy:C.mid, lineHeight:1.9 }}>{l}</div>
           ))}
-          <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:"1px solid #1e1e1e" }}>
+          <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
             <MiniStat label="Terrain" val={activeSession.terrain}/>
             <MiniStat label="Target Pace" val={activeSession.pace} color="#E06666"/>
           </div>
@@ -1549,20 +1553,20 @@ Return JSON with exactly these keys:
         {!stravaDetail && (
           <div style={{ display:"flex", gap:12, marginBottom:14 }}>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
               <input type="number" step="0.01" min="0" placeholder="e.g. 10.5"
                 value={sessionDistKm} onChange={e=>setSessionDistKm(e.target.value)}
                 style={S.input}/>
             </div>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Duration (min)</div>
               <input type="number" step="1" min="0" placeholder="e.g. 55"
                 value={sessionDurMin} onChange={e=>setSessionDurMin(e.target.value)}
                 style={S.input}/>
             </div>
           </div>
         )}
-        <div style={{ fontSize:11, letterSpacing:2, color:"#666", textTransform:"uppercase", marginBottom:10 }}>How did it go?</div>
+        <div style={{ fontSize:11, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:10 }}>How did it go?</div>
         <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)}
           placeholder="Tell me about the session... how did it feel? Did you hit the paces? Any soreness or highlights?"
           style={S.textarea}/>
@@ -1590,7 +1594,7 @@ Return JSON with exactly these keys:
         <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>setScreen("home")}/>
         <div style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ textAlign:"center", fontSize:64, margin:"20px 0 8px" }}>{an?.emoji || "✓"}</div>
-          <div style={{ textAlign:"center", fontSize:14, color:"#4ade80", fontWeight:700, marginBottom:20, letterSpacing:1 }}>SESSION LOGGED</div>
+          <div style={{ textAlign:"center", fontSize:14, color:C.green, fontWeight:700, marginBottom:20, letterSpacing:1 }}>SESSION LOGGED</div>
           <div style={{ display:"flex", gap:10, marginBottom:16 }}>
             {an?.distance_km && <StatPill label="Distance" val={`${an.distance_km}km`} color="#4ade80"/>}
             {an?.duration_min && <StatPill label="Duration" val={`${an.duration_min}min`}/>}
@@ -1598,12 +1602,12 @@ Return JSON with exactly these keys:
           {log?.strava_data && <StravaDataCard data={log.strava_data}/>}
           {(log?.feedback || feedbackText) && (
             <SectionCard label="Your Notes">
-              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{log?.feedback || feedbackText}"</div>
+              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{log?.feedback || feedbackText}"</div>
             </SectionCard>
           )}
           {(log?.coach_reply || resultLinkedAct?.coach_reply) && (
             <SectionCard label="💬 Message from Coach" accent="#3b82f6">
-              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{log?.coach_reply || resultLinkedAct?.coach_reply}</div>
+              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8 }}>{log?.coach_reply || resultLinkedAct?.coach_reply}</div>
             </SectionCard>
           )}
           <button onClick={()=>setScreen("home")} style={S.ghostBtn}>← Back to week</button>
@@ -1625,7 +1629,7 @@ Return JSON with exactly these keys:
         <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setScreen("home"); }}/>
         <div style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ textAlign:"center", fontSize:48, margin:"20px 0 8px" }}>➕</div>
-          <div style={{ textAlign:"center", fontSize:14, color:"#E06666", fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
+          <div style={{ textAlign:"center", fontSize:14, color:C.crimson, fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
           <div style={{ display:"flex", gap:10, marginBottom:16 }}>
             {act.distance_km && <StatPill label="Distance" val={`${act.distance_km}km`} color="#4ade80"/>}
             {durMin && <StatPill label="Duration" val={`${durMin}min`}/>}
@@ -1633,12 +1637,12 @@ Return JSON with exactly these keys:
           {act.strava_data && <StravaDataCard data={act.strava_data}/>}
           {act.notes && (
             <SectionCard label="Your Notes">
-              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8, fontStyle:"italic" }}>"{act.notes}"</div>
+              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{act.notes}"</div>
             </SectionCard>
           )}
           {act.coach_reply && (
             <SectionCard label="💬 Message from Coach" accent="#3b82f6">
-              <div style={{ fontSize:14, color:"#ccc", lineHeight:1.8 }}>{act.coach_reply}</div>
+              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8 }}>{act.coach_reply}</div>
             </SectionCard>
           )}
           <button onClick={()=>{ setActiveExtraActivity(null); setScreen("home"); }} style={S.ghostBtn}>← Back to week</button>
@@ -1663,11 +1667,11 @@ Return JSON with exactly these keys:
             {[
               { label:"Compliance", val:`${compliance}%`, color: compliance>75?"#4ade80":"#fbbf24" },
               { label:"Sessions",   val:`${logged.length}/${allSessions.length}` },
-              { label:"Block Km",   val:`${totalKm.toFixed(0)}`, color:"#f0ece4" },
+              { label:"Block Km",   val:`${totalKm.toFixed(0)}`, color:C.navy },
             ].map((s,i)=>(
               <div key={i} style={S.statBox}>
-                <div style={{ fontSize:20, fontWeight:900, color:s.color||"#f0ece4" }}>{s.val}</div>
-                <div style={{ fontSize:9, color:"#555", letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>{s.label}</div>
+                <div style={{ fontSize:20, fontWeight:900, color:s.color||C.navy }}>{s.val}</div>
+                <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>{s.label}</div>
               </div>
             ))}
           </div>
@@ -1678,18 +1682,18 @@ Return JSON with exactly these keys:
               return (
                 <div key={i} style={{ marginBottom:10 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:5 }}>
-                    <span style={{ color:"#888" }}>{w.weekLabel}</span>
+                    <span style={{ color:C.mid }}>{w.weekLabel}</span>
                     <span style={{ color: pct>75?"#4ade80":pct>40?"#fbbf24":"#f87171" }}>{done}/{w.sessions.length}</span>
                   </div>
-                  <div style={{ background:"#0a0a0a", borderRadius:4, height:4 }}>
-                    <div style={{ width:`${pct}%`, height:4, borderRadius:4, background: pct>75?"#4ade80":pct>40?"#fbbf24":"#f87171" }}/>
+                  <div style={{ background:C.cream, borderRadius:2, height:4 }}>
+                    <div style={{ width:`${pct}%`, height:4, borderRadius:2, background: pct>75?"#4ade80":pct>40?"#fbbf24":"#f87171" }}/>
                   </div>
                 </div>
               );
             })}
           </SectionCard>
-          <div style={{ fontSize:11, letterSpacing:2, color:"#444", textTransform:"uppercase", marginBottom:12 }}>Session Log</div>
-          {logged.length===0 && <div style={{ color:"#444", fontSize:14, textAlign:"center", padding:"20px 0" }}>No sessions logged yet.</div>}
+          <div style={{ fontSize:11, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:12 }}>Session Log</div>
+          {logged.length===0 && <div style={{ color:C.mid, fontSize:14, textAlign:"center", padding:"20px 0" }}>No sessions logged yet.</div>}
           {logged.map(s=>{
             const log = logs[s.id];
             const an  = log?.analysis;
@@ -1701,7 +1705,7 @@ Return JSON with exactly these keys:
                 <div style={{ flex:1 }}>
                   <div style={{ fontWeight:700, fontSize:13 }}>{s.day} · {s.type}</div>
                   {an?.distance_km && (
-                    <div style={{ fontSize:12, color:"#888", marginTop:2 }}>
+                    <div style={{ fontSize:12, color:C.mid, marginTop:2 }}>
                       {an.distance_km}km{an.duration_min ? ` · ${an.duration_min}min` : ""}
                     </div>
                   )}
@@ -1723,11 +1727,11 @@ Return JSON with exactly these keys:
 // ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
 function Header({ title, subtitle, right, onBack }) {
   return (
-    <div style={{ background:"#0f0f0f", borderBottom:"1px solid #1a1a1a", padding:"16px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:10 }}>
-      {onBack && <button onClick={onBack} style={{ background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:22, padding:"0 6px 0 0", lineHeight:1 }}>‹</button>}
+    <div style={{ background:C.cream, borderBottom:`1px solid ${C.rule}`, padding:"16px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:10 }}>
+      {onBack && <button onClick={onBack} style={{ background:"none", border:"none", color:C.mid, cursor:"pointer", fontSize:22, padding:"0 6px 0 0", lineHeight:1 }}>‹</button>}
       <div style={{ flex:1 }}>
-        <div style={{ fontSize:10, color:"#444", letterSpacing:2, textTransform:"uppercase" }}>{subtitle}</div>
-        <div style={{ fontSize:17, fontWeight:800, fontFamily:"'Georgia',serif", color:"#f0ece4" }}>{title}</div>
+        <div style={{ fontSize:10, color:C.mid, letterSpacing:2, textTransform:"uppercase" }}>{subtitle}</div>
+        <div style={{ fontSize:17, fontWeight:800, fontFamily:"'EB Garamond', Georgia, serif", color:C.navy }}>{title}</div>
       </div>
       {right}
     </div>
@@ -1735,81 +1739,81 @@ function Header({ title, subtitle, right, onBack }) {
 }
 function SectionCard({ label, children, accent }) {
   return (
-    <div style={{ background:"#161616", border:`1px solid ${accent?"#222":"#1a1a1a"}`, borderLeft:`3px solid ${accent||"#1a1a1a"}`, borderRadius:10, padding:"16px 18px", marginBottom:14 }}>
-      <div style={{ fontSize:10, letterSpacing:2, color:accent||"#444", textTransform:"uppercase", marginBottom:10 }}>{label}</div>
+    <div style={{ background:C.white, border:`1px solid ${accent?C.rule:C.lightRule}`, borderLeft:`3px solid ${accent||C.lightRule}`, borderRadius:2, padding:"16px 18px", marginBottom:14 }}>
+      <div style={{ fontSize:10, letterSpacing:2, color:accent||C.mid, textTransform:"uppercase", marginBottom:10 }}>{label}</div>
       {children}
     </div>
   );
 }
 function StatPill({ label, val, color }) {
   return (
-    <div style={{ flex:1, background:"#161616", border:"1px solid #1a1a1a", borderRadius:10, padding:"14px 8px", textAlign:"center" }}>
-      <div style={{ fontSize:10, color:"#444", letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>{label}</div>
-      <div style={{ fontSize:13, fontWeight:800, color:color||"#f0ece4" }}>{val}</div>
+    <div style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 8px", textAlign:"center" }}>
+      <div style={{ fontSize:10, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>{label}</div>
+      <div style={{ fontSize:13, fontWeight:800, color:color||C.navy }}>{val}</div>
     </div>
   );
 }
 function MiniStat({ label, val, color }) {
   return (
     <div>
-      <div style={{ fontSize:10, color:"#444", letterSpacing:2, textTransform:"uppercase", marginBottom:3 }}>{label}</div>
-      <div style={{ fontSize:13, color:color||"#f0ece4", fontWeight:600 }}>{val}</div>
+      <div style={{ fontSize:10, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginBottom:3 }}>{label}</div>
+      <div style={{ fontSize:13, color:color||C.navy, fontWeight:600 }}>{val}</div>
     </div>
   );
 }
 
 function MonthlySummaryCard({ summary, loading, onGenerate, isCoach }) {
   if (loading) return (
-    <div style={{ background:"#161616", border:"1px solid #222", borderRadius:10, padding:"20px 18px", marginBottom:20, textAlign:"center" }}>
-      <div style={{ fontSize:13, color:"#555" }}>Generating block summary...</div>
+    <div style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"20px 18px", marginBottom:20, textAlign:"center" }}>
+      <div style={{ fontSize:13, color:C.mid }}>Generating block summary...</div>
     </div>
   );
   if (!summary) {
     if (!isCoach) return null;
     return (
       <button onClick={onGenerate}
-        style={{ width:"100%", background:"#161616", border:"1px dashed #333", borderRadius:10, padding:"16px", marginBottom:20, color:"#555", fontSize:12, cursor:"pointer", letterSpacing:1, textTransform:"uppercase" }}>
+        style={{ width:"100%", background:C.white, border:"1px dashed #333", borderRadius:2, padding:"16px", marginBottom:20, color:C.mid, fontSize:12, cursor:"pointer", letterSpacing:1, textTransform:"uppercase" }}>
         + Generate 4-Week Block Summary
       </button>
     );
   }
   return (
-    <div style={{ background:"#161616", border:"1px solid #222", borderLeft:"3px solid #E06666", borderRadius:10, padding:"18px", marginBottom:20 }}>
+    <div style={{ background:C.white, border:`1px solid ${C.rule}`, borderLeft:"3px solid #E06666", borderRadius:2, padding:"18px", marginBottom:20 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
-        <div style={{ fontSize:10, letterSpacing:3, color:"#E06666", textTransform:"uppercase" }}>4-Week Block Summary</div>
+        <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase" }}>4-Week Block Summary</div>
         {isCoach && (
           <button onClick={onGenerate}
-            style={{ background:"none", border:"none", color:"#444", fontSize:11, cursor:"pointer", padding:0 }}>
+            style={{ background:"none", border:"none", color:C.mid, fontSize:11, cursor:"pointer", padding:0 }}>
             Regenerate
           </button>
         )}
       </div>
-      <div style={{ fontSize:15, fontWeight:700, color:"#f0ece4", marginBottom:14, lineHeight:1.4 }}>{summary.headline}</div>
+      <div style={{ fontSize:15, fontWeight:700, color:C.navy, marginBottom:14, lineHeight:1.4 }}>{summary.headline}</div>
 
       <div style={{ marginBottom:12 }}>
-        <div style={{ fontSize:10, letterSpacing:2, color:"#444", textTransform:"uppercase", marginBottom:6 }}>Wins</div>
+        <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Wins</div>
         {summary.wins?.map((w, i) => (
-          <div key={i} style={{ fontSize:12, color:"#4ade80", marginBottom:4 }}>✓ {w}</div>
+          <div key={i} style={{ fontSize:12, color:C.green, marginBottom:4 }}>✓ {w}</div>
         ))}
       </div>
 
       {summary.watchPoints?.length > 0 && (
         <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:10, letterSpacing:2, color:"#444", textTransform:"uppercase", marginBottom:6 }}>Watch</div>
+          <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Watch</div>
           {summary.watchPoints.map((w, i) => (
-            <div key={i} style={{ fontSize:12, color:"#fbbf24", marginBottom:4 }}>⚠ {w}</div>
+            <div key={i} style={{ fontSize:12, color:C.amber, marginBottom:4 }}>⚠ {w}</div>
           ))}
         </div>
       )}
 
-      <div style={{ borderTop:"1px solid #1e1e1e", paddingTop:12, marginTop:4 }}>
-        <div style={{ fontSize:10, letterSpacing:2, color:"#444", textTransform:"uppercase", marginBottom:4 }}>Next Block Focus</div>
-        <div style={{ fontSize:13, color:"#f0ece4", lineHeight:1.5 }}>{summary.nextBlockFocus}</div>
+      <div style={{ borderTop:`1px solid ${C.lightRule}`, paddingTop:12, marginTop:4 }}>
+        <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:4 }}>Next Block Focus</div>
+        <div style={{ fontSize:13, color:C.navy, lineHeight:1.5 }}>{summary.nextBlockFocus}</div>
       </div>
 
-      <div style={{ marginTop:10, fontSize:11, color:"#555", fontStyle:"italic" }}>{summary.volumeTrend}</div>
+      <div style={{ marginTop:10, fontSize:11, color:C.mid, fontStyle:"italic" }}>{summary.volumeTrend}</div>
       {summary.generatedAt && (
-        <div style={{ marginTop:8, fontSize:10, color:"#333" }}>
+        <div style={{ marginTop:8, fontSize:10, color:C.mid }}>
           Generated {new Date(summary.generatedAt).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}
         </div>
       )}
@@ -1841,16 +1845,16 @@ function StravaDetailCard({ detail, onClear }) {
   const minHRVal = hrGraphData.length ? Math.min(...hrGraphData.map(sp => sp.avg_heartrate)) : 0;
   const hrColor = (hr) => hr > 170 ? "#f87171" : hr > 155 ? "#fb923c" : hr > 140 ? "#fbbf24" : "#4ade80";
   return (
-    <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
+    <div style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"16px 18px", marginBottom:14 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:16 }}>🟠</span>
           <div>
-            <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{detail.name}</div>
-            <div style={{ fontSize:11, color:"#4ade80", letterSpacing:1 }}>STRAVA IMPORTED</div>
+            <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{detail.name}</div>
+            <div style={{ fontSize:11, color:C.green, letterSpacing:1 }}>STRAVA IMPORTED</div>
           </div>
         </div>
-        {onClear && <button onClick={onClear} style={{ background:"none", border:"1px solid #2a2a2a", borderRadius:6, padding:"4px 10px", color:"#666", fontSize:11, cursor:"pointer" }}>✕ Clear</button>}
+        {onClear && <button onClick={onClear} style={{ background:"none", border:`1px solid ${C.rule}`, borderRadius:2, padding:"4px 10px", color:C.mid, fontSize:11, cursor:"pointer" }}>✕ Clear</button>}
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom: splits?.length > 0 ? 14 : 0 }}>
         {[
@@ -1864,15 +1868,15 @@ function StravaDetailCard({ detail, onClear }) {
           ...(detail.avg_cadence ? [{ label:"Cadence",  val:detail.avg_cadence+"spm" }] : []),
         ].map((s,i)=>(
           <div key={i} onClick={s.hrTile && hrGraphData.length ? ()=>setShowHRGraph(v=>!v) : undefined}
-            style={{ background: s.hrTile && showHRGraph ? "#0a2a0a" : "#161616", borderRadius:8, padding:"8px 10px", textAlign:"center", cursor: s.hrTile && hrGraphData.length ? "pointer" : "default", border: s.hrTile && showHRGraph ? "1px solid #1a5a1a" : "1px solid transparent" }}>
-            <div style={{ fontSize:13, fontWeight:700, color: s.hrTile ? "#f87171" : "#f0ece4" }}>{s.val}</div>
-            <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}{s.hrTile && hrGraphData.length ? (showHRGraph ? " ▴" : " ▾") : ""}</div>
+            style={{ background: s.hrTile && showHRGraph ? "#eef6ec" : C.white, borderRadius:2, padding:"8px 10px", textAlign:"center", cursor: s.hrTile && hrGraphData.length ? "pointer" : "default", border: s.hrTile && showHRGraph ? "1px solid #b8d4b4" : `1px solid ${C.lightRule}` }}>
+            <div style={{ fontSize:13, fontWeight:700, color: s.hrTile ? C.crimson : C.navy }}>{s.val}</div>
+            <div style={{ fontSize:9, color:C.mid, letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}{s.hrTile && hrGraphData.length ? (showHRGraph ? " ▴" : " ▾") : ""}</div>
           </div>
         ))}
       </div>
       {showHRGraph && hrGraphData.length > 0 && (
-        <div style={{ background:"#0a120a", borderRadius:8, border:"1px solid #1a3a1a", padding:"12px", marginBottom:14 }}>
-          <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:10 }}>HR per {hasLaps ? "Lap" : "Split"}</div>
+        <div style={{ background:"#0a120a", borderRadius:2, border:"1px solid #1a3a1a", padding:"12px", marginBottom:14 }}>
+          <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:10 }}>HR per {hasLaps ? "Lap" : "Split"}</div>
           <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:64 }}>
             {splits.map((sp, i) => {
               const hr = sp.avg_heartrate;
@@ -1880,9 +1884,9 @@ function StravaDetailCard({ detail, onClear }) {
               const pct = maxHRVal > minHRVal ? 0.3 + ((hr - minHRVal) / (maxHRVal - minHRVal)) * 0.7 : 0.5;
               return (
                 <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-                  <div style={{ fontSize:8, color:"#888", lineHeight:1 }}>{Math.round(hr)}</div>
+                  <div style={{ fontSize:8, color:C.mid, lineHeight:1 }}>{Math.round(hr)}</div>
                   <div style={{ width:"100%", height:`${pct * 100}%`, background:hrColor(hr), borderRadius:"2px 2px 0 0", minHeight:4 }}/>
-                  <div style={{ fontSize:8, color:"#444", lineHeight:1 }}>{sp.split ?? sp.lap_index ?? i+1}</div>
+                  <div style={{ fontSize:8, color:C.mid, lineHeight:1 }}>{sp.split ?? sp.lap_index ?? i+1}</div>
                 </div>
               );
             })}
@@ -1891,7 +1895,7 @@ function StravaDetailCard({ detail, onClear }) {
             {[["#4ade80","< 140"],["#fbbf24","140–155"],["#fb923c","155–170"],["#f87171","> 170"]].map(([c,l])=>(
               <div key={l} style={{ display:"flex", alignItems:"center", gap:3 }}>
                 <div style={{ width:7, height:7, background:c, borderRadius:2 }}/>
-                <div style={{ fontSize:9, color:"#555" }}>{l}</div>
+                <div style={{ fontSize:9, color:C.mid }}>{l}</div>
               </div>
             ))}
           </div>
@@ -1899,11 +1903,11 @@ function StravaDetailCard({ detail, onClear }) {
       )}
       {splits?.length > 0 && (
         <div>
-          <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>{splitLabel}</div>
+          <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>{splitLabel}</div>
           <div style={{ overflowX:"auto" }}>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
               <thead>
-                <tr style={{ color:"#555", textAlign:"left" }}>
+                <tr style={{ color:C.mid, textAlign:"left" }}>
                   <th style={{ padding:"4px 6px", fontWeight:400 }}>#</th>
                   <th style={{ padding:"4px 6px", fontWeight:400 }}>Dist</th>
                   <th style={{ padding:"4px 6px", fontWeight:400 }}>Time</th>
@@ -1914,11 +1918,11 @@ function StravaDetailCard({ detail, onClear }) {
               </thead>
               <tbody>
                 {splits.map((sp, i) => (
-                  <tr key={i} style={{ borderTop:"1px solid #1a1a1a", color:"#ccc" }}>
-                    <td style={{ padding:"5px 6px", color:"#555" }}>{sp.split ?? sp.lap_index ?? i+1}</td>
+                  <tr key={i} style={{ borderTop:`1px solid ${C.lightRule}`, color:C.navy }}>
+                    <td style={{ padding:"5px 6px", color:C.mid }}>{sp.split ?? sp.lap_index ?? i+1}</td>
                     <td style={{ padding:"5px 6px" }}>{(sp.distance_m/1000).toFixed(2)}km</td>
                     <td style={{ padding:"5px 6px" }}>{fmtTime(sp.moving_time_s)}</td>
-                    <td style={{ padding:"5px 6px", color:"#E06666", fontWeight:600 }}>{fmtPace(sp.avg_speed_mps)}</td>
+                    <td style={{ padding:"5px 6px", color:C.crimson, fontWeight:600 }}>{fmtPace(sp.avg_speed_mps)}</td>
                     {hasHR  && <td style={{ padding:"5px 6px" }}>{sp.avg_heartrate ? Math.round(sp.avg_heartrate)+"bpm" : "–"}</td>}
                     {hasCad && <td style={{ padding:"5px 6px" }}>{sp.avg_cadence ? sp.avg_cadence+"spm" : "–"}</td>}
                   </tr>
@@ -1935,15 +1939,15 @@ function StravaDetailCard({ detail, onClear }) {
 function StravaActivityPicker({ activities, loading, selectedId, detail, detailLoading, onOpen, onSelect, onClear, compact }) {
   if (detail && compact) {
     return (
-      <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:10, padding:"12px 14px", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+      <div style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 14px", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:16 }}>🟠</span>
           <div>
-            <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{detail.name}</div>
-            <div style={{ fontSize:11, color:"#4ade80", letterSpacing:1 }}>STRAVA IMPORTED · {(detail.distance_m/1000).toFixed(2)}km</div>
+            <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{detail.name}</div>
+            <div style={{ fontSize:11, color:C.green, letterSpacing:1 }}>STRAVA IMPORTED · {(detail.distance_m/1000).toFixed(2)}km</div>
           </div>
         </div>
-        <button onClick={onClear} style={{ background:"none", border:"1px solid #2a2a2a", borderRadius:6, padding:"4px 10px", color:"#666", fontSize:11, cursor:"pointer" }}>✕ Clear</button>
+        <button onClick={onClear} style={{ background:"none", border:`1px solid ${C.rule}`, borderRadius:2, padding:"4px 10px", color:C.mid, fontSize:11, cursor:"pointer" }}>✕ Clear</button>
       </div>
     );
   }
@@ -1954,18 +1958,18 @@ function StravaActivityPicker({ activities, loading, selectedId, detail, detailL
   return (
     <div style={{ marginBottom:14 }}>
       {!activities.length && !loading ? (
-        <button onClick={onOpen} style={{ width:"100%", background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:10, padding:"12px", color:"#4ade80", fontSize:13, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+        <button onClick={onOpen} style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px", color:C.green, fontSize:13, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
           <span style={{ fontSize:16 }}>🟠</span> Import from Strava
         </button>
       ) : loading ? (
-        <div style={{ textAlign:"center", padding:"12px 0", color:"#4ade80", fontSize:13 }}>Loading Strava activities…</div>
+        <div style={{ textAlign:"center", padding:"12px 0", color:C.green, fontSize:13 }}>Loading Strava activities…</div>
       ) : (
         <div>
-          <div style={{ fontSize:10, letterSpacing:2, color:"#4ade80", textTransform:"uppercase", marginBottom:6 }}>🟠 Select Strava Activity</div>
+          <div style={{ fontSize:10, letterSpacing:2, color:C.green, textTransform:"uppercase", marginBottom:6 }}>🟠 Select Strava Activity</div>
           <select
             value={selectedId || ""}
             onChange={e => onSelect(e.target.value ? Number(e.target.value) : null)}
-            style={{ width:"100%", background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:10, padding:"12px 14px", color: selectedId ? "#f0ece4" : "#555", fontSize:14, boxSizing:"border-box", outline:"none", colorScheme:"dark" }}
+            style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 14px", color: selectedId ? C.navy : C.mid, fontSize:14, boxSizing:"border-box", outline:"none",  }}
           >
             <option value="">— Choose a run —</option>
             {activities.map(a => {
@@ -1980,7 +1984,7 @@ function StravaActivityPicker({ activities, loading, selectedId, detail, detailL
               );
             })}
           </select>
-          {detailLoading && <div style={{ fontSize:12, color:"#4ade80", marginTop:6, textAlign:"center" }}>Fetching detail…</div>}
+          {detailLoading && <div style={{ fontSize:12, color:C.green, marginTop:6, textAlign:"center" }}>Fetching detail…</div>}
         </div>
       )}
     </div>
@@ -2013,12 +2017,12 @@ function StravaDataCard({ data }) {
   const hrColor = (hr) => hr > 170 ? "#f87171" : hr > 155 ? "#fb923c" : hr > 140 ? "#fbbf24" : "#4ade80";
 
   return (
-    <div style={{ background:"#0f1a0f", border:"1px solid #1a3a1a", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
+    <div style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"16px 18px", marginBottom:14 }}>
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
         <span style={{ fontSize:16 }}>🟠</span>
         <div>
-          <div style={{ fontSize:13, fontWeight:700, color:"#f0ece4" }}>{data.name}</div>
-          <div style={{ fontSize:10, color:"#4ade80", letterSpacing:2, textTransform:"uppercase" }}>Strava Data</div>
+          <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{data.name}</div>
+          <div style={{ fontSize:10, color:C.green, letterSpacing:2, textTransform:"uppercase" }}>Strava Data</div>
         </div>
       </div>
 
@@ -2035,16 +2039,16 @@ function StravaDataCard({ data }) {
           ...(data.avg_cadence ? [{ label:"Cadence", val:data.avg_cadence+"spm" }] : []),
         ].map((s,i)=>(
           <div key={i} onClick={s.hrTile && hrGraphData.length ? ()=>setShowHRGraph(v=>!v) : undefined}
-            style={{ background: s.hrTile && showHRGraph ? "#0a2a0a" : "#161616", borderRadius:8, padding:"8px 10px", textAlign:"center", cursor: s.hrTile && hrGraphData.length ? "pointer" : "default", border: s.hrTile && showHRGraph ? "1px solid #1a5a1a" : "1px solid transparent" }}>
-            <div style={{ fontSize:13, fontWeight:700, color: s.hrTile ? "#f87171" : "#f0ece4" }}>{s.val}</div>
-            <div style={{ fontSize:9, color:"#555", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}{s.hrTile && hrGraphData.length ? (showHRGraph ? " ▴" : " ▾") : ""}</div>
+            style={{ background: s.hrTile && showHRGraph ? "#eef6ec" : C.white, borderRadius:2, padding:"8px 10px", textAlign:"center", cursor: s.hrTile && hrGraphData.length ? "pointer" : "default", border: s.hrTile && showHRGraph ? "1px solid #b8d4b4" : `1px solid ${C.lightRule}` }}>
+            <div style={{ fontSize:13, fontWeight:700, color: s.hrTile ? C.crimson : C.navy }}>{s.val}</div>
+            <div style={{ fontSize:9, color:C.mid, letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}{s.hrTile && hrGraphData.length ? (showHRGraph ? " ▴" : " ▾") : ""}</div>
           </div>
         ))}
       </div>
 
       {showHRGraph && hrGraphData.length > 0 && (
-        <div style={{ background:"#0a120a", borderRadius:8, border:"1px solid #1a3a1a", padding:"12px", marginBottom:14 }}>
-          <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:10 }}>HR per {hasLaps ? "Lap" : "Split"}</div>
+        <div style={{ background:"#0a120a", borderRadius:2, border:"1px solid #1a3a1a", padding:"12px", marginBottom:14 }}>
+          <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:10 }}>HR per {hasLaps ? "Lap" : "Split"}</div>
           <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:64 }}>
             {splits.map((sp, i) => {
               const hr = sp.avg_heartrate;
@@ -2052,9 +2056,9 @@ function StravaDataCard({ data }) {
               const pct = maxHRVal > minHRVal ? 0.3 + ((hr - minHRVal) / (maxHRVal - minHRVal)) * 0.7 : 0.5;
               return (
                 <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-                  <div style={{ fontSize:8, color:"#888", lineHeight:1 }}>{Math.round(hr)}</div>
+                  <div style={{ fontSize:8, color:C.mid, lineHeight:1 }}>{Math.round(hr)}</div>
                   <div style={{ width:"100%", height:`${pct * 100}%`, background:hrColor(hr), borderRadius:"2px 2px 0 0", minHeight:4 }}/>
-                  <div style={{ fontSize:8, color:"#444", lineHeight:1 }}>{sp.split ?? sp.lap_index ?? i+1}</div>
+                  <div style={{ fontSize:8, color:C.mid, lineHeight:1 }}>{sp.split ?? sp.lap_index ?? i+1}</div>
                 </div>
               );
             })}
@@ -2063,7 +2067,7 @@ function StravaDataCard({ data }) {
             {[["#4ade80","< 140"],["#fbbf24","140–155"],["#fb923c","155–170"],["#f87171","> 170"]].map(([c,l])=>(
               <div key={l} style={{ display:"flex", alignItems:"center", gap:3 }}>
                 <div style={{ width:7, height:7, background:c, borderRadius:2 }}/>
-                <div style={{ fontSize:9, color:"#555" }}>{l}</div>
+                <div style={{ fontSize:9, color:C.mid }}>{l}</div>
               </div>
             ))}
           </div>
@@ -2073,11 +2077,11 @@ function StravaDataCard({ data }) {
       {/* Splits/Laps table */}
       {splits?.length > 0 && (
         <div>
-          <div style={{ fontSize:10, letterSpacing:2, color:"#555", textTransform:"uppercase", marginBottom:6 }}>{splitLabel}</div>
+          <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>{splitLabel}</div>
           <div style={{ overflowX:"auto" }}>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
               <thead>
-                <tr style={{ color:"#555", textAlign:"left" }}>
+                <tr style={{ color:C.mid, textAlign:"left" }}>
                   <th style={{ padding:"4px 6px", fontWeight:400 }}>#</th>
                   <th style={{ padding:"4px 6px", fontWeight:400 }}>Dist</th>
                   <th style={{ padding:"4px 6px", fontWeight:400 }}>Time</th>
@@ -2088,11 +2092,11 @@ function StravaDataCard({ data }) {
               </thead>
               <tbody>
                 {splits.map((sp, i) => (
-                  <tr key={i} style={{ borderTop:"1px solid #1a1a1a", color:"#ccc" }}>
-                    <td style={{ padding:"5px 6px", color:"#555" }}>{sp.split ?? sp.lap_index ?? i+1}</td>
+                  <tr key={i} style={{ borderTop:`1px solid ${C.lightRule}`, color:C.navy }}>
+                    <td style={{ padding:"5px 6px", color:C.mid }}>{sp.split ?? sp.lap_index ?? i+1}</td>
                     <td style={{ padding:"5px 6px" }}>{(sp.distance_m/1000).toFixed(2)}km</td>
                     <td style={{ padding:"5px 6px" }}>{fmtTime(sp.moving_time_s)}</td>
-                    <td style={{ padding:"5px 6px", color:"#E06666", fontWeight:600 }}>{fmtPace(sp.avg_speed_mps)}/km</td>
+                    <td style={{ padding:"5px 6px", color:C.crimson, fontWeight:600 }}>{fmtPace(sp.avg_speed_mps)}/km</td>
                     {hasHR  && <td style={{ padding:"5px 6px" }}>{sp.avg_heartrate ? Math.round(sp.avg_heartrate)+"bpm" : "–"}</td>}
                     {hasCad && <td style={{ padding:"5px 6px" }}>{sp.avg_cadence ? sp.avg_cadence+"spm" : "–"}</td>}
                   </tr>
@@ -2106,15 +2110,31 @@ function StravaDataCard({ data }) {
   );
 }
 
+// ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
+const C = {
+  cream:     "#f5ede2",
+  white:     "#fffdf8",
+  navy:      "#0c1b2e",
+  crimson:   "#8b1c1c",
+  green:     "#2a6e27",
+  amber:     "#8b6914",
+  mid:       "#7a6a5a",
+  rule:      "#d8cabb",
+  lightRule: "#ece4d6",
+};
+
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const S = {
-  page:       { minHeight:"100vh", background:"#0c0c0c", fontFamily:"'Georgia',serif", color:"#f0ece4", position:"relative" },
-  grain:      { position:"fixed", inset:0, backgroundImage:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E\")", pointerEvents:"none", zIndex:0 },
-  card:       { background:"#161616", border:"1px solid #1a1a1a", borderRadius:12, padding:"16px 18px" },
-  statBox:    { flex:1, background:"#161616", border:"1px solid #1a1a1a", borderRadius:10, padding:"14px 10px", textAlign:"center" },
-  textarea:   { width:"100%", background:"#161616", border:"1px solid #222", borderRadius:12, padding:"16px", color:"#f0ece4", fontSize:15, lineHeight:1.7, resize:"none", minHeight:130, boxSizing:"border-box", fontFamily:"Georgia,serif", outline:"none", marginBottom:14, display:"block" },
-  input:      { width:"100%", background:"#161616", border:"1px solid #222", borderRadius:10, padding:"12px 14px", color:"#f0ece4", fontSize:15, boxSizing:"border-box", fontFamily:"Georgia,serif", outline:"none", display:"block", colorScheme:"dark" },
-  primaryBtn: (c, dis) => ({ width:"100%", background:dis?"#1a1a1a":c, color:dis?"#333":"white", border:"none", borderRadius:12, padding:"17px", fontSize:15, fontWeight:700, cursor:dis?"not-allowed":"pointer", letterSpacing:1, display:"block" }),
-  ghostBtn:   { width:"100%", background:"#161616", border:"1px solid #1e1e1e", borderRadius:12, padding:"15px", color:"#666", fontSize:14, cursor:"pointer", marginTop:8, fontFamily:"Georgia,serif", display:"block" },
-  signOutBtn: { background:"none", border:"1px solid #2a2a2a", borderRadius:8, padding:"5px 12px", color:"#555", fontSize:11, cursor:"pointer", letterSpacing:1 },
+  displayFont: "'Playfair Display', Georgia, serif",
+  bodyFont:    "'EB Garamond', Georgia, serif",
+  monoFont:    "'Courier New', Courier, monospace",
+  page:       { minHeight:"100vh", background:C.cream, fontFamily:"'EB Garamond', Georgia, serif", color:C.navy, position:"relative" },
+  grain:      { display:"none" },
+  card:       { background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 16px" },
+  statBox:    { flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 10px", textAlign:"center" },
+  textarea:   { width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 16px", color:C.navy, fontSize:15, lineHeight:1.8, resize:"none", minHeight:130, boxSizing:"border-box", fontFamily:"'EB Garamond', Georgia, serif", marginBottom:14, display:"block" },
+  input:      { width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 14px", color:C.navy, fontSize:15, boxSizing:"border-box", fontFamily:"'EB Garamond', Georgia, serif", display:"block" },
+  primaryBtn: (c, dis) => ({ width:"100%", background:dis?C.lightRule:c, color:dis?C.mid:"#fffdf8", border:"none", borderRadius:2, padding:"16px", fontSize:13, fontWeight:600, cursor:dis?"not-allowed":"pointer", letterSpacing:2, textTransform:"uppercase", display:"block", fontFamily:"'EB Garamond', Georgia, serif" }),
+  ghostBtn:   { width:"100%", background:"none", border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px", color:C.mid, fontSize:13, cursor:"pointer", marginTop:8, fontFamily:"'EB Garamond', Georgia, serif", letterSpacing:1, display:"block", textAlign:"center" },
+  signOutBtn: { background:"none", border:`1px solid ${C.rule}`, borderRadius:2, padding:"5px 12px", color:C.mid, fontSize:11, cursor:"pointer", letterSpacing:1, fontFamily:"'EB Garamond', Georgia, serif" },
 };
