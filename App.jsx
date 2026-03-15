@@ -1290,7 +1290,7 @@ Return JSON with exactly these keys:
                     onMouseEnter={() => setHoveredWeekIdx(i)}
                     onMouseLeave={() => setHoveredWeekIdx(null)}
                     onTouchStart={() => setHoveredWeekIdx(hoveredWeekIdx === i ? null : i)}
-                    style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer", userSelect:"none" }}>
+                    style={{ flex:1, height:"100%", display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer", userSelect:"none" }}>
                     <div style={{ fontSize:9, color: isHovered ? "#f0ece4" : "transparent", marginBottom:3, fontWeight:600, minHeight:12, lineHeight:1 }}>
                       {b.km > 0 ? b.km.toFixed(1) : ""}
                     </div>
