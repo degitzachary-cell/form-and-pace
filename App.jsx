@@ -234,6 +234,20 @@ function weekKm(activities, email, weeksAgo = 0) {
     .reduce((sum, a) => sum + parseFloat(a.distance_km || 0), 0);
 }
 
+function stravaWeekKm(stravaActivities, storedStravaIds, weeksAgo = 0) {
+  const { monday, sunday } = getWeekBounds(weeksAgo);
+  return stravaActivities
+    .filter(a => {
+      if (storedStravaIds.has(a.id)) return false;
+      const dateStr = (a.start_date_local || a.start_date || "").slice(0, 10);
+      if (!dateStr) return false;
+      const [y, mo, dy] = dateStr.split("-").map(Number);
+      const d = new Date(y, mo - 1, dy, 12, 0, 0);
+      return d >= monday && d <= sunday;
+    })
+    .reduce((sum, a) => sum + (a.distance || 0) / 1000, 0);
+}
+
 // ─── SESSION DATE HELPER ──────────────────────────────────────────────────────
 function sessionDateStr(weekStart, dayAbbrev) {
   const DAY_OFFSET = { Mon:0, Tue:1, Wed:2, Thu:3, Fri:4, Sat:5, Sun:6 };
@@ -532,6 +546,11 @@ export default function App() {
     } catch { setStravaConnected(false); }
   };
 
+  // Auto-fetch recent Strava activities for the rolling volume graph
+  useEffect(() => {
+    if (stravaConnected) fetchStravaActivities();
+  }, [stravaConnected]);
+
   const exchangeStravaCode = async (code) => {
     try {
       const token = await getAuthToken();
@@ -603,7 +622,7 @@ export default function App() {
     if (stravaActivitiesLoading) return;
     setStravaActivitiesLoading(true);
     try {
-      const data = await stravaCall("list", { per_page: 20 });
+      const data = await stravaCall("list", { per_page: 50 });
       if (Array.isArray(data)) {
         setStravaActivities(data.filter(a => a.sport_type === "Run" || a.type === "Run"));
       }
@@ -1223,7 +1242,8 @@ Return JSON with exactly these keys:
   // ────────────────────────────────────────────────────────────
   if (role === "athlete" && screen === "home") {
     const week = weeks[activeWeekIdx];
-    const weekBars = [7,6,5,4,3,2,1,0].map(ago => ({ km: weekKm(activities, user.email, ago), weeksAgo: ago, label: ago === 0 ? "NOW" : `W-${ago}` }));
+    const storedStravaIds = new Set(activities.filter(a => a.strava_data?.id).map(a => a.strava_data.id));
+    const weekBars = [7,6,5,4,3,2,1,0].map(ago => ({ km: weekKm(activities, user.email, ago) + stravaWeekKm(stravaActivities, storedStravaIds, ago), weeksAgo: ago, label: ago === 0 ? "NOW" : `W-${ago}` }));
     const maxBarKm = Math.max(...weekBars.map(b => b.km), 1);
     const thisWeekKm = weekBars[7].km;
     const actByDate = {};
