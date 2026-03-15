@@ -309,7 +309,6 @@ export default function App() {
   const [selectedStravaId,      setSelectedStravaId]      = useState(null);
   const [stravaDetail,          setStravaDetail]          = useState(null);
   const [stravaDetailLoading,   setStravaDetailLoading]   = useState(false);
-  const [stravaPickerOpen,      setStravaPickerOpen]      = useState(false);
 
   // Activities (manual logging + future Strava sync)
   const [activities,  setActivities]  = useState([]);
@@ -390,9 +389,11 @@ export default function App() {
     if (role !== "coach" || coachScreen !== "session" || !activeSession?.id) return;
     supabase.from("session_logs").select("*")
       .eq("session_id", activeSession.id).maybeSingle()
-      .then(({ data }) => { if (data) setLogs(prev => ({ ...prev, [activeSession.id]: data })); });
+      .then(({ data }) => { if (data) setLogs(prev => ({ ...prev, [activeSession.id]: data })); })
+      .catch(e => console.error("session log refresh error:", e));
     supabase.from("activities").select("*").order("activity_date", { ascending: false })
-      .then(({ data }) => { if (data) setActivities(data); });
+      .then(({ data }) => { if (data) setActivities(data); })
+      .catch(e => console.error("activities refresh error:", e));
   }, [coachScreen, activeSession?.id, role]);
 
   const loadLogs = async () => {
@@ -503,9 +504,11 @@ export default function App() {
         .select()
         .single());
     }
-    if (!error && data) {
-      setLogs(prev => ({ ...prev, [sessionId]: data }));
+    if (error) {
+      console.error("saveLog error:", error);
+      throw error;
     }
+    if (data) setLogs(prev => ({ ...prev, [sessionId]: data }));
   };
 
   // ── Sign in with Google ──
@@ -703,7 +706,6 @@ export default function App() {
       setSessionDistKm("");
       setSessionDurMin("");
       clearStravaSelection();
-      setStravaActivities([]);
       setScreen("result");
     } catch(e) { console.error(e); }
     setIsSaving(false);
@@ -794,8 +796,10 @@ Return JSON with exactly these keys:
   // ── Coach reply ──
   const handleCoachReply = async (sessionId) => {
     if (!coachReply.trim()) return;
-    await saveLog(sessionId, { coach_reply: coachReply });
-    setCoachReply("");
+    try {
+      await saveLog(sessionId, { coach_reply: coachReply });
+      setCoachReply("");
+    } catch(e) { console.error("coach reply save error:", e); }
   };
 
   // ── Compliance stats ──
