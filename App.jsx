@@ -1284,9 +1284,11 @@ Return JSON with exactly these keys:
                 + LOG RUN
               </button>
             </div>
-            <div style={{ display:"flex", gap:3, alignItems:"flex-end", height:72 }}>
+            <div style={{ display:"flex", gap:3, alignItems:"flex-end" }}>
               {weekBars.map((b, i) => {
+                const BAR_MAX_PX = 52;
                 const pct = maxBarKm > 0 ? b.km / maxBarKm : 0;
+                const barPx = b.km > 0 ? Math.max(Math.round(pct * BAR_MAX_PX), 4) : 2;
                 const isCurrent = b.weeksAgo === 0;
                 const isHovered = hoveredWeekIdx === i;
                 return (
@@ -1294,14 +1296,14 @@ Return JSON with exactly these keys:
                     onMouseEnter={() => setHoveredWeekIdx(i)}
                     onMouseLeave={() => setHoveredWeekIdx(null)}
                     onTouchStart={() => setHoveredWeekIdx(hoveredWeekIdx === i ? null : i)}
-                    style={{ flex:1, height:"100%", display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer", userSelect:"none" }}>
+                    style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer", userSelect:"none" }}>
                     <div style={{ fontSize:9, color: isHovered ? C.navy : "transparent", marginBottom:3, fontWeight:600, minHeight:12, lineHeight:1 }}>
                       {b.km > 0 ? b.km.toFixed(1) : ""}
                     </div>
-                    <div style={{ width:"100%", flex:1, display:"flex", alignItems:"flex-end" }}>
+                    <div style={{ width:"100%", height:BAR_MAX_PX, display:"flex", alignItems:"flex-end" }}>
                       <div style={{
                         width:"100%",
-                        height: b.km > 0 ? `${Math.max(pct * 100, 6)}%` : "2px",
+                        height: barPx,
                         background: isCurrent ? C.crimson : isHovered ? C.mid : C.lightRule,
                         borderRadius:"3px 3px 0 0",
                         transition:"background 0.15s",
