@@ -197,6 +197,47 @@ const ATHLETE_PROGRAMS = {
       },
     ]
   },
+  "justinexs@gmail.com": {
+    name: "Justine Hsu", goal: "Berlin 2026: 4:10", current: "HM 1:57 / M 4:21", avatar: "JH",
+    weeks: [
+      {
+        weekLabel: "Week 1 · 16–22 Mar", weekStart: "2026-03-16",
+        sessions: [
+          { id:"jh-s1", day:"Tue 17", type:"RECOVERY", tag:"easy",  desc:"40 min Recovery Run\n(6:30–7:10/km)\n6 × 15sec Strides\n30sec Rest",                                   pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+          { id:"jh-s2", day:"Thu 19", type:"SPEED",    tag:"speed", desc:"WU 15min\n10 × 400m @ 5K effort (4:50–5:00/km)\n90sec rest\nCD 15min",                                  pace:"4:50–5:00 /km",                    terrain:"TRACK / ROAD" },
+          { id:"jh-s3", day:"Fri 20", type:"EASY",     tag:"easy",  desc:"40 min Easy Run\n(6:30–7:10/km)\n6 × 15sec Strides\n30sec Rest",                                        pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+          { id:"jh-s4", day:"Sat 21", type:"LONG RUN", tag:"tempo", desc:"90 min Easy (6:30–7:10/km)\nLast 20 min @ Marathon Pace\n(5:50–6:00/km)",                               pace:"Easy 6:30–7:10 / MP 5:50–6:00 /km", terrain:"FLAT" },
+        ]
+      },
+      {
+        weekLabel: "Week 2 · 23–29 Mar", weekStart: "2026-03-23",
+        sessions: [
+          { id:"jh-s5", day:"Tue 24", type:"RECOVERY", tag:"easy",  desc:"50 min Recovery Run\n(6:30–7:10/km)\n6 × 15sec Strides\n30sec Rest",                                   pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+          { id:"jh-s6", day:"Thu 26", type:"TEMPO",    tag:"tempo", desc:"WU 15min\n10 min Threshold (5:15–5:30/km)\n2 min easy jog\n6 min Threshold\nCD 15min",                  pace:"5:15–5:30 /km",                    terrain:"TRACK / ROAD" },
+          { id:"jh-s7", day:"Fri 27", type:"EASY",     tag:"easy",  desc:"40 min Easy Run\n(6:30–7:10/km)\n6 × 15sec Strides\n30sec Rest",                                        pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+          { id:"jh-s8", day:"Sat 28", type:"LONG RUN", tag:"easy",  desc:"95 min Easy\n(6:30–7:10/km)",                                                                           pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+        ]
+      },
+      {
+        weekLabel: "Week 3 · 30 Mar–5 Apr", weekStart: "2026-03-30",
+        sessions: [
+          { id:"jh-s9",  day:"Tue 31", type:"RECOVERY", tag:"easy",  desc:"50 min Recovery Run\n(6:30–7:10/km)\n6 × 15sec Strides\n30sec Rest",                                  pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+          { id:"jh-s10", day:"Thu 02", type:"SPEED",    tag:"speed", desc:"WU 15min\n6 × 600m @ 5K effort (4:50–5:00/km)\n2 min recovery\nCD 15min",                             pace:"4:50–5:00 /km",                    terrain:"TRACK / ROAD" },
+          { id:"jh-s11", day:"Fri 03", type:"EASY",     tag:"easy",  desc:"40 min Easy Run\n(6:30–7:10/km)\n6 × 15sec Strides\n30sec Rest",                                       pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+          { id:"jh-s12", day:"Sat 04", type:"LONG RUN", tag:"tempo", desc:"100 min Easy (6:30–7:10/km)\nLast 25 min @ Marathon Pace\n(5:50–6:00/km)",                             pace:"Easy 6:30–7:10 / MP 5:50–6:00 /km", terrain:"FLAT" },
+        ]
+      },
+      {
+        weekLabel: "Week 4 · 6–12 Apr", weekStart: "2026-04-06",
+        sessions: [
+          { id:"jh-s13", day:"Tue 07", type:"RECOVERY", tag:"easy",  desc:"40 min Recovery Run\n(6:30–7:10/km)\n6 × 15sec Strides\n30sec Rest",                                  pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+          { id:"jh-s14", day:"Thu 09", type:"TEMPO",    tag:"tempo", desc:"WU 15min\n3 × 7 min Threshold (5:15–5:30/km)\n3 min jog recovery\nCD 15min",                           pace:"5:15–5:30 /km",                    terrain:"TRACK / ROAD" },
+          { id:"jh-s15", day:"Fri 10", type:"EASY",     tag:"easy",  desc:"40 min Easy Run\n(6:30–7:10/km)\n6 × 15sec Strides\n30sec Rest",                                       pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+          { id:"jh-s16", day:"Sat 11", type:"LONG RUN", tag:"easy",  desc:"80 min Easy\n(6:30–7:10/km)",                                                                          pace:"6:30–7:10 /km",                    terrain:"FLAT" },
+        ]
+      },
+    ]
+  },
   // Add more athletes here by email
 };
 
