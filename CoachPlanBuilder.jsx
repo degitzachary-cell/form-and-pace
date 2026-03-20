@@ -313,7 +313,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
       const existing = athletes[uploadTarget]?.weeks || [];
       const updated = uploadMode === 'replace' ? parsedWeeks : [...existing, ...parsedWeeks];
       onSave(uploadTarget, updated);
-      if (uploadTarget === selectedEmail) setWeeks(updated);
+      setSelectedEmail(uploadTarget);
       alert(`✅ Imported ${parsedWeeks.length} weeks for ${athletes[uploadTarget]?.name || uploadTarget}`);
     } catch (err) {
       alert('❌ Failed to parse Excel: ' + err.message);
