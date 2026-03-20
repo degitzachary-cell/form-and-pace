@@ -1,4 +1,101 @@
-import React, { useState, useEffect } from 'react';
+// Requires: npm install xlsx
+import React, { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
+
+// ─── EXCEL PARSER ────────────────────────────────────────────
+function inferSessionType(desc) {
+  if (!desc) return 'REST';
+  const d = desc.toString();
+  if (/SABBATH|REST|rest day/i.test(d)) return 'REST';
+  if (/Recovery|Easy w\//i.test(d)) return 'RECOVERY';
+  if (/Warm Up/i.test(d) && /400m|800m|200m|\d+km @|\d+ x \d+min|\d+min @/i.test(d) && !/MP|HMP|marathon pace|tempo/i.test(d)) return 'SPEED';
+  if (/Warm Up/i.test(d) && /MP|HMP|marathon|tempo|\d+min @/i.test(d)) return 'TEMPO';
+  if (/Strides/i.test(d)) return 'EASY + STRIDES';
+  if (/\d{2,3} min Easy|\d{2,3}min Easy|Long/i.test(d)) return 'LONG RUN';
+  if (/Easy/i.test(d)) return 'EASY';
+  return 'EASY';
+}
+
+function parseExcelToWeeks(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        const weeks = [];
+
+        wb.SheetNames.forEach((sheetName) => {
+          const ws = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+          if (!rows || rows.length < 4) return;
+
+          const dayHeaders = rows[1]; // [null, MON, TUE, WED, THU, FRI, SAT, SUN]
+          const dateRow = rows[2];    // [null, Date, Date, ...]
+          const runRow = rows[3];     // [RUN, desc1, desc2, ...]
+          const terrainRow = rows[4]; // [TERRAIN, t1, t2, ...]
+          const paceRow = rows[6];    // [PACES, p1, p2, ...]
+          const kmRow = rows[7];      // [Est. Weekly KM:, label]
+
+          // Parse week start from sheet name (e.g. "16-03" → "2026-03-16")
+          const parts = sheetName.split('-');
+          let weekStart = '';
+          if (parts.length >= 2) {
+            const day = parts[0].padStart(2, '0');
+            const month = parts[1].padStart(2, '0');
+            weekStart = `2026-${month}-${day}`;
+          }
+
+          const kmLabel = kmRow ? (kmRow[1] || '') : '';
+          const weekLabel = `${sheetName} · ${kmLabel}`.trim();
+
+          const sessions = [];
+          const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+
+          days.forEach((day, i) => {
+            const colIdx = i + 1;
+            const desc = runRow ? (runRow[colIdx] || '') : '';
+            const terrain = terrainRow ? (terrainRow[colIdx] || '') : '';
+            const pace = paceRow ? (paceRow[colIdx] || '') : '';
+            const dateVal = dateRow ? dateRow[colIdx] : null;
+
+            if (!desc) return;
+
+            let dayStr = day.charAt(0) + day.slice(1,3).toLowerCase();
+            if (dateVal) {
+              const d = dateVal instanceof Date ? dateVal : new Date(dateVal);
+              if (!isNaN(d)) dayStr += ' ' + d.getDate();
+            }
+
+            const type = inferSessionType(desc);
+            const tag = getTagFromType(type);
+
+            sessions.push({
+              id: `upload-${sheetName}-${i}-${Date.now()}`,
+              day: dayStr,
+              type,
+              tag,
+              desc: desc.toString().trim(),
+              pace: pace ? pace.toString().trim() : '',
+              terrain: terrain ? terrain.toString().trim() : '',
+            });
+          });
+
+          if (sessions.length > 0) {
+            weeks.push({ weekLabel, weekStart, sessions });
+          }
+        });
+
+        resolve(weeks);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
 
 const SESSION_TYPES = [
   'LONG RUN',
@@ -189,6 +286,28 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [newWeekLabel, setNewWeekLabel] = useState('');
   const [newWeekStart, setNewWeekStart] = useState('');
   const [showAddWeek, setShowAddWeek] = useState(false);
+  const [uploadTarget, setUploadTarget] = useState('');
+  const [uploadMode, setUploadMode] = useState('append'); // 'append' | 'replace'
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleExcelUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !uploadTarget) return;
+    setUploading(true);
+    try {
+      const parsedWeeks = await parseExcelToWeeks(file);
+      const existing = athletes[uploadTarget]?.weeks || [];
+      const updated = uploadMode === 'replace' ? parsedWeeks : [...existing, ...parsedWeeks];
+      onSave(uploadTarget, updated);
+      if (uploadTarget === selectedEmail) setWeeks(updated);
+      alert(`✅ Imported ${parsedWeeks.length} weeks for ${athletes[uploadTarget]?.name || uploadTarget}`);
+    } catch (err) {
+      alert('❌ Failed to parse Excel: ' + err.message);
+    }
+    setUploading(false);
+    e.target.value = '';
+  };
 
   const athleteList = Object.entries(athletes || {}).map(([email, data]) => ({
     email,
@@ -278,6 +397,31 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   return (
     <div style={styles.container}>
       <div style={styles.header}>🏃 Coach Dashboard</div>
+
+      {/* ── Excel Upload ── */}
+      <div style={{ background:'#252525', borderRadius:8, padding:16, marginBottom:20, border:'1px solid #333' }}>
+        <div style={{ fontSize:14, fontWeight:600, color:'#bbb', marginBottom:10 }}>📥 Import from Excel</div>
+        <select style={styles.select} value={uploadTarget} onChange={e => setUploadTarget(e.target.value)}>
+          <option value="">Select athlete to import into...</option>
+          {athleteList.map(a => <option key={a.email} value={a.email}>{a.name}</option>)}
+        </select>
+        <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+          {['append','replace'].map(mode => (
+            <button key={mode} onClick={() => setUploadMode(mode)}
+              style={{ ...styles.button, flex:1, background: uploadMode===mode ? '#3d5afe' : '#444', color:'#fff', fontSize:13 }}>
+              {mode === 'append' ? '➕ Append weeks' : '🔄 Replace all'}
+            </button>
+          ))}
+        </div>
+        <input ref={fileInputRef} type="file" accept=".xlsx" style={{ display:'none' }} onChange={handleExcelUpload} />
+        <button
+          style={{ ...styles.button, ...styles.addBtn, width:'100%', opacity: !uploadTarget ? 0.5 : 1 }}
+          disabled={!uploadTarget || uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? 'Importing...' : '📂 Choose Excel File (.xlsx)'}
+        </button>
+      </div>
 
       <select
         style={styles.select}
