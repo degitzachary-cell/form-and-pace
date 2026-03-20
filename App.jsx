@@ -383,6 +383,28 @@ export default function App() {
   const [coachReply,    setCoachReply]    = useState("");
   const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
 
+  // Load saved plans from Supabase
+  useEffect(() => {
+    if (!user) return;
+    const loadPlans = async () => {
+      const { data, error } = await supabase.from('coach_plans').select('*');
+      if (error) {
+        console.error('Failed to load coach plans:', error);
+        return;
+      }
+      setAthletePrograms(prev => {
+        const updated = { ...prev };
+        data.forEach(row => {
+          if (updated[row.athlete_email]) {
+            updated[row.athlete_email].weeks = row.plan_json;
+          }
+        });
+        return updated;
+      });
+    };
+    loadPlans();
+  }, [user, supabase]);
+
   // Profile (loaded from DB on login — determines role)
   const [profile,       setProfile]       = useState(null);
 
@@ -744,7 +766,7 @@ export default function App() {
 
   // ── Resolve athlete program ──
   const athleteEmail   = user?.email?.toLowerCase();
-  const programEntry   = ATHLETE_PROGRAMS[athleteEmail] || null;
+  const programEntry   = athletePrograms[athleteEmail] || null;
   // Profile is the source of truth for identity; program provides weeks
   const athleteData    = programEntry ? {
     name:    profile?.name    || programEntry.name,
@@ -804,7 +826,7 @@ export default function App() {
   const [summaryLoading,   setSummaryLoading]   = useState(false);
 
   const generateMonthlySummary = async (email) => {
-    const da = ATHLETE_PROGRAMS[email];
+    const da = athletePrograms[email];
     if (!da) return;
     setSummaryLoading(true);
 
@@ -892,7 +914,7 @@ Return JSON with exactly these keys:
 
   // ── Compliance stats ──
   const getStats = (email) => {
-    const program = ATHLETE_PROGRAMS[email];
+    const program = athletePrograms[email];
     const sessions = (program?.weeks || []).flatMap(w =>
       w.sessions.map(s => ({ ...s, sessionDate: sessionDateStr(w.weekStart, s.day) }))
     );
@@ -987,7 +1009,7 @@ Return JSON with exactly these keys:
   //  COACH DASHBOARD
   // ────────────────────────────────────────────────────────────
   if (role === "coach" && coachScreen === "dashboard") {
-    const athletes = Object.entries(ATHLETE_PROGRAMS);
+    const athletes = Object.entries(athletePrograms);
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -1113,7 +1135,7 @@ Return JSON with exactly these keys:
   //  COACH → ATHLETE DETAIL
   // ────────────────────────────────────────────────────────────
   if (role === "coach" && coachScreen === "athlete" && dashAthlete) {
-    const da  = ATHLETE_PROGRAMS[dashAthlete];
+    const da  = athletePrograms[dashAthlete];
     const st  = getStats(dashAthlete);
     const athWeekKm = weekKm(activities, dashAthlete, 0);
     return (
@@ -1330,7 +1352,7 @@ Return JSON with exactly these keys:
     const act = activeExtraActivity;
     const durMin = act.duration_seconds ? Math.round(act.duration_seconds / 60) : null;
     const dateLabel = act.activity_date ? act.activity_date.slice(5).replace("-", " ") : "";
-    const da = ATHLETE_PROGRAMS[dashAthlete];
+    const da = athletePrograms[dashAthlete];
     return (
       <div style={S.page}>
         <div style={S.grain}/>
