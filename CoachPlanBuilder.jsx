@@ -38,17 +38,30 @@ function parseExcelToWeeks(file) {
           const paceRow = rows[6];    // [PACES, p1, p2, ...]
           const kmRow = rows[7];      // [Est. Weekly KM:, label]
 
-          // Parse week start from sheet name (e.g. "16-03" → "2026-03-16")
-          const parts = sheetName.split('-');
+          // Determine week start from Monday date (column 1 of date row)
           let weekStart = '';
-          if (parts.length >= 2) {
-            const day = parts[0].padStart(2, '0');
-            const month = parts[1].padStart(2, '0');
-            weekStart = `2026-${month}-${day}`;
+          let mondayDate = dateRow ? dateRow[1] : null; // column 1 = Monday
+          if (mondayDate) {
+            const d = mondayDate instanceof Date ? mondayDate : new Date(mondayDate);
+            if (!isNaN(d)) {
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, '0');
+              const day = String(d.getDate()).padStart(2, '0');
+              weekStart = `${y}-${m}-${day}`;
+            }
+          }
+          // Fallback: try parsing sheet name as dd‑mm (old behavior)
+          if (!weekStart) {
+            const parts = sheetName.split('-');
+            if (parts.length >= 2) {
+              const day = parts[0].padStart(2, '0');
+              const month = parts[1].padStart(2, '0');
+              weekStart = `2026-${month}-${day}`;
+            }
           }
 
           const kmLabel = kmRow ? (kmRow[1] || '') : '';
-          const weekLabel = `${sheetName} · ${kmLabel}`.trim();
+          const weekLabel = sheetName + (kmLabel ? ` · ${kmLabel}` : '');
 
           const sessions = [];
           const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
