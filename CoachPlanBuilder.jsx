@@ -328,8 +328,8 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   }));
 
   useEffect(() => {
-    if (selectedEmail && athletes[selectedEmail]?.plan) {
-      setWeeks(athletes[selectedEmail].plan);
+    if (selectedEmail && athletes[selectedEmail]?.weeks) {
+      setWeeks(athletes[selectedEmail].weeks);
     } else {
       setWeeks([]);
     }
