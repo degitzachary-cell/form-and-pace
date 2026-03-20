@@ -1071,15 +1071,28 @@ Return JSON with exactly these keys:
   //  COACH → PLAN BUILDER
   // ────────────────────────────────────────────────────────────
   const handleSavePlan = async (athleteEmail, weeksArray) => {
-    await supabase.from('coach_plans').upsert({
-      athlete_email: athleteEmail,
-      plan_json: weeksArray,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'athlete_email' });
-    setAthletePrograms(prev => ({
-      ...prev,
-      [athleteEmail]: { ...prev[athleteEmail], weeks: weeksArray }
-    }));
+    try {
+      console.log('Saving plan for', athleteEmail, weeksArray);
+      const { error } = await supabase.from('coach_plans').upsert({
+        athlete_email: athleteEmail,
+        plan_json: weeksArray,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'athlete_email' });
+      if (error) {
+        console.error('Supabase error:', error);
+        alert(`Save failed: ${error.message}`);
+        return;
+      }
+      setAthletePrograms(prev => ({
+        ...prev,
+        [athleteEmail]: { ...prev[athleteEmail], weeks: weeksArray }
+      }));
+      console.log('Plan saved successfully');
+      alert(`✅ Plan saved for ${athleteEmail}`);
+    } catch (err) {
+      console.error('Unexpected error saving plan:', err);
+      alert(`Save error: ${err.message}`);
+    }
   };
 
   if (role === "coach" && coachScreen === "plan-builder") {
