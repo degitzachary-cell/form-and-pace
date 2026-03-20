@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import CoachPlanBuilder from "./CoachPlanBuilder";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL    = import.meta.env.VITE_SUPABASE_URL;
@@ -380,6 +381,7 @@ export default function App() {
   const [coachScreen,   setCoachScreen]   = useState("dashboard");
   const [dashAthlete,   setDashAthlete]   = useState(null);
   const [coachReply,    setCoachReply]    = useState("");
+  const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
 
   // Profile (loaded from DB on login — determines role)
   const [profile,       setProfile]       = useState(null);
@@ -1010,6 +1012,14 @@ Return JSON with exactly these keys:
             ))}
           </div>
 
+          {/* Plan Builder button */}
+          <button
+            onClick={() => setCoachScreen("plan-builder")}
+            style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"12px", fontSize:14, fontWeight:700, background:"#1a2744", color:"#e8dcc8", border:"1px solid #2a3a5c", borderRadius:8 }}
+          >
+            ✏️ Plan Builder
+          </button>
+
           {/* Athlete cards */}
           {athletes.map(([email, data]) => {
             const st = getStats(email);
@@ -1053,6 +1063,35 @@ Return JSON with exactly these keys:
             );
           })}
         </div>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  COACH → PLAN BUILDER
+  // ────────────────────────────────────────────────────────────
+  const handleSavePlan = async (athleteEmail, weeksArray) => {
+    await supabase.from('coach_plans').upsert({
+      athlete_email: athleteEmail,
+      plan_json: weeksArray,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'athlete_email' });
+    setAthletePrograms(prev => ({
+      ...prev,
+      [athleteEmail]: { ...prev[athleteEmail], weeks: weeksArray }
+    }));
+  };
+
+  if (role === "coach" && coachScreen === "plan-builder") {
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header
+          title="Plan Builder"
+          subtitle="Edit athlete training plans"
+          right={<button onClick={() => setCoachScreen("dashboard")} style={S.signOutBtn}>← Back</button>}
+        />
+        <CoachPlanBuilder athletes={athletePrograms} onSave={handleSavePlan} />
       </div>
     );
   }
