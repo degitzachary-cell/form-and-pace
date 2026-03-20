@@ -401,7 +401,10 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
 
   const handleSave = () => {
     if (selectedEmail && onSave) {
+      console.log('Saving plan for', selectedEmail, weeks.length, 'weeks');
       onSave(selectedEmail, weeks);
+    } else {
+      console.warn('Save called without selectedEmail or onSave');
     }
   };
 
