@@ -70,12 +70,13 @@ function parseExcelToWeeks(file) {
               weekStart = `${y}-${m}-${day}`;
             }
           }
-          // Fallback: try parsing sheet name as dd‑mm (old behavior)
+          // Fallback: parse sheet name as dd-mm, ignoring any trailing label text
+          // e.g. "21-04 Taper", "28-04 Race Week", "05-05" all work correctly
           if (!weekStart) {
-            const parts = sheetName.split('-');
-            if (parts.length >= 2) {
-              const day = parts[0].padStart(2, '0');
-              const month = parts[1].padStart(2, '0');
+            const dateMatch = sheetName.match(/^(\d{1,2})\s*-\s*(\d{1,2})/);
+            if (dateMatch) {
+              const day = dateMatch[1].padStart(2, '0');
+              const month = dateMatch[2].padStart(2, '0');
               weekStart = `2026-${month}-${day}`;
             }
           }
