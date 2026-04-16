@@ -415,6 +415,7 @@ export default function App() {
   const [activeSession, setActiveSession] = useState(null);
   const [activeExtraActivity, setActiveExtraActivity] = useState(null);
   const [activeWeekIdx, setActiveWeekIdx] = useState(0);
+  const [expandedWeekIdxs, setExpandedWeekIdxs] = useState(null);
   const [feedbackText,  setFeedbackText]  = useState("");
   const [sessionDistKm, setSessionDistKm] = useState("");
   const [sessionDurMin, setSessionDurMin] = useState("");
@@ -1560,79 +1561,133 @@ Return JSON with exactly these keys:
             )}
           </div>
 
-          <div style={{ display:"flex", gap:8, padding:"0 16px", marginBottom:16, overflowX:"auto" }}>
-            {weeks.map((w,i)=>(
-              <button key={i} onClick={()=>setActiveWeekIdx(i)} style={{
-                background: i===activeWeekIdx?C.crimson:"none",
-                border:`1px solid ${i===activeWeekIdx?"#E06666":"#222"}`,
-                borderRadius:2, padding:"6px 14px",
-                color: i===activeWeekIdx?"#fffdf8":C.mid,
-                fontSize:11, cursor:"pointer", whiteSpace:"nowrap", letterSpacing:1,
-              }}>WK {i+1}</button>
-            ))}
-            <button onClick={()=>setScreen("history")} style={{
-              background:C.white, border:`1px solid ${C.rule}`, borderRadius:2,
-              padding:"6px 14px", color:C.mid, fontSize:11, cursor:"pointer", whiteSpace:"nowrap",
-            }}>HISTORY →</button>
-          </div>
+          {/* Week accordion — past weeks auto-collapsed, current/future expanded */}
+          {(() => {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const weekStatus = (w) => {
+              const mon = new Date(w.weekStart + "T00:00:00");
+              const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+              if (today > sun) return "past";
+              if (today >= mon) return "current";
+              return "future";
+            };
 
-          <div style={{ padding:"0 16px 10px", fontSize:12, color:C.mid }}>{week?.weekLabel}</div>
+            // Initialise on first render: expand current + future weeks, collapse past
+            const expanded = expandedWeekIdxs ?? (() => {
+              const s = new Set();
+              weeks.forEach((w, i) => { if (weekStatus(w) !== "past") s.add(i); });
+              if (s.size === 0) s.add(weeks.length - 1); // all past? open last
+              setTimeout(() => setExpandedWeekIdxs(s), 0);
+              return s;
+            })();
 
-          <div style={{ padding:"0 16px" }}>
-            {week?.sessions.map(s => {
-              const log = logs[s.id];
-              const ts  = TAG_STYLE[s.tag];
-              const sDate = week ? sessionDateStr(week.weekStart, s.day) : null;
-              const linkedAct = sDate ? actByDate[sDate] : null;
-              const isLogged = !!log || !!linkedAct;
-              const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
-              return (
-                <div key={s.id}
-                  onClick={()=>{ setActiveSession({...s, weekStart: week.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
-                  style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"16px 18px", marginBottom:10, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
-                  <div style={{ width:42, height:42, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>
-                    {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
-                  </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between" }}>
-                      <div style={{ fontSize:12, color:C.mid }}>{s.day}</div>
-                      {isLogged && <div style={{ fontSize:11, color:C.green }}>✓ LOGGED</div>}
+            const toggle = (i) => {
+              const next = new Set(expanded);
+              next.has(i) ? next.delete(i) : next.add(i);
+              setExpandedWeekIdxs(next);
+            };
+
+            return (
+              <div style={{ padding:"0 16px" }}>
+                {weeks.map((w, i) => {
+                  const status = weekStatus(w);
+                  const isOpen = expanded.has(i);
+                  const isCurrent = status === "current";
+                  const isPast = status === "past";
+                  const wkEnd = (() => { const d = new Date(w.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+                  const extraActs = activities.filter(a =>
+                    a.athlete_email === user.email?.toLowerCase() &&
+                    a.source !== "session" &&
+                    a.activity_date >= w.weekStart &&
+                    a.activity_date <= wkEnd
+                  );
+                  const sessionsDone = w.sessions.filter(s => logs[s.id] || actByDate[sessionDateStr(w.weekStart, s.day)]).length;
+
+                  return (
+                    <div key={i} style={{ marginBottom:10 }}>
+                      <div onClick={() => toggle(i)} style={{
+                        display:"flex", alignItems:"center", justifyContent:"space-between",
+                        padding:"12px 14px",
+                        background: isCurrent ? C.crimson : C.white,
+                        border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
+                        borderRadius: isOpen ? "2px 2px 0 0" : 2,
+                        cursor:"pointer",
+                        opacity: isPast ? 0.65 : 1,
+                      }}>
+                        <div>
+                          <div style={{ fontSize:12, fontWeight:700, color: isCurrent ? "#fffdf8" : C.navy, letterSpacing:0.5 }}>
+                            {w.weekLabel}
+                          </div>
+                          {isPast && sessionsDone > 0 && (
+                            <div style={{ fontSize:10, color:C.mid, marginTop:2 }}>
+                              {sessionsDone}/{w.sessions.length} logged
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          {isPast   && <div style={{ fontSize:9, letterSpacing:1, color:C.mid, textTransform:"uppercase" }}>PAST</div>}
+                          {isCurrent && <div style={{ fontSize:9, letterSpacing:1, color:"rgba(255,255,255,0.75)", textTransform:"uppercase" }}>THIS WEEK</div>}
+                          <div style={{ fontSize:16, color: isCurrent ? "rgba(255,255,255,0.6)" : C.mid, transform: isOpen ? "rotate(90deg)" : "none", transition:"transform 0.2s" }}>›</div>
+                        </div>
+                      </div>
+
+                      {isOpen && (
+                        <div style={{ border:`1px solid ${isCurrent ? "#E06666" : C.rule}`, borderTop:"none", borderRadius:"0 0 2px 2px", padding:"10px 10px 4px" }}>
+                          {w.sessions.map(s => {
+                            const log = logs[s.id];
+                            const ts  = TAG_STYLE[s.tag] || TAG_STYLE.easy;
+                            const sDate = sessionDateStr(w.weekStart, s.day);
+                            const linkedAct = actByDate[sDate];
+                            const isLogged = !!log || !!linkedAct;
+                            const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
+                            return (
+                              <div key={s.id}
+                                onClick={()=>{ setActiveSession({...s, weekStart: w.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
+                                style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"14px 16px", marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
+                                <div style={{ width:40, height:40, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
+                                  {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
+                                </div>
+                                <div style={{ flex:1 }}>
+                                  <div style={{ display:"flex", justifyContent:"space-between" }}>
+                                    <div style={{ fontSize:12, color:C.mid }}>{s.day}</div>
+                                    {isLogged && <div style={{ fontSize:11, color:C.green }}>✓ LOGGED</div>}
+                                  </div>
+                                  <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
+                                  <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
+                                  {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:C.mid, marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
+                                  {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
+                                </div>
+                                <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
+                              </div>
+                            );
+                          })}
+                          {extraActs.map(act => (
+                            <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:2, padding:"14px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
+                              <div style={{ width:40, height:40, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>➕</div>
+                              <div style={{ flex:1 }}>
+                                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                                  <div style={{ fontSize:12, color:C.mid }}>{act.activity_date.slice(5).replace("-"," ")}</div>
+                                  <div style={{ fontSize:11, color:C.crimson }}>EXTRA RUN</div>
+                                </div>
+                                <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
+                                <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
+                                {act.notes && <div style={{ fontSize:11, color:C.mid, marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
+                                {act.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
-                    <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
-                    {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:C.mid, marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
-                    {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
-                  </div>
-                  <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
-                </div>
-              );
-            })}
-            {(() => {
-              if (!week) return null;
-              const wkEnd = (() => { const d = new Date(week.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
-              const extraActs = activities.filter(a =>
-                a.athlete_email === user.email?.toLowerCase() &&
-                a.source !== "session" &&
-                a.activity_date >= week.weekStart &&
-                a.activity_date <= wkEnd
-              );
-              return extraActs.map(act => (
-                <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:2, padding:"16px 18px", marginBottom:10, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
-                  <div style={{ width:42, height:42, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>➕</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between" }}>
-                      <div style={{ fontSize:12, color:C.mid }}>{act.activity_date.slice(5).replace("-"," ")}</div>
-                      <div style={{ fontSize:11, color:C.crimson }}>EXTRA RUN</div>
-                    </div>
-                    <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
-                    <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
-                    {act.notes && <div style={{ fontSize:11, color:C.mid, marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
-                    {act.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
-                  </div>
-                </div>
-              ));
-            })()}
-          </div>
+                  );
+                })}
+                <button onClick={()=>setScreen("history")} style={{
+                  width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2,
+                  padding:"10px", color:C.mid, fontSize:11, cursor:"pointer", marginBottom:16, letterSpacing:1,
+                }}>HISTORY →</button>
+              </div>
+            );
+          })()}
         </div>
       </div>
     );
