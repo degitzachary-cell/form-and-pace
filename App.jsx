@@ -326,6 +326,47 @@ const ATHLETE_PROGRAMS = {
           { id:"nz-s20", day:"Sat 18", type:"LONG RUN", tag:"easy",  desc:"Easy Long Run\n60 min Easy (6:10–6:30/km)\n~9–10km\nEasy run — go longer if you want, but not too long",                                                                                pace:"6:10–6:30 /km",        terrain:"FLAT/ROAD" },
         ]
       },
+      {
+        weekLabel: "Week 5 · Hyrox Build · 20–26 Apr", weekStart: "2026-04-20",
+        sessions: [
+          { id:"nz-s21", day:"Mon 20", type:"RECOVERY", tag:"easy",  desc:"Recovery Run\n35 min Easy (6:00–6:30/km)\n~5–6km\n6×20sec Strides\n40sec float",                                                                                                                                                          pace:"6:00–6:30 /km",   terrain:"FLAT/ROAD" },
+          { id:"nz-s22", day:"Tue 21", type:"SPEED",    tag:"speed", desc:"Compromised Running Quality Session\n15 min Easy Warm Up (~2.2km)\n3×1km @ 5:00–5:05/km\nAfter each 1km: 50m Farmers Carry (heavy)\n90 sec rest before next rep\n15 min Easy Cool Down (~2.2km)\nTotal ~9km",                            pace:"1km: 5:00–5:05 /km", terrain:"FLAT/ROAD" },
+          { id:"nz-s23", day:"Wed 22", type:"EASY",     tag:"easy",  desc:"Easy Run\n65 min Easy (6:00–6:30/km)\n~10–11km",                                                                                                                                                                                          pace:"6:00–6:30 /km",   terrain:"FLAT/ROAD" },
+          { id:"nz-s24", day:"Thu 23", type:"HYROX",    tag:"speed", desc:"TH Hyrox Session",                                                                                                                                                                                                                        pace:"–",               terrain:"GYM" },
+          { id:"nz-s25", day:"Sat 25", type:"LONG RUN", tag:"easy",  desc:"Long Easy Run\n75 min Easy (6:00–6:20/km)\n~12km\nFocus: time on feet · aerobic base",                                                                                                                                                   pace:"6:00–6:20 /km",   terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 6 · Hyrox Build · 27 Apr–3 May", weekStart: "2026-04-27",
+        sessions: [
+          { id:"nz-s26", day:"Mon 27", type:"RECOVERY", tag:"easy",  desc:"Recovery Run\n35 min Easy (6:00–6:30/km)\n~5–6km\n6×20sec Strides\n40sec float",                                                                                                                                                          pace:"6:00–6:30 /km",   terrain:"FLAT/ROAD" },
+          { id:"nz-s27", day:"Tue 28", type:"SPEED",    tag:"speed", desc:"Compromised Running Quality Session\n15 min Easy Warm Up (~2.2km)\n4×1km @ 4:58–5:05/km\nAfter each 1km: 50m Farmers Carry (heavy)\n90 sec rest before next rep\n15 min Easy Cool Down (~2.2km)\nTotal ~10km",                           pace:"1km: 4:58–5:05 /km", terrain:"FLAT/ROAD" },
+          { id:"nz-s28", day:"Wed 29", type:"EASY",     tag:"easy",  desc:"Easy Run\n65 min Easy (6:00–6:20/km)\n~10–11km",                                                                                                                                                                                          pace:"6:00–6:20 /km",   terrain:"FLAT/ROAD" },
+          { id:"nz-s29", day:"Thu 30", type:"HYROX",    tag:"speed", desc:"TH Hyrox Session",                                                                                                                                                                                                                        pace:"–",               terrain:"GYM" },
+          { id:"nz-s30", day:"Sat 02", type:"LONG RUN", tag:"tempo", desc:"Long Easy Run\n80 min Easy (6:00–6:20/km)\n~13km\nFinal 10 min @ 5:30/km (progressive finish)",                                                                                                                                           pace:"Easy → 5:30 /km", terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 7 · Hyrox Peak · 4–10 May", weekStart: "2026-05-04",
+        sessions: [
+          { id:"nz-s31", day:"Mon 04", type:"RECOVERY", tag:"easy",  desc:"Recovery Run\n30 min Easy (6:10–6:30/km)\n~5km\n4×20sec Strides\n40sec float",                                                                                                                                                                          pace:"6:10–6:30 /km",      terrain:"FLAT/ROAD" },
+          { id:"nz-s32", day:"Tue 05", type:"SPEED",    tag:"speed", desc:"Compromised Running Quality Session\n15 min Easy Warm Up (~2.2km)\n5×800m @ 4:55–5:00/km\nAfter each 800m: 12×Weighted Sandbag Lunges\n90sec rest before next rep\n15 min Easy Cool Down (~2.2km)\nTotal ~9km",                                        pace:"800m: 4:55–5:00 /km", terrain:"FLAT/ROAD" },
+          { id:"nz-s33", day:"Wed 06", type:"HYROX",    tag:"speed", desc:"TH Hyrox Session",                                                                                                                                                                                                                                      pace:"1km: 4:52–4:58 /km", terrain:"TRACK OR ROAD" },
+          { id:"nz-s34", day:"Thu 07", type:"SPEED",    tag:"speed", desc:"Km Repeats – Extra Quality Session\n10 min Warm Up (~1.5km)\n5×1km @ 4:52–4:58/km\n2 min standing rest\n10 min Cool Down (~1.5km)\nTotal ~10km\nPush toward race pace",                                                                                 pace:"1km: 4:52–4:58 /km", terrain:"GYM" },
+          { id:"nz-s35", day:"Sat 09", type:"LONG RUN", tag:"tempo", desc:"Long Easy Run\n85 min Easy (6:00–6:20/km)\n~14km\nFinal 15 min @ 5:20/km",                                                                                                                                                                              pace:"Easy → 5:20 /km",    terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 8 · Hyrox Deload · 11–17 May", weekStart: "2026-05-11",
+        sessions: [
+          { id:"nz-s36", day:"Mon 11", type:"RECOVERY", tag:"easy",  desc:"Recovery Run\n25 min Easy (6:10–6:30/km)\n~4km\n4×20sec Strides\n40sec float",                                                                                                                                                         pace:"6:10–6:30 /km",     terrain:"FLAT/ROAD" },
+          { id:"nz-s37", day:"Tue 12", type:"SPEED",    tag:"speed", desc:"Compromised Running Light Quality Session\n10 min Easy Warm Up (~1.5km)\n3×600m @ 4:50–5:00/km\nAfter each 600m: 1 min Ski Erg\n90sec rest before next rep\n10 min Easy Cool Down (~1.5km)\nTotal ~5km",                                 pace:"600m: 4:50–5:00 /km", terrain:"FLAT/ROAD" },
+          { id:"nz-s38", day:"Wed 13", type:"EASY",     tag:"easy",  desc:"Easy Run\n30 min Easy (6:10–6:30/km)\n~5km",                                                                                                                                                                                           pace:"6:10–6:30 /km",     terrain:"FLAT/ROAD" },
+          { id:"nz-s39", day:"Thu 14", type:"HYROX",    tag:"speed", desc:"TH Hyrox Session\n(Lighter – technique focus)\nNO HEAVY WEIGHTS",                                                                                                                                                                      pace:"–",                  terrain:"GYM" },
+          { id:"nz-s40", day:"Sat 16", type:"EASY",     tag:"easy",  desc:"Easy Short Run\n30 min Easy (6:10–6:30/km)\n~4–5km",                                                                                                                                                                                   pace:"6:10–6:30 /km",     terrain:"FLAT/ROAD" },
+          { id:"nz-s41", day:"Sun 17", type:"RACE DAY", tag:"speed", desc:"🏆 HYROX RACE DAY",                                                                                                                                                                                                                    pace:"–",                  terrain:"GYM" },
+        ]
+      },
     ]
   },
   // Add more athletes here by email
