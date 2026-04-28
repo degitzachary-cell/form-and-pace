@@ -25,8 +25,8 @@ export default function App() {
   const [screen,        setScreen]        = useState("home");
   const [activeSession, setActiveSession] = useState(null);
   const [activeExtraActivity, setActiveExtraActivity] = useState(null);
-  const [activeWeekIdx, setActiveWeekIdx] = useState(0);
-  const [expandedWeekIdxs, setExpandedWeekIdxs] = useState(null);
+  const [activeWeekIdx, setActiveWeekIdx] = useState(null);
+  const [coachWeekIdx, setCoachWeekIdx] = useState(null);
   const [feedbackText,  setFeedbackText]  = useState("");
   const [sessionDistKm, setSessionDistKm] = useState("");
   const [sessionDurMin, setSessionDurMin] = useState("");
@@ -161,6 +161,28 @@ export default function App() {
       checkStravaConnection();
     }
   }, [user, role]);
+
+  // Default the coach week dropdown to the current week whenever they open
+  // an athlete (or null when they leave the screen).
+  useEffect(() => {
+    if (role !== "coach" || coachScreen !== "athlete" || !dashAthlete) {
+      if (coachWeekIdx !== null) setCoachWeekIdx(null);
+      return;
+    }
+    const wks = athletePrograms[dashAthlete]?.weeks || [];
+    if (wks.length === 0) return;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let idx = wks.findIndex(w => {
+      const mon = new Date(w.weekStart + "T00:00:00");
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
+      return today >= mon && today <= sun;
+    });
+    if (idx < 0) {
+      idx = wks.findIndex(w => new Date(w.weekStart + "T00:00:00") > today);
+      if (idx < 0) idx = wks.length - 1;
+    }
+    setCoachWeekIdx(idx);
+  }, [role, coachScreen, dashAthlete, athletePrograms]);
 
   // ── Refresh session log when coach opens a session detail ──
   // Single round-trip; no separate activities re-fetch (the home query already
@@ -297,7 +319,7 @@ export default function App() {
     setStravaConnected(false); setStravaActivities([]);
     setSelectedStravaId(null); setStravaDetail(null);
     setActiveSession(null); setActiveExtraActivity(null);
-    setExpandedWeekIdxs(null); setHoveredWeekIdx(null);
+    setActiveWeekIdx(null); setCoachWeekIdx(null); setHoveredWeekIdx(null);
     setCoachReply(""); setFeedbackText("");
     setSessionDistKm(""); setSessionDurMin("");
     setScreen("home"); setCoachScreen("dashboard");
@@ -339,20 +361,21 @@ export default function App() {
     };
   }, [hoveredWeekIdx]);
 
-  // Initialise the athlete week accordion: expand current/future, collapse past.
-  // Avoids the previous setState-during-render anti-pattern.
+  // Default the athlete week dropdown to the current week (or last if all in past).
   useEffect(() => {
-    if (role !== "athlete" || expandedWeekIdxs !== null || weeks.length === 0) return;
+    if (role !== "athlete" || activeWeekIdx !== null || weeks.length === 0) return;
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const s = new Set();
-    weeks.forEach((w, i) => {
+    let idx = weeks.findIndex(w => {
       const mon = new Date(w.weekStart + "T00:00:00");
       const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
-      if (today <= sun) s.add(i);
+      return today >= mon && today <= sun;
     });
-    if (s.size === 0) s.add(weeks.length - 1);
-    setExpandedWeekIdxs(s);
-  }, [role, weeks, expandedWeekIdxs]);
+    if (idx < 0) {
+      idx = weeks.findIndex(w => new Date(w.weekStart + "T00:00:00") > today);
+      if (idx < 0) idx = weeks.length - 1;
+    }
+    setActiveWeekIdx(idx);
+  }, [role, weeks, activeWeekIdx]);
 
   const fetchStravaActivities = async () => {
     if (stravaActivitiesLoading) return;
@@ -705,15 +728,57 @@ export default function App() {
             ))}
           </div>
 
-          {(() => {
+          {da.weeks.length > 0 && coachWeekIdx !== null && (() => {
             const athActs     = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
             const athActDates = new Set(athActs.map(a => a.activity_date));
-            return da.weeks.map((wk,wi) => {
-              const wkEnd = weekEndStr(wk.weekStart);
-              const extraActs = athActs.filter(a => a.source !== "session" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
-              return (
-                <div key={wi} style={{ marginBottom:20 }}>
-                  <div style={{ fontSize:11, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:10, paddingLeft:4 }}>{wk.weekLabel}</div>
+            const today = new Date(); today.setHours(0,0,0,0);
+            const weekStatus = (w) => {
+              const mon = new Date(w.weekStart + "T00:00:00");
+              const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+              if (today > sun) return "past";
+              if (today >= mon) return "current";
+              return "future";
+            };
+            const idx = Math.min(coachWeekIdx, da.weeks.length - 1);
+            const wk = da.weeks[idx];
+            const status = weekStatus(wk);
+            const isCurrent = status === "current";
+            const wkEnd = weekEndStr(wk.weekStart);
+            const extraActs = athActs.filter(a => a.source !== "session" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
+            return (
+              <>
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:6, fontFamily:S.bodyFont }}>Week</div>
+                  <div style={{ position:"relative" }}>
+                    <select
+                      value={idx}
+                      onChange={(e) => setCoachWeekIdx(Number(e.target.value))}
+                      style={{
+                        width:"100%",
+                        appearance:"none",
+                        WebkitAppearance:"none",
+                        background: isCurrent ? C.crimson : C.white,
+                        color: isCurrent ? "#fffdf8" : C.navy,
+                        border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
+                        borderRadius:2,
+                        padding:"12px 36px 12px 14px",
+                        fontSize:13,
+                        fontWeight:700,
+                        letterSpacing:0.5,
+                        fontFamily:S.bodyFont,
+                        cursor:"pointer",
+                      }}>
+                      {da.weeks.map((w, i) => {
+                        const s = weekStatus(w);
+                        const tag = s === "current" ? " · THIS WEEK" : s === "past" ? " · PAST" : "";
+                        return <option key={i} value={i}>{w.weekLabel}{tag}</option>;
+                      })}
+                    </select>
+                    <div style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color: isCurrent ? "rgba(255,255,255,0.75)" : C.mid, fontSize:14 }}>▾</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom:20 }}>
                   {wk.sessions.map(s => {
                     const log    = logs[s.id];
                     const sDate  = sessionDateStr(wk.weekStart, s.day);
@@ -724,7 +789,6 @@ export default function App() {
                           const sess = {...s, weekStart: wk.weekStart, athleteEmail: dashAthlete};
                           setActiveSession(sess);
                           setCoachScreen("session");
-                          // session log is pulled by the useEffect tied to coachScreen
                         }}
                         style={{ ...S.card, marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:12 }}>
                         <div style={{ fontSize:22 }}>{log?.analysis?.emoji || "⏳"}</div>
@@ -758,8 +822,8 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-              );
-            });
+              </>
+            );
           })()}
         </div>
       </div>
@@ -1084,8 +1148,8 @@ export default function App() {
             )}
           </div>
 
-          {/* Week accordion — past weeks auto-collapsed, current/future expanded */}
-          {(() => {
+          {/* Week selector dropdown — defaults to current week */}
+          {weeks.length > 0 && activeWeekIdx !== null && (() => {
             const today = new Date(); today.setHours(0,0,0,0);
             const weekStatus = (w) => {
               const mon = new Date(w.weekStart + "T00:00:00");
@@ -1094,107 +1158,103 @@ export default function App() {
               if (today >= mon) return "current";
               return "future";
             };
-
-            const expanded = expandedWeekIdxs ?? new Set();
-            const toggle = (i) => {
-              const next = new Set(expanded);
-              next.has(i) ? next.delete(i) : next.add(i);
-              setExpandedWeekIdxs(next);
-            };
+            const idx = Math.min(activeWeekIdx, weeks.length - 1);
+            const w = weeks[idx];
+            const status = weekStatus(w);
+            const isCurrent = status === "current";
+            const isPast = status === "past";
+            const wkEnd = weekEndStr(w.weekStart);
+            const extraActs = myActs.filter(a =>
+              a.source !== "session" &&
+              a.activity_date >= w.weekStart &&
+              a.activity_date <= wkEnd
+            );
+            const sessionsDone = w.sessions.filter(s => logs[s.id] || actByDate[sessionDateStr(w.weekStart, s.day)]).length;
 
             return (
               <div style={{ padding:"0 16px" }}>
-                {weeks.map((w, i) => {
-                  const status = weekStatus(w);
-                  const isOpen = expanded.has(i);
-                  const isCurrent = status === "current";
-                  const isPast = status === "past";
-                  const wkEnd = weekEndStr(w.weekStart);
-                  const extraActs = myActs.filter(a =>
-                    a.source !== "session" &&
-                    a.activity_date >= w.weekStart &&
-                    a.activity_date <= wkEnd
-                  );
-                  const sessionsDone = w.sessions.filter(s => logs[s.id] || actByDate[sessionDateStr(w.weekStart, s.day)]).length;
-
-                  return (
-                    <div key={i} style={{ marginBottom:10 }}>
-                      <div onClick={() => toggle(i)} style={{
-                        display:"flex", alignItems:"center", justifyContent:"space-between",
-                        padding:"12px 14px",
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:6, fontFamily:S.bodyFont }}>Week</div>
+                  <div style={{ position:"relative" }}>
+                    <select
+                      value={idx}
+                      onChange={(e) => setActiveWeekIdx(Number(e.target.value))}
+                      style={{
+                        width:"100%",
+                        appearance:"none",
+                        WebkitAppearance:"none",
                         background: isCurrent ? C.crimson : C.white,
+                        color: isCurrent ? "#fffdf8" : C.navy,
                         border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
-                        borderRadius: isOpen ? "2px 2px 0 0" : 2,
+                        borderRadius:2,
+                        padding:"12px 36px 12px 14px",
+                        fontSize:13,
+                        fontWeight:700,
+                        letterSpacing:0.5,
+                        fontFamily:S.bodyFont,
                         cursor:"pointer",
-                        opacity: isPast ? 0.65 : 1,
                       }}>
-                        <div>
-                          <div style={{ fontSize:12, fontWeight:700, color: isCurrent ? "#fffdf8" : C.navy, letterSpacing:0.5 }}>
-                            {w.weekLabel}
-                          </div>
-                          {isPast && sessionsDone > 0 && (
-                            <div style={{ fontSize:10, color:C.mid, marginTop:2 }}>
-                              {sessionsDone}/{w.sessions.length} logged
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                          {isPast   && <div style={{ fontSize:9, letterSpacing:1, color:C.mid, textTransform:"uppercase" }}>PAST</div>}
-                          {isCurrent && <div style={{ fontSize:9, letterSpacing:1, color:"rgba(255,255,255,0.75)", textTransform:"uppercase" }}>THIS WEEK</div>}
-                          <div style={{ fontSize:16, color: isCurrent ? "rgba(255,255,255,0.6)" : C.mid, transform: isOpen ? "rotate(90deg)" : "none", transition:"transform 0.2s" }}>›</div>
-                        </div>
-                      </div>
-
-                      {isOpen && (
-                        <div style={{ border:`1px solid ${isCurrent ? "#E06666" : C.rule}`, borderTop:"none", borderRadius:"0 0 2px 2px", padding:"10px 10px 4px" }}>
-                          {w.sessions.map(s => {
-                            const log = logs[s.id];
-                            const ts  = TAG_STYLE[s.tag] || TAG_STYLE.easy;
-                            const sDate = sessionDateStr(w.weekStart, s.day);
-                            const linkedAct = actByDate[sDate];
-                            const isLogged = !!log || !!linkedAct;
-                            const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
-                            return (
-                              <div key={s.id}
-                                onClick={()=>{ setActiveSession({...s, weekStart: w.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
-                                style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"14px 16px", marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
-                                <div style={{ width:40, height:40, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
-                                  {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
-                                </div>
-                                <div style={{ flex:1 }}>
-                                  <div style={{ display:"flex", justifyContent:"space-between" }}>
-                                    <div style={{ fontSize:12, color:C.mid }}>{s.day}</div>
-                                    {isLogged && <div style={{ fontSize:11, color:C.green }}>✓ LOGGED</div>}
-                                  </div>
-                                  <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
-                                  <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
-                                  {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:C.mid, marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
-                                  {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
-                                </div>
-                                <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
-                              </div>
-                            );
-                          })}
-                          {extraActs.map(act => (
-                            <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:2, padding:"14px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
-                              <div style={{ width:40, height:40, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>➕</div>
-                              <div style={{ flex:1 }}>
-                                <div style={{ display:"flex", justifyContent:"space-between" }}>
-                                  <div style={{ fontSize:12, color:C.mid }}>{act.activity_date.slice(5).replace("-"," ")}</div>
-                                  <div style={{ fontSize:11, color:C.crimson }}>EXTRA RUN</div>
-                                </div>
-                                <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
-                                <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
-                                {act.notes && <div style={{ fontSize:11, color:C.mid, marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
-                                {act.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {weeks.map((wk, i) => {
+                        const s = weekStatus(wk);
+                        const tag = s === "current" ? " · THIS WEEK" : s === "past" ? " · PAST" : "";
+                        return <option key={i} value={i}>{wk.weekLabel}{tag}</option>;
+                      })}
+                    </select>
+                    <div style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color: isCurrent ? "rgba(255,255,255,0.75)" : C.mid, fontSize:14 }}>▾</div>
+                  </div>
+                  {isPast && sessionsDone > 0 && (
+                    <div style={{ fontSize:10, color:C.mid, marginTop:6, paddingLeft:2 }}>
+                      {sessionsDone}/{w.sessions.length} sessions logged
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+
+                <div style={{ marginBottom:14 }}>
+                  {w.sessions.map(s => {
+                    const log = logs[s.id];
+                    const ts  = TAG_STYLE[s.tag] || TAG_STYLE.easy;
+                    const sDate = sessionDateStr(w.weekStart, s.day);
+                    const linkedAct = actByDate[sDate];
+                    const isLogged = !!log || !!linkedAct;
+                    const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
+                    return (
+                      <div key={s.id}
+                        onClick={()=>{ setActiveSession({...s, weekStart: w.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
+                        style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"14px 16px", marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
+                        <div style={{ width:40, height:40, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
+                          {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
+                        </div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between" }}>
+                            <div style={{ fontSize:12, color:C.mid }}>{s.day}</div>
+                            {isLogged && <div style={{ fontSize:11, color:C.green }}>✓ LOGGED</div>}
+                          </div>
+                          <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
+                          <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
+                          {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:C.mid, marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
+                          {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
+                        </div>
+                        <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
+                      </div>
+                    );
+                  })}
+                  {extraActs.map(act => (
+                    <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:2, padding:"14px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
+                      <div style={{ width:40, height:40, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>➕</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between" }}>
+                          <div style={{ fontSize:12, color:C.mid }}>{act.activity_date.slice(5).replace("-"," ")}</div>
+                          <div style={{ fontSize:11, color:C.crimson }}>EXTRA RUN</div>
+                        </div>
+                        <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
+                        <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
+                        {act.notes && <div style={{ fontSize:11, color:C.mid, marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
+                        {act.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 <button onClick={()=>setScreen("history")} style={{
                   width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2,
                   padding:"10px", color:C.mid, fontSize:11, cursor:"pointer", marginBottom:16, letterSpacing:1,
