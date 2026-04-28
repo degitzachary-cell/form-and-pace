@@ -369,6 +369,56 @@ const ATHLETE_PROGRAMS = {
       },
     ]
   },
+  "chaselw9@gmail.com": {
+    name: "Chase Williams", goal: "PB Half & Full Marathon", current: "", avatar: "CW",
+    weeks: [
+      {
+        weekLabel: "Week 1 · General Phase · 20–26 Apr", weekStart: "2026-04-20",
+        sessions: [
+          { id:"cw-s1",  day:"Mon 20", type:"RECOVERY", tag:"easy",  desc:"40 min Easy\nTotal ~8km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:00–5:20 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s2",  day:"Tue 21", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n5×800m @ 3:50–3:55/km\n90sec standing rest\n15 min Cool Down (~3km)\nTotal ~10km",                                         pace:"3:50–3:55 /km",         terrain:"TRACK OR ROAD" },
+          { id:"cw-s3",  day:"Wed 22", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+          { id:"cw-s4",  day:"Thu 23", type:"EASY",     tag:"easy",  desc:"45 min Easy (~9km)\n6×15sec Strides\n30sec rest",                                                                                                  pace:"MP: 4:30 /km",          terrain:"ROAD" },
+          { id:"cw-s5",  day:"Fri 24", type:"TEMPO",    tag:"tempo", desc:"15 min Warm Up (~3km)\n3×7 min @ MP (4:30/km)\n2 min jog recovery\n15 min Cool Down (~3km)\nTotal ~13km",                                         pace:"Easy: 4:50–5:10 /km",   terrain:"FLAT" },
+          { id:"cw-s6",  day:"Sat 25", type:"LONG RUN", tag:"easy",  desc:"80 min Easy (4:50–5:05/km)\n~16km",                                                                                                               pace:"4:50–5:05 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s7",  day:"Sun 26", type:"LONG RUN", tag:"easy",  desc:"80 min Easy (4:50–5:05/km)\n~16km",                                                                                                               pace:"4:50–5:05 /km",         terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 2 · General Phase · 27 Apr–3 May", weekStart: "2026-04-27",
+        sessions: [
+          { id:"cw-s8",  day:"Mon 27", type:"RECOVERY", tag:"easy",  desc:"50 min Easy\nTotal ~10km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s9",  day:"Tue 28", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n25 min @ 4:45/km · 6% incline (Aerobic strength ~5km)\n15 min Cool Down (~3km)\nTotal ~11km",                              pace:"4:10 /km @ 6% incline", terrain:"TREADMILL" },
+          { id:"cw-s10", day:"Wed 29", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+          { id:"cw-s11", day:"Thu 30", type:"TEMPO",    tag:"tempo", desc:"15 min Warm Up (~3km)\n4×8 min @ HMP (4:15–4:25/km)\n90sec jog recovery\n15 min Cool Down (~3km)\nTotal ~13km",                                   pace:"4:15–4:25 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s12", day:"Fri 01", type:"RECOVERY", tag:"easy",  desc:"50 min Easy\nTotal ~10km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT" },
+          { id:"cw-s13", day:"Sat 02", type:"LONG RUN", tag:"tempo", desc:"80 min Easy (4:50–5:05/km)\n~16km\nFinal 10 min @ 4:20/km",                                                                                       pace:"Easy → 4:20 /km",       terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 3 · General Phase · 4–10 May", weekStart: "2026-05-04",
+        sessions: [
+          { id:"cw-s14", day:"Mon 04", type:"RECOVERY", tag:"easy",  desc:"50 min Easy\nTotal ~10km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s15", day:"Tue 05", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n6×1km @ 3:50/km (10k Pace)\n2 min standing rest\n15 min Cool Down (~3km)\nTotal ~12km",                                    pace:"4:10 /km @ 6% incline", terrain:"TREADMILL" },
+          { id:"cw-s16", day:"Wed 06", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+          { id:"cw-s17", day:"Thu 07", type:"TEMPO",    tag:"tempo", desc:"15 min Warm Up (~3km)\n15 min @ HMP (4:15–4:25/km)\n5 min jog recovery\n5 min @ 10k pace (4:05/km)\n15 min Cool Down (~3km)\nTotal ~14km",        pace:"4:15–4:25 /km + 4:05 /km", terrain:"FLAT/ROAD" },
+          { id:"cw-s18", day:"Fri 08", type:"RECOVERY", tag:"easy",  desc:"60 min Easy\nTotal ~12km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT" },
+          { id:"cw-s19", day:"Sat 09", type:"LONG RUN", tag:"tempo", desc:"80 min Easy (4:50–5:05/km)\n~16km",                                                                                                               pace:"Easy → 4:20 /km",       terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 4 · General Phase Deload · 11–17 May", weekStart: "2026-05-11",
+        sessions: [
+          { id:"cw-s20", day:"Mon 11", type:"RECOVERY", tag:"easy",  desc:"40 min Easy\nTotal ~10km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s21", day:"Tue 12", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n6×200m @ 4:10\n15 min Cool Down (~3km)\nTotal ~10km",                                                                      pace:"4:00 /km @ 5–7% incline", terrain:"TREADMILL" },
+          { id:"cw-s22", day:"Wed 13", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+          { id:"cw-s23", day:"Thu 14", type:"EASY",     tag:"easy",  desc:"30 min Easy (~8km)\n4×15sec Strides\n30sec rest",                                                                                                  pace:"4:15–4:25 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s24", day:"Fri 15", type:"RACE DAY", tag:"speed", desc:"🏆 RACE DAY",                                                                                                                                    pace:"Easy: 4:55–5:10 /km",   terrain:"FLAT" },
+          { id:"cw-s25", day:"Sat 16", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+        ]
+      },
+    ]
+  },
   // Add more athletes here by email
 };
 
