@@ -55,13 +55,51 @@ export default function App() {
       setAthletePrograms(prev => {
         const updated = { ...prev };
         data.forEach(row => {
-          const existing = updated[row.athlete_email] || {};
-          updated[row.athlete_email] = { ...existing, weeks: row.plan_json };
+          const key = row.athlete_email?.toLowerCase();
+          if (!key) return;
+          const existing = updated[key] || {};
+          updated[key] = { ...existing, weeks: row.plan_json };
         });
         return updated;
       });
     };
     loadPlans();
+  }, [user, role]);
+
+  // Coaches need every athlete's profile (name / goal / PB / avatar) so the
+  // dashboard cards aren't blank. Athletes only need their own profile, which
+  // resolveUser already loaded.
+  useEffect(() => {
+    if (!user || role !== 'coach') return;
+    const loadAthleteProfiles = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('email, name, goal, current_pb, avatar, role')
+        .eq('role', 'athlete');
+      if (error) {
+        console.error('Failed to load athlete profiles:', error);
+        return;
+      }
+      setAthletePrograms(prev => {
+        const updated = { ...prev };
+        data.forEach(p => {
+          const key = p.email?.toLowerCase();
+          if (!key) return;
+          const existing = updated[key] || {};
+          const displayName = p.name || key;
+          updated[key] = {
+            ...existing,
+            name:    p.name    || existing.name    || displayName,
+            goal:    p.goal    || existing.goal    || '—',
+            current: p.current_pb || existing.current || '—',
+            avatar:  p.avatar  || existing.avatar  || displayName.slice(0, 2).toUpperCase(),
+            weeks:   existing.weeks || [],
+          };
+        });
+        return updated;
+      });
+    };
+    loadAthleteProfiles();
   }, [user, role]);
 
   // Profile (loaded from DB on login — determines role)
@@ -625,18 +663,21 @@ export default function App() {
           {/* Athlete cards */}
           {athletes.map(([email, data]) => {
             const st = statsFor(email);
-            const recentSessions = data.weeks.flatMap(w=>w.sessions).filter(s=>logs[s.id]).slice(-3);
+            const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
+            const recentSessions = weeksList.flatMap(w=>w.sessions || []).filter(s=>logs[s.id]).slice(-3);
             const thisWeekKm = weekKm(activities, email, 0);
+            const displayName = data.name || email.split("@")[0];
+            const avatar = data.avatar || displayName.slice(0, 2).toUpperCase();
             return (
               <div key={email} onClick={()=>{ setDashAthlete(email); setCoachScreen("athlete"); }}
                 style={{ ...S.card, marginBottom:12, cursor:"pointer" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:14 }}>
                   <div style={{ width:46, height:46, borderRadius:"50%", background:C.navy, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:14, flexShrink:0, color:C.cream }}>
-                    {data.avatar}
+                    {avatar}
                   </div>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:700, fontSize:16, color:C.navy, fontFamily:S.displayFont }}>{data.name}</div>
-                    <div style={{ fontSize:12, color:C.mid, marginTop:2 }}>Goal: {data.goal} · PB: {data.current}</div>
+                    <div style={{ fontWeight:700, fontSize:16, color:C.navy, fontFamily:S.displayFont }}>{displayName}</div>
+                    <div style={{ fontSize:12, color:C.mid, marginTop:2 }}>Goal: {data.goal || "—"} · PB: {data.current || "—"}</div>
                   </div>
                   <div style={{ textAlign:"right" }}>
                     <div style={{ fontSize:16, fontWeight:900, color:C.navy }}>{thisWeekKm.toFixed(1)}</div>
@@ -704,13 +745,15 @@ export default function App() {
   //  COACH → ATHLETE DETAIL
   // ────────────────────────────────────────────────────────────
   if (role === "coach" && coachScreen === "athlete" && dashAthlete) {
-    const da  = athletePrograms[dashAthlete];
+    const da  = athletePrograms[dashAthlete] || { weeks: [] };
     const st  = statsFor(dashAthlete);
     const athWeekKm = weekKm(activities, dashAthlete, 0);
+    const daName = da.name || dashAthlete.split("@")[0];
+    const daGoal = da.goal || "—";
     return (
       <div style={S.page}>
         <div style={S.grain}/>
-        <Header title={da.name} subtitle={`Goal: ${da.goal}`} onBack={()=>setCoachScreen("dashboard")}
+        <Header title={daName} subtitle={`Goal: ${daGoal}`} onBack={()=>setCoachScreen("dashboard")}
           right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}/>
         <div style={{ maxWidth:500, margin:"0 auto", padding:"24px 16px 80px" }}>
 
