@@ -147,6 +147,50 @@ const ATHLETE_PROGRAMS = {
           { id:"jb-s24", day:"Sun 12", type:"LONG RUN", tag:"easy",  desc:"60min Easy\n(4:55–5:10 /km)\n~12km",                                                                    pace:"4:55–5:10 /km",          terrain:"FLAT/ROAD" },
         ]
       },
+      {
+        weekLabel: "Week 5 · Peak Quality · 13–19 Apr", weekStart: "2026-04-13",
+        sessions: [
+          { id:"jb-s25", day:"Tue 14", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n7 × 1km @ 3:48–3:52 /km\n(Slightly sub-10k pace)\n90 sec standing rest\n15 min Cool Down (~3km)\nTotal ~13km",                                                                        pace:"3:48–3:52 /km",              terrain:"FLAT/ROAD" },
+          { id:"jb-s26", day:"Wed 15", type:"RECOVERY", tag:"easy",  desc:"4km Easy w/ Son\n+ 25 min Easy Extension (~5km)\nTotal ~9km — Recovery",                                                                                                                                       pace:"5:10–5:20 /km",              terrain:"TRACK OR ROAD" },
+          { id:"jb-s27", day:"Thu 16", type:"TEMPO",    tag:"tempo", desc:"15 min Warm Up (~3km)\n3km @ MP (4:10 /km)\n2 min jog\n6km @ HMP (3:55–4:00 /km)\n2 min jog\n3km @ MP\n15 min Cool Down (~3km)\nTotal ~20km",                                                              pace:"MP: 4:10 → HMP: 3:55–4:00 /km", terrain:"FLAT/ROAD" },
+          { id:"jb-s28", day:"Fri 17", type:"EASY",     tag:"easy",  desc:"60 min Easy Run\n(4:50–5:05 /km)\n~12km",                                                                                                                                                                      pace:"4:50–5:05 /km",              terrain:"FLAT/ROAD" },
+          { id:"jb-s29", day:"Sat 18", type:"EASY",     tag:"easy",  desc:"50 min Easy (~10km)\n6 × 20 sec Strides\n40 sec rest",                                                                                                                                                         pace:"Easy: 4:50–5:10 /km",        terrain:"FLAT" },
+          { id:"jb-s30", day:"Sun 19", type:"LONG RUN", tag:"easy",  desc:"90 min Easy\n(4:50–5:05 /km)\n~18km",                                                                                                                                                                          pace:"4:50–5:05 /km",              terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 6 · Taper · 20–26 Apr", weekStart: "2026-04-20",
+        sessions: [
+          { id:"jb-s31", day:"Tue 21", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n5 × 400m @ 3:40–3:45 /km\n(Fast & sharp)\n2 min standing rest\n15 min Cool Down (~3km)\nTotal ~8km",                                                                                 pace:"Fast: 3:40–3:45 /km",        terrain:"FLAT/ROAD" },
+          { id:"jb-s32", day:"Wed 22", type:"RECOVERY", tag:"easy",  desc:"4km Easy w/ Son\n+ 15 min Easy Extension (~3km)\nTotal ~7km",                                                                                                                                                  pace:"5:10–5:20 /km",              terrain:"TRACK" },
+          { id:"jb-s33", day:"Thu 23", type:"TEMPO",    tag:"tempo", desc:"15 min Warm Up (~3km)\n3 × 1km @ HMP (3:55 /km)\n2 min standing rest\n15 min Cool Down (~3km)\nTotal ~9km",                                                                                                  pace:"HMP: 3:55 /km",              terrain:"FLAT/ROAD" },
+          { id:"jb-s34", day:"Fri 24", type:"EASY",     tag:"easy",  desc:"35 min Easy Run\n(5:00–5:10 /km)\n~7km",                                                                                                                                                                       pace:"5:00–5:10 /km",              terrain:"FLAT/ROAD" },
+          { id:"jb-s35", day:"Sat 25", type:"EASY",     tag:"easy",  desc:"30 min Easy (~6km)\n4 × 15 sec Strides\n30 sec rest",                                                                                                                                                          pace:"Easy: 5:00–5:10 /km",        terrain:"FLAT" },
+          { id:"jb-s36", day:"Sun 26", type:"LONG RUN", tag:"easy",  desc:"60 min Easy\n4 × 20 sec @ HMP\nFeel fast, stay relaxed",                                                                                                                                                       pace:"Easy + HMP strides",         terrain:"FLAT" },
+        ]
+      },
+      {
+        weekLabel: "Race Week · 27 Apr–3 May", weekStart: "2026-04-27",
+        sessions: [
+          { id:"jb-s37", day:"Tue 28", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n6 × 200m @ 3:30–3:35 /km (Sharp & fast)\n2 × 400m @ HMP (3:55 /km)\n15 min Cool Down (~3km)\nTotal ~9km",                                                                            pace:"200s: 3:30–3:35 | 400s: 3:55 /km", terrain:"FLAT" },
+          { id:"jb-s38", day:"Wed 29", type:"EASY",     tag:"easy",  desc:"25 min Easy (~4km)\n4 × 15 sec Strides\n30 sec rest\nLoose legs, nothing more",                                                                                                                                pace:"5:10–5:15 /km",              terrain:"FLAT" },
+          { id:"jb-s39", day:"Thu 30", type:"EASY",     tag:"easy",  desc:"20 min Easy (~4km)\nVery light — just moving",                                                                                                                                                                 pace:"5:10–5:15 /km",              terrain:"FLAT" },
+          { id:"jb-s40", day:"Fri 01", type:"EASY",     tag:"easy",  desc:"15 min Easy (~3km)\nNo effort\nJust stay loose",                                                                                                                                                               pace:"Very easy",                  terrain:"FLAT" },
+          { id:"jb-s41", day:"Sat 02", type:"EASY",     tag:"easy",  desc:"REST\nCarb-load · Final prep\nEarly night",                                                                                                                                                                    pace:"–",                          terrain:"–" },
+          { id:"jb-s42", day:"Sun 03", type:"RACE DAY", tag:"tempo", desc:"🏆 HOKA HALF MARATHON\nTarget: 1:23:00 (3:55 /km)\nRun smart. Trust the training.",                                                                                                                            pace:"Target: 3:55 /km",           terrain:"ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Deload · 4–10 May", weekStart: "2026-05-04",
+        sessions: [
+          { id:"jb-s43", day:"Tue 05", type:"EASY",     tag:"easy",  desc:"55 min Easy (~11km)\n4 × 15 sec Strides\n30 sec rest\nVery Chill Day",                                                                                                                                         pace:"5:10–5:15 /km",              terrain:"FLAT" },
+          { id:"jb-s44", day:"Wed 06", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n6 × 1km @ 3:40–3:55 /km\n90 sec standing rest\n15 min Cool Down (~3km)\nTotal ~12km",                                                                                                  pace:"3:40–3:55 /km",              terrain:"FLAT" },
+          { id:"jb-s45", day:"Thu 07", type:"EASY",     tag:"easy",  desc:"40 min Easy (~8km)",                                                                                                                                                                                           pace:"5:10–5:15 /km",              terrain:"FLAT" },
+          { id:"jb-s46", day:"Fri 08", type:"TEMPO",    tag:"tempo", desc:"15 min Warm Up (~3km)\n5 × 6 min @ HMP (3:55–4:00 /km)\n90 sec jog recovery\n15 min Cool Down (~3km)\nTotal ~15km",                                                                                           pace:"HMP: 3:55–4:00 /km",         terrain:"FLAT" },
+          { id:"jb-s47", day:"Sat 09", type:"EASY",     tag:"easy",  desc:"45 min Easy (~9km)\n4 × 15 sec Strides\n30 sec rest\nVery Chill Day",                                                                                                                                          pace:"Easy: 5:10–5:15 /km",        terrain:"FLAT" },
+          { id:"jb-s48", day:"Sun 10", type:"LONG RUN", tag:"easy",  desc:"90 min Easy\n(4:50–5:05 /km)\n~18km",                                                                                                                                                                          pace:"4:50–5:05 /km",              terrain:"FLAT/ROAD" },
+        ]
+      },
     ]
   },
   "smithavt14@gmail.com": {
@@ -282,6 +326,97 @@ const ATHLETE_PROGRAMS = {
           { id:"nz-s20", day:"Sat 18", type:"LONG RUN", tag:"easy",  desc:"Easy Long Run\n60 min Easy (6:10–6:30/km)\n~9–10km\nEasy run — go longer if you want, but not too long",                                                                                pace:"6:10–6:30 /km",        terrain:"FLAT/ROAD" },
         ]
       },
+      {
+        weekLabel: "Week 5 · Hyrox Build · 20–26 Apr", weekStart: "2026-04-20",
+        sessions: [
+          { id:"nz-s21", day:"Mon 20", type:"RECOVERY", tag:"easy",  desc:"Recovery Run\n35 min Easy (6:00–6:30/km)\n~5–6km\n6×20sec Strides\n40sec float",                                                                                                                                                          pace:"6:00–6:30 /km",   terrain:"FLAT/ROAD" },
+          { id:"nz-s22", day:"Tue 21", type:"SPEED",    tag:"speed", desc:"Compromised Running Quality Session\n15 min Easy Warm Up (~2.2km)\n3×1km @ 5:00–5:05/km\nAfter each 1km: 50m Farmers Carry (heavy)\n90 sec rest before next rep\n15 min Easy Cool Down (~2.2km)\nTotal ~9km",                            pace:"1km: 5:00–5:05 /km", terrain:"FLAT/ROAD" },
+          { id:"nz-s23", day:"Wed 22", type:"EASY",     tag:"easy",  desc:"Easy Run\n65 min Easy (6:00–6:30/km)\n~10–11km",                                                                                                                                                                                          pace:"6:00–6:30 /km",   terrain:"FLAT/ROAD" },
+          { id:"nz-s24", day:"Thu 23", type:"HYROX",    tag:"speed", desc:"TH Hyrox Session",                                                                                                                                                                                                                        pace:"–",               terrain:"GYM" },
+          { id:"nz-s25", day:"Sat 25", type:"LONG RUN", tag:"easy",  desc:"Long Easy Run\n75 min Easy (6:00–6:20/km)\n~12km\nFocus: time on feet · aerobic base",                                                                                                                                                   pace:"6:00–6:20 /km",   terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 6 · Hyrox Build · 27 Apr–3 May", weekStart: "2026-04-27",
+        sessions: [
+          { id:"nz-s26", day:"Mon 27", type:"RECOVERY", tag:"easy",  desc:"Recovery Run\n35 min Easy (6:00–6:30/km)\n~5–6km\n6×20sec Strides\n40sec float",                                                                                                                                                          pace:"6:00–6:30 /km",   terrain:"FLAT/ROAD" },
+          { id:"nz-s27", day:"Tue 28", type:"SPEED",    tag:"speed", desc:"Compromised Running Quality Session\n15 min Easy Warm Up (~2.2km)\n4×1km @ 4:58–5:05/km\nAfter each 1km: 50m Farmers Carry (heavy)\n90 sec rest before next rep\n15 min Easy Cool Down (~2.2km)\nTotal ~10km",                           pace:"1km: 4:58–5:05 /km", terrain:"FLAT/ROAD" },
+          { id:"nz-s28", day:"Wed 29", type:"EASY",     tag:"easy",  desc:"Easy Run\n65 min Easy (6:00–6:20/km)\n~10–11km",                                                                                                                                                                                          pace:"6:00–6:20 /km",   terrain:"FLAT/ROAD" },
+          { id:"nz-s29", day:"Thu 30", type:"HYROX",    tag:"speed", desc:"TH Hyrox Session",                                                                                                                                                                                                                        pace:"–",               terrain:"GYM" },
+          { id:"nz-s30", day:"Sat 02", type:"LONG RUN", tag:"tempo", desc:"Long Easy Run\n80 min Easy (6:00–6:20/km)\n~13km\nFinal 10 min @ 5:30/km (progressive finish)",                                                                                                                                           pace:"Easy → 5:30 /km", terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 7 · Hyrox Peak · 4–10 May", weekStart: "2026-05-04",
+        sessions: [
+          { id:"nz-s31", day:"Mon 04", type:"RECOVERY", tag:"easy",  desc:"Recovery Run\n30 min Easy (6:10–6:30/km)\n~5km\n4×20sec Strides\n40sec float",                                                                                                                                                                          pace:"6:10–6:30 /km",      terrain:"FLAT/ROAD" },
+          { id:"nz-s32", day:"Tue 05", type:"SPEED",    tag:"speed", desc:"Compromised Running Quality Session\n15 min Easy Warm Up (~2.2km)\n5×800m @ 4:55–5:00/km\nAfter each 800m: 12×Weighted Sandbag Lunges\n90sec rest before next rep\n15 min Easy Cool Down (~2.2km)\nTotal ~9km",                                        pace:"800m: 4:55–5:00 /km", terrain:"FLAT/ROAD" },
+          { id:"nz-s33", day:"Wed 06", type:"HYROX",    tag:"speed", desc:"TH Hyrox Session",                                                                                                                                                                                                                                      pace:"1km: 4:52–4:58 /km", terrain:"TRACK OR ROAD" },
+          { id:"nz-s34", day:"Thu 07", type:"SPEED",    tag:"speed", desc:"Km Repeats – Extra Quality Session\n10 min Warm Up (~1.5km)\n5×1km @ 4:52–4:58/km\n2 min standing rest\n10 min Cool Down (~1.5km)\nTotal ~10km\nPush toward race pace",                                                                                 pace:"1km: 4:52–4:58 /km", terrain:"GYM" },
+          { id:"nz-s35", day:"Sat 09", type:"LONG RUN", tag:"tempo", desc:"Long Easy Run\n85 min Easy (6:00–6:20/km)\n~14km\nFinal 15 min @ 5:20/km",                                                                                                                                                                              pace:"Easy → 5:20 /km",    terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 8 · Hyrox Deload · 11–17 May", weekStart: "2026-05-11",
+        sessions: [
+          { id:"nz-s36", day:"Mon 11", type:"RECOVERY", tag:"easy",  desc:"Recovery Run\n25 min Easy (6:10–6:30/km)\n~4km\n4×20sec Strides\n40sec float",                                                                                                                                                         pace:"6:10–6:30 /km",     terrain:"FLAT/ROAD" },
+          { id:"nz-s37", day:"Tue 12", type:"SPEED",    tag:"speed", desc:"Compromised Running Light Quality Session\n10 min Easy Warm Up (~1.5km)\n3×600m @ 4:50–5:00/km\nAfter each 600m: 1 min Ski Erg\n90sec rest before next rep\n10 min Easy Cool Down (~1.5km)\nTotal ~5km",                                 pace:"600m: 4:50–5:00 /km", terrain:"FLAT/ROAD" },
+          { id:"nz-s38", day:"Wed 13", type:"EASY",     tag:"easy",  desc:"Easy Run\n30 min Easy (6:10–6:30/km)\n~5km",                                                                                                                                                                                           pace:"6:10–6:30 /km",     terrain:"FLAT/ROAD" },
+          { id:"nz-s39", day:"Thu 14", type:"HYROX",    tag:"speed", desc:"TH Hyrox Session\n(Lighter – technique focus)\nNO HEAVY WEIGHTS",                                                                                                                                                                      pace:"–",                  terrain:"GYM" },
+          { id:"nz-s40", day:"Sat 16", type:"EASY",     tag:"easy",  desc:"Easy Short Run\n30 min Easy (6:10–6:30/km)\n~4–5km",                                                                                                                                                                                   pace:"6:10–6:30 /km",     terrain:"FLAT/ROAD" },
+          { id:"nz-s41", day:"Sun 17", type:"RACE DAY", tag:"speed", desc:"🏆 HYROX RACE DAY",                                                                                                                                                                                                                    pace:"–",                  terrain:"GYM" },
+        ]
+      },
+    ]
+  },
+  "chaselw9@gmail.com": {
+    name: "Chase Williams", goal: "PB Half & Full Marathon", current: "", avatar: "CW",
+    weeks: [
+      {
+        weekLabel: "Week 1 · General Phase · 20–26 Apr", weekStart: "2026-04-20",
+        sessions: [
+          { id:"cw-s1",  day:"Mon 20", type:"RECOVERY", tag:"easy",  desc:"40 min Easy\nTotal ~8km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:00–5:20 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s2",  day:"Tue 21", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n5×800m @ 3:50–3:55/km\n90sec standing rest\n15 min Cool Down (~3km)\nTotal ~10km",                                         pace:"3:50–3:55 /km",         terrain:"TRACK OR ROAD" },
+          { id:"cw-s3",  day:"Wed 22", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+          { id:"cw-s4",  day:"Thu 23", type:"EASY",     tag:"easy",  desc:"45 min Easy (~9km)\n6×15sec Strides\n30sec rest",                                                                                                  pace:"MP: 4:30 /km",          terrain:"ROAD" },
+          { id:"cw-s5",  day:"Fri 24", type:"TEMPO",    tag:"tempo", desc:"15 min Warm Up (~3km)\n3×7 min @ MP (4:30/km)\n2 min jog recovery\n15 min Cool Down (~3km)\nTotal ~13km",                                         pace:"Easy: 4:50–5:10 /km",   terrain:"FLAT" },
+          { id:"cw-s6",  day:"Sat 25", type:"LONG RUN", tag:"easy",  desc:"80 min Easy (4:50–5:05/km)\n~16km",                                                                                                               pace:"4:50–5:05 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s7",  day:"Sun 26", type:"LONG RUN", tag:"easy",  desc:"80 min Easy (4:50–5:05/km)\n~16km",                                                                                                               pace:"4:50–5:05 /km",         terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 2 · General Phase · 27 Apr–3 May", weekStart: "2026-04-27",
+        sessions: [
+          { id:"cw-s8",  day:"Mon 27", type:"RECOVERY", tag:"easy",  desc:"50 min Easy\nTotal ~10km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s9",  day:"Tue 28", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n25 min @ 4:45/km · 6% incline (Aerobic strength ~5km)\n15 min Cool Down (~3km)\nTotal ~11km",                              pace:"4:10 /km @ 6% incline", terrain:"TREADMILL" },
+          { id:"cw-s10", day:"Wed 29", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+          { id:"cw-s11", day:"Thu 30", type:"TEMPO",    tag:"tempo", desc:"15 min Warm Up (~3km)\n4×8 min @ HMP (4:15–4:25/km)\n90sec jog recovery\n15 min Cool Down (~3km)\nTotal ~13km",                                   pace:"4:15–4:25 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s12", day:"Fri 01", type:"RECOVERY", tag:"easy",  desc:"50 min Easy\nTotal ~10km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT" },
+          { id:"cw-s13", day:"Sat 02", type:"LONG RUN", tag:"tempo", desc:"80 min Easy (4:50–5:05/km)\n~16km\nFinal 10 min @ 4:20/km",                                                                                       pace:"Easy → 4:20 /km",       terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 3 · General Phase · 4–10 May", weekStart: "2026-05-04",
+        sessions: [
+          { id:"cw-s14", day:"Mon 04", type:"RECOVERY", tag:"easy",  desc:"50 min Easy\nTotal ~10km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s15", day:"Tue 05", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n6×1km @ 3:50/km (10k Pace)\n2 min standing rest\n15 min Cool Down (~3km)\nTotal ~12km",                                    pace:"4:10 /km @ 6% incline", terrain:"TREADMILL" },
+          { id:"cw-s16", day:"Wed 06", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+          { id:"cw-s17", day:"Thu 07", type:"TEMPO",    tag:"tempo", desc:"15 min Warm Up (~3km)\n15 min @ HMP (4:15–4:25/km)\n5 min jog recovery\n5 min @ 10k pace (4:05/km)\n15 min Cool Down (~3km)\nTotal ~14km",        pace:"4:15–4:25 /km + 4:05 /km", terrain:"FLAT/ROAD" },
+          { id:"cw-s18", day:"Fri 08", type:"RECOVERY", tag:"easy",  desc:"60 min Easy\nTotal ~12km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT" },
+          { id:"cw-s19", day:"Sat 09", type:"LONG RUN", tag:"tempo", desc:"80 min Easy (4:50–5:05/km)\n~16km",                                                                                                               pace:"Easy → 4:20 /km",       terrain:"FLAT/ROAD" },
+        ]
+      },
+      {
+        weekLabel: "Week 4 · General Phase Deload · 11–17 May", weekStart: "2026-05-11",
+        sessions: [
+          { id:"cw-s20", day:"Mon 11", type:"RECOVERY", tag:"easy",  desc:"40 min Easy\nTotal ~10km Recovery\n6×15sec Strides\n30sec rest",                                                                                   pace:"5:10–5:20 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s21", day:"Tue 12", type:"SPEED",    tag:"speed", desc:"15 min Warm Up (~3km)\n6×200m @ 4:10\n15 min Cool Down (~3km)\nTotal ~10km",                                                                      pace:"4:00 /km @ 5–7% incline", terrain:"TREADMILL" },
+          { id:"cw-s22", day:"Wed 13", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+          { id:"cw-s23", day:"Thu 14", type:"EASY",     tag:"easy",  desc:"30 min Easy (~8km)\n4×15sec Strides\n30sec rest",                                                                                                  pace:"4:15–4:25 /km",         terrain:"FLAT/ROAD" },
+          { id:"cw-s24", day:"Fri 15", type:"RACE DAY", tag:"speed", desc:"🏆 RACE DAY",                                                                                                                                    pace:"Easy: 4:55–5:10 /km",   terrain:"FLAT" },
+          { id:"cw-s25", day:"Sat 16", type:"RECOVERY", tag:"easy",  desc:"NO CARDIO OR EASY BIKE RIDE",                                                                                                                     pace:"–",                     terrain:"FLAT/ROAD" },
+        ]
+      },
     ]
   },
   // Add more athletes here by email
@@ -371,6 +506,7 @@ export default function App() {
   const [activeSession, setActiveSession] = useState(null);
   const [activeExtraActivity, setActiveExtraActivity] = useState(null);
   const [activeWeekIdx, setActiveWeekIdx] = useState(0);
+  const [expandedWeekIdxs, setExpandedWeekIdxs] = useState(null);
   const [feedbackText,  setFeedbackText]  = useState("");
   const [sessionDistKm, setSessionDistKm] = useState("");
   const [sessionDurMin, setSessionDurMin] = useState("");
@@ -1516,79 +1652,133 @@ Return JSON with exactly these keys:
             )}
           </div>
 
-          <div style={{ display:"flex", gap:8, padding:"0 16px", marginBottom:16, overflowX:"auto" }}>
-            {weeks.map((w,i)=>(
-              <button key={i} onClick={()=>setActiveWeekIdx(i)} style={{
-                background: i===activeWeekIdx?C.crimson:"none",
-                border:`1px solid ${i===activeWeekIdx?"#E06666":"#222"}`,
-                borderRadius:2, padding:"6px 14px",
-                color: i===activeWeekIdx?"#fffdf8":C.mid,
-                fontSize:11, cursor:"pointer", whiteSpace:"nowrap", letterSpacing:1,
-              }}>WK {i+1}</button>
-            ))}
-            <button onClick={()=>setScreen("history")} style={{
-              background:C.white, border:`1px solid ${C.rule}`, borderRadius:2,
-              padding:"6px 14px", color:C.mid, fontSize:11, cursor:"pointer", whiteSpace:"nowrap",
-            }}>HISTORY →</button>
-          </div>
+          {/* Week accordion — past weeks auto-collapsed, current/future expanded */}
+          {(() => {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const weekStatus = (w) => {
+              const mon = new Date(w.weekStart + "T00:00:00");
+              const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+              if (today > sun) return "past";
+              if (today >= mon) return "current";
+              return "future";
+            };
 
-          <div style={{ padding:"0 16px 10px", fontSize:12, color:C.mid }}>{week?.weekLabel}</div>
+            // Initialise on first render: expand current + future weeks, collapse past
+            const expanded = expandedWeekIdxs ?? (() => {
+              const s = new Set();
+              weeks.forEach((w, i) => { if (weekStatus(w) !== "past") s.add(i); });
+              if (s.size === 0) s.add(weeks.length - 1); // all past? open last
+              setTimeout(() => setExpandedWeekIdxs(s), 0);
+              return s;
+            })();
 
-          <div style={{ padding:"0 16px" }}>
-            {week?.sessions.map(s => {
-              const log = logs[s.id];
-              const ts  = TAG_STYLE[s.tag];
-              const sDate = week ? sessionDateStr(week.weekStart, s.day) : null;
-              const linkedAct = sDate ? actByDate[sDate] : null;
-              const isLogged = !!log || !!linkedAct;
-              const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
-              return (
-                <div key={s.id}
-                  onClick={()=>{ setActiveSession({...s, weekStart: week.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
-                  style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"16px 18px", marginBottom:10, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
-                  <div style={{ width:42, height:42, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>
-                    {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
-                  </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between" }}>
-                      <div style={{ fontSize:12, color:C.mid }}>{s.day}</div>
-                      {isLogged && <div style={{ fontSize:11, color:C.green }}>✓ LOGGED</div>}
+            const toggle = (i) => {
+              const next = new Set(expanded);
+              next.has(i) ? next.delete(i) : next.add(i);
+              setExpandedWeekIdxs(next);
+            };
+
+            return (
+              <div style={{ padding:"0 16px" }}>
+                {weeks.map((w, i) => {
+                  const status = weekStatus(w);
+                  const isOpen = expanded.has(i);
+                  const isCurrent = status === "current";
+                  const isPast = status === "past";
+                  const wkEnd = (() => { const d = new Date(w.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+                  const extraActs = activities.filter(a =>
+                    a.athlete_email === user.email?.toLowerCase() &&
+                    a.source !== "session" &&
+                    a.activity_date >= w.weekStart &&
+                    a.activity_date <= wkEnd
+                  );
+                  const sessionsDone = w.sessions.filter(s => logs[s.id] || actByDate[sessionDateStr(w.weekStart, s.day)]).length;
+
+                  return (
+                    <div key={i} style={{ marginBottom:10 }}>
+                      <div onClick={() => toggle(i)} style={{
+                        display:"flex", alignItems:"center", justifyContent:"space-between",
+                        padding:"12px 14px",
+                        background: isCurrent ? C.crimson : C.white,
+                        border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
+                        borderRadius: isOpen ? "2px 2px 0 0" : 2,
+                        cursor:"pointer",
+                        opacity: isPast ? 0.65 : 1,
+                      }}>
+                        <div>
+                          <div style={{ fontSize:12, fontWeight:700, color: isCurrent ? "#fffdf8" : C.navy, letterSpacing:0.5 }}>
+                            {w.weekLabel}
+                          </div>
+                          {isPast && sessionsDone > 0 && (
+                            <div style={{ fontSize:10, color:C.mid, marginTop:2 }}>
+                              {sessionsDone}/{w.sessions.length} logged
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          {isPast   && <div style={{ fontSize:9, letterSpacing:1, color:C.mid, textTransform:"uppercase" }}>PAST</div>}
+                          {isCurrent && <div style={{ fontSize:9, letterSpacing:1, color:"rgba(255,255,255,0.75)", textTransform:"uppercase" }}>THIS WEEK</div>}
+                          <div style={{ fontSize:16, color: isCurrent ? "rgba(255,255,255,0.6)" : C.mid, transform: isOpen ? "rotate(90deg)" : "none", transition:"transform 0.2s" }}>›</div>
+                        </div>
+                      </div>
+
+                      {isOpen && (
+                        <div style={{ border:`1px solid ${isCurrent ? "#E06666" : C.rule}`, borderTop:"none", borderRadius:"0 0 2px 2px", padding:"10px 10px 4px" }}>
+                          {w.sessions.map(s => {
+                            const log = logs[s.id];
+                            const ts  = TAG_STYLE[s.tag] || TAG_STYLE.easy;
+                            const sDate = sessionDateStr(w.weekStart, s.day);
+                            const linkedAct = actByDate[sDate];
+                            const isLogged = !!log || !!linkedAct;
+                            const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
+                            return (
+                              <div key={s.id}
+                                onClick={()=>{ setActiveSession({...s, weekStart: w.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
+                                style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"14px 16px", marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
+                                <div style={{ width:40, height:40, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
+                                  {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
+                                </div>
+                                <div style={{ flex:1 }}>
+                                  <div style={{ display:"flex", justifyContent:"space-between" }}>
+                                    <div style={{ fontSize:12, color:C.mid }}>{s.day}</div>
+                                    {isLogged && <div style={{ fontSize:11, color:C.green }}>✓ LOGGED</div>}
+                                  </div>
+                                  <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
+                                  <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
+                                  {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:C.mid, marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
+                                  {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
+                                </div>
+                                <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
+                              </div>
+                            );
+                          })}
+                          {extraActs.map(act => (
+                            <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:2, padding:"14px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
+                              <div style={{ width:40, height:40, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>➕</div>
+                              <div style={{ flex:1 }}>
+                                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                                  <div style={{ fontSize:12, color:C.mid }}>{act.activity_date.slice(5).replace("-"," ")}</div>
+                                  <div style={{ fontSize:11, color:C.crimson }}>EXTRA RUN</div>
+                                </div>
+                                <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
+                                <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
+                                {act.notes && <div style={{ fontSize:11, color:C.mid, marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
+                                {act.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
-                    <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
-                    {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:C.mid, marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
-                    {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
-                  </div>
-                  <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
-                </div>
-              );
-            })}
-            {(() => {
-              if (!week) return null;
-              const wkEnd = (() => { const d = new Date(week.weekStart + "T00:00:00"); d.setDate(d.getDate() + 6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
-              const extraActs = activities.filter(a =>
-                a.athlete_email === user.email?.toLowerCase() &&
-                a.source !== "session" &&
-                a.activity_date >= week.weekStart &&
-                a.activity_date <= wkEnd
-              );
-              return extraActs.map(act => (
-                <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:2, padding:"16px 18px", marginBottom:10, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
-                  <div style={{ width:42, height:42, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>➕</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between" }}>
-                      <div style={{ fontSize:12, color:C.mid }}>{act.activity_date.slice(5).replace("-"," ")}</div>
-                      <div style={{ fontSize:11, color:C.crimson }}>EXTRA RUN</div>
-                    </div>
-                    <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
-                    <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
-                    {act.notes && <div style={{ fontSize:11, color:C.mid, marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
-                    {act.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
-                  </div>
-                </div>
-              ));
-            })()}
-          </div>
+                  );
+                })}
+                <button onClick={()=>setScreen("history")} style={{
+                  width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2,
+                  padding:"10px", color:C.mid, fontSize:11, cursor:"pointer", marginBottom:16, letterSpacing:1,
+                }}>HISTORY →</button>
+              </div>
+            );
+          })()}
         </div>
       </div>
     );

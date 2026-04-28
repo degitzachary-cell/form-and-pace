@@ -6,12 +6,32 @@ import * as XLSX from 'xlsx';
 function inferSessionType(desc) {
   if (!desc) return 'REST';
   const d = desc.toString();
-  if (/SABBATH|REST|rest day/i.test(d)) return 'REST';
-  if (/Recovery|Easy w\//i.test(d)) return 'RECOVERY';
-  if (/Warm Up/i.test(d) && /400m|800m|200m|\d+km @|\d+ x \d+min|\d+min @/i.test(d) && !/MP|HMP|marathon pace|tempo/i.test(d)) return 'SPEED';
-  if (/Warm Up/i.test(d) && /MP|HMP|marathon|tempo|\d+min @/i.test(d)) return 'TEMPO';
-  if (/Strides/i.test(d)) return 'EASY + STRIDES';
-  if (/\d{2,3} min Easy|\d{2,3}min Easy|Long/i.test(d)) return 'LONG RUN';
+
+  // Rest / Sabbath
+  if (/SABBATH|REST\b|rest day/i.test(d)) return 'REST';
+
+  // Recovery: "Easy w/ [person]" is the clearest signal; also explicit "Recovery Run"
+  // Avoid false matches on "jog recovery" / "min recovery" inside interval descriptions
+  if (/Easy w\//i.test(d)) return 'RECOVERY';
+  if (/\bRecovery Run\b|Total[^,\n]*Recovery/i.test(d)) return 'RECOVERY';
+
+  // Quality sessions: warmup indicator is "WU" (abbreviated) or "Warm Up" (written out)
+  const hasWarmup = /\bWU\b|Warm.?Up/i.test(d);
+  const hasIntervals = /\d+\s*[×x]\s*\d+|\d+m\s*@|800m|400m|200m|\d+km\s*@|\d+\s*min\s*@/i.test(d);
+  const hasTempoKw = /\bMP\b|\bHMP\b|marathon pace/i.test(d);
+
+  if (hasWarmup && hasTempoKw) return 'TEMPO';
+  if (hasWarmup && hasIntervals) return 'SPEED';
+  if (hasWarmup) return 'SPEED'; // quality session even without explicit interval notation
+
+  // Strides = easy day (not a separate type)
+  if (/Strides/i.test(d)) return 'EASY';
+
+  // Long run: explicit "Long" keyword OR duration >= 70 min easy
+  if (/\bLong\b/i.test(d)) return 'LONG RUN';
+  const minMatch = d.match(/(\d+)\s*min\s*Easy/i);
+  if (minMatch && parseInt(minMatch[1]) >= 70) return 'LONG RUN';
+
   if (/Easy/i.test(d)) return 'EASY';
   return 'EASY';
 }
@@ -50,12 +70,13 @@ function parseExcelToWeeks(file) {
               weekStart = `${y}-${m}-${day}`;
             }
           }
-          // Fallback: try parsing sheet name as dd‑mm (old behavior)
+          // Fallback: parse sheet name as dd-mm, ignoring any trailing label text
+          // e.g. "21-04 Taper", "28-04 Race Week", "05-05" all work correctly
           if (!weekStart) {
-            const parts = sheetName.split('-');
-            if (parts.length >= 2) {
-              const day = parts[0].padStart(2, '0');
-              const month = parts[1].padStart(2, '0');
+            const dateMatch = sheetName.match(/^(\d{1,2})\s*-\s*(\d{1,2})/);
+            if (dateMatch) {
+              const day = dateMatch[1].padStart(2, '0');
+              const month = dateMatch[2].padStart(2, '0');
               weekStart = `2026-${month}-${day}`;
             }
           }
@@ -82,6 +103,7 @@ function parseExcelToWeeks(file) {
             }
 
             const type = inferSessionType(desc);
+            if (type === 'REST') return; // skip rest/sabbath days — they aren't sessions
             const tag = getTagFromType(type);
 
             sessions.push({
@@ -115,15 +137,12 @@ const SESSION_TYPES = [
   'SPEED',
   'TEMPO',
   'EASY',
-  'EASY + STRIDES',
   'RECOVERY',
-  'REST'
 ];
 
 const getTagFromType = (type) => {
-  if (['SPEED', 'EASY + STRIDES'].includes(type)) return 'speed';
+  if (type === 'SPEED') return 'speed';
   if (type === 'TEMPO') return 'tempo';
-  if (type === 'REST') return 'rest';
   return 'easy';
 };
 
