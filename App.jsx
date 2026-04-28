@@ -361,22 +361,6 @@ export default function App() {
     };
   }, [hoveredWeekIdx]);
 
-  // Default the athlete week dropdown to the current week (or last if all in past).
-  useEffect(() => {
-    if (role !== "athlete" || activeWeekIdx !== null || weeks.length === 0) return;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    let idx = weeks.findIndex(w => {
-      const mon = new Date(w.weekStart + "T00:00:00");
-      const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
-      return today >= mon && today <= sun;
-    });
-    if (idx < 0) {
-      idx = weeks.findIndex(w => new Date(w.weekStart + "T00:00:00") > today);
-      if (idx < 0) idx = weeks.length - 1;
-    }
-    setActiveWeekIdx(idx);
-  }, [role, weeks, activeWeekIdx]);
-
   const fetchStravaActivities = async () => {
     if (stravaActivitiesLoading) return;
     setStravaActivitiesLoading(true);
@@ -423,6 +407,22 @@ export default function App() {
   } : null;
   const weeks       = athleteData?.weeks || [];
   const allSessions = useMemo(() => weeks.flatMap(w => w.sessions), [weeks]);
+
+  // Default the athlete week dropdown to the current week (or last if all in past).
+  useEffect(() => {
+    if (role !== "athlete" || activeWeekIdx !== null || weeks.length === 0) return;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let idx = weeks.findIndex(w => {
+      const mon = new Date(w.weekStart + "T00:00:00");
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
+      return today >= mon && today <= sun;
+    });
+    if (idx < 0) {
+      idx = weeks.findIndex(w => new Date(w.weekStart + "T00:00:00") > today);
+      if (idx < 0) idx = weeks.length - 1;
+    }
+    setActiveWeekIdx(idx);
+  }, [role, weeks, activeWeekIdx]);
 
   // Index activities by athlete + date for O(1) lookups in render loops.
   const actByEmailDate = useMemo(() => {
