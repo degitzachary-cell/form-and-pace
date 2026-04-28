@@ -1,33 +1,28 @@
 // Requires: npm install xlsx
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { C, S } from './styles.js';
+import { newId } from './lib/helpers.js';
 
 // ─── EXCEL PARSER ────────────────────────────────────────────
 function inferSessionType(desc) {
   if (!desc) return 'REST';
   const d = desc.toString();
 
-  // Rest / Sabbath
   if (/SABBATH|REST\b|rest day/i.test(d)) return 'REST';
-
-  // Recovery: "Easy w/ [person]" is the clearest signal; also explicit "Recovery Run"
-  // Avoid false matches on "jog recovery" / "min recovery" inside interval descriptions
   if (/Easy w\//i.test(d)) return 'RECOVERY';
   if (/\bRecovery Run\b|Total[^,\n]*Recovery/i.test(d)) return 'RECOVERY';
 
-  // Quality sessions: warmup indicator is "WU" (abbreviated) or "Warm Up" (written out)
   const hasWarmup = /\bWU\b|Warm.?Up/i.test(d);
   const hasIntervals = /\d+\s*[×x]\s*\d+|\d+m\s*@|800m|400m|200m|\d+km\s*@|\d+\s*min\s*@/i.test(d);
   const hasTempoKw = /\bMP\b|\bHMP\b|marathon pace/i.test(d);
 
   if (hasWarmup && hasTempoKw) return 'TEMPO';
   if (hasWarmup && hasIntervals) return 'SPEED';
-  if (hasWarmup) return 'SPEED'; // quality session even without explicit interval notation
+  if (hasWarmup) return 'SPEED';
 
-  // Strides = easy day (not a separate type)
   if (/Strides/i.test(d)) return 'EASY';
 
-  // Long run: explicit "Long" keyword OR duration >= 70 min easy
   if (/\bLong\b/i.test(d)) return 'LONG RUN';
   const minMatch = d.match(/(\d+)\s*min\s*Easy/i);
   if (minMatch && parseInt(minMatch[1]) >= 70) return 'LONG RUN';
@@ -35,6 +30,12 @@ function inferSessionType(desc) {
   if (/Easy/i.test(d)) return 'EASY';
   return 'EASY';
 }
+
+const getTagFromType = (type) => {
+  if (type === 'SPEED') return 'speed';
+  if (type === 'TEMPO') return 'tempo';
+  return 'easy';
+};
 
 function parseExcelToWeeks(file) {
   return new Promise((resolve, reject) => {
@@ -48,19 +49,16 @@ function parseExcelToWeeks(file) {
         wb.SheetNames.forEach((sheetName) => {
           const ws = wb.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-
           if (!rows || rows.length < 4) return;
 
-          const dayHeaders = rows[1]; // [null, MON, TUE, WED, THU, FRI, SAT, SUN]
-          const dateRow = rows[2];    // [null, Date, Date, ...]
-          const runRow = rows[3];     // [RUN, desc1, desc2, ...]
-          const terrainRow = rows[4]; // [TERRAIN, t1, t2, ...]
-          const paceRow = rows[6];    // [PACES, p1, p2, ...]
-          const kmRow = rows[7];      // [Est. Weekly KM:, label]
+          const dateRow    = rows[2];
+          const runRow     = rows[3];
+          const terrainRow = rows[4];
+          const paceRow    = rows[6];
+          const kmRow      = rows[7];
 
-          // Determine week start from Monday date (column 1 of date row)
           let weekStart = '';
-          let mondayDate = dateRow ? dateRow[1] : null; // column 1 = Monday
+          let mondayDate = dateRow ? dateRow[1] : null;
           if (mondayDate) {
             const d = mondayDate instanceof Date ? mondayDate : new Date(mondayDate);
             if (!isNaN(d)) {
@@ -70,8 +68,6 @@ function parseExcelToWeeks(file) {
               weekStart = `${y}-${m}-${day}`;
             }
           }
-          // Fallback: parse sheet name as dd-mm, ignoring any trailing label text
-          // e.g. "21-04 Taper", "28-04 Race Week", "05-05" all work correctly
           if (!weekStart) {
             const dateMatch = sheetName.match(/^(\d{1,2})\s*-\s*(\d{1,2})/);
             if (dateMatch) {
@@ -93,7 +89,6 @@ function parseExcelToWeeks(file) {
             const terrain = terrainRow ? (terrainRow[colIdx] || '') : '';
             const pace = paceRow ? (paceRow[colIdx] || '') : '';
             const dateVal = dateRow ? dateRow[colIdx] : null;
-
             if (!desc) return;
 
             let dayStr = day.charAt(0) + day.slice(1,3).toLowerCase();
@@ -103,11 +98,11 @@ function parseExcelToWeeks(file) {
             }
 
             const type = inferSessionType(desc);
-            if (type === 'REST') return; // skip rest/sabbath days — they aren't sessions
+            if (type === 'REST') return;
             const tag = getTagFromType(type);
 
             sessions.push({
-              id: `upload-${sheetName}-${i}-${Date.now()}`,
+              id: newId(),
               day: dayStr,
               type,
               tag,
@@ -117,200 +112,60 @@ function parseExcelToWeeks(file) {
             });
           });
 
-          if (sessions.length > 0) {
-            weeks.push({ weekLabel, weekStart, sessions });
-          }
+          if (sessions.length > 0) weeks.push({ weekLabel, weekStart, sessions });
         });
 
         resolve(weeks);
-      } catch (err) {
-        reject(err);
-      }
+      } catch (err) { reject(err); }
     };
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
   });
 }
 
-const SESSION_TYPES = [
-  'LONG RUN',
-  'SPEED',
-  'TEMPO',
-  'EASY',
-  'RECOVERY',
-];
+const SESSION_TYPES = ['LONG RUN','SPEED','TEMPO','EASY','RECOVERY'];
 
-const getTagFromType = (type) => {
-  if (type === 'SPEED') return 'speed';
-  if (type === 'TEMPO') return 'tempo';
-  return 'easy';
+const TYPE_ACCENT = {
+  'LONG RUN': '#14365f',
+  'SPEED':    '#7a1a1a',
+  'TEMPO':    '#5a2a6e',
+  'EASY':     '#2a6e27',
+  'RECOVERY': '#0f6678',
 };
 
-const styles = {
-  container: {
-    backgroundColor: '#1a1a1a',
-    color: '#e0e0e0',
-    padding: '16px',
-    borderRadius: '8px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    minHeight: '100vh',
-    boxSizing: 'border-box'
-  },
-  header: {
-    fontSize: '20px',
-    fontWeight: 'bold',
-    marginBottom: '16px',
-    color: '#fff'
-  },
-  select: {
-    width: '100%',
-    padding: '10px 12px',
-    fontSize: '16px',
-    backgroundColor: '#2d2d2d',
-    color: '#e0e0e0',
-    border: '1px solid #444',
-    borderRadius: '6px',
-    marginBottom: '20px',
-    boxSizing: 'border-box'
-  },
-  section: {
-    marginBottom: '24px'
-  },
-  sectionTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    marginBottom: '12px',
-    color: '#bbb'
-  },
-  row: {
-    display: 'flex',
-    gap: '8px',
-    marginBottom: '8px',
-    flexWrap: 'wrap'
-  },
-  input: {
-    flex: '1 1 auto',
-    minWidth: '100px',
-    padding: '10px 12px',
-    fontSize: '14px',
-    backgroundColor: '#2d2d2d',
-    color: '#e0e0e0',
-    border: '1px solid #444',
-    borderRadius: '6px',
-    boxSizing: 'border-box'
-  },
-  textarea: {
-    width: '100%',
-    padding: '10px 12px',
-    fontSize: '14px',
-    backgroundColor: '#2d2d2d',
-    color: '#e0e0e0',
-    border: '1px solid #444',
-    borderRadius: '6px',
-    minHeight: '60px',
-    resize: 'vertical',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box'
-  },
-  button: {
-    padding: '10px 16px',
-    fontSize: '14px',
-    fontWeight: '600',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    transition: 'opacity 0.2s'
-  },
-  addBtn: {
-    backgroundColor: '#3d5afe',
-    color: '#fff',
-    marginTop: '8px'
-  },
-  deleteBtn: {
-    backgroundColor: '#d32f2f',
-    color: '#fff',
-    padding: '8px 12px',
-    fontSize: '12px'
-  },
-  saveBtn: {
-    backgroundColor: '#2e7d32',
-    color: '#fff',
-    width: '100%',
-    padding: '14px',
-    fontSize: '16px',
-    marginTop: '16px'
-  },
-  weekCard: {
-    backgroundColor: '#252525',
-    borderRadius: '8px',
-    padding: '16px',
-    marginBottom: '16px',
-    border: '1px solid #333'
-  },
-  weekHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '12px',
-    flexWrap: 'wrap',
-    gap: '8px'
-  },
-  weekLabel: {
-    fontSize: '16px',
-    fontWeight: 'bold',
-    color: '#fff'
-  },
-  sessionCard: {
-    backgroundColor: '#1e1e1e',
-    borderRadius: '6px',
-    padding: '12px',
-    marginBottom: '8px',
-    border: '1px solid #333'
-  },
-  sessionType: {
-    fontSize: '12px',
-    padding: '2px 8px',
-    borderRadius: '4px',
-    display: 'inline-block',
-    marginBottom: '8px',
-    fontWeight: '600'
-  },
-  tagBadge: {
-    fontSize: '11px',
-    padding: '2px 6px',
-    borderRadius: '3px',
-    marginLeft: '8px',
-    textTransform: 'uppercase'
-  },
-  noData: {
-    textAlign: 'center',
-    color: '#666',
-    padding: '32px',
-    fontSize: '14px'
-  }
+const cardStyle = {
+  background: C.white,
+  border: `1px solid ${C.rule}`,
+  borderRadius: 2,
+  padding: '14px 16px',
+  marginBottom: 12,
 };
 
-const getTypeColor = (type) => {
-  switch (type) {
-    case 'LONG RUN': return '#1565c0';
-    case 'SPEED': return '#e65100';
-    case 'TEMPO': return '#6a1b9a';
-    case 'EASY': return '#2e7d32';
-    case 'EASY + STRIDES': return '#ef6c00';
-    case 'RECOVERY': return '#00838f';
-    case 'REST': return '#616161';
-    default: return '#424242';
-  }
-};
+const inputStyle = { ...S.input, padding: '8px 10px', fontSize: 13 };
 
-const getTagColor = (tag) => {
-  switch (tag) {
-    case 'speed': return '#ff5722';
-    case 'tempo': return '#9c27b0';
-    case 'rest': return '#757575';
-    default: return '#4caf50';
-  }
-};
+// Auto-dismissing inline status (replaces alert() calls).
+function StatusBanner({ status, onDismiss }) {
+  useEffect(() => {
+    if (!status || status.kind === 'error') return;
+    const t = setTimeout(onDismiss, 3500);
+    return () => clearTimeout(t);
+  }, [status, onDismiss]);
+  if (!status) return null;
+  const tone = status.kind === 'error'
+    ? { bg: '#fdf0f0', border: C.crimson, color: C.crimson }
+    : { bg: '#eef6ec', border: C.green,   color: C.green   };
+  return (
+    <div style={{
+      background: tone.bg, border: `1px solid ${tone.border}`, borderLeft: `3px solid ${tone.border}`,
+      borderRadius: 2, padding: '10px 14px', marginBottom: 14,
+      color: tone.color, fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+    }}>
+      <span>{status.message}</span>
+      <button onClick={onDismiss} aria-label="Dismiss"
+        style={{ background: 'none', border: 'none', color: tone.color, fontSize: 16, cursor: 'pointer', padding: 0 }}>✕</button>
+    </div>
+  );
+}
 
 export default function CoachPlanBuilder({ athletes, onSave }) {
   const [selectedEmail, setSelectedEmail] = useState('');
@@ -319,31 +174,15 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [newWeekStart, setNewWeekStart] = useState('');
   const [showAddWeek, setShowAddWeek] = useState(false);
   const [uploadTarget, setUploadTarget] = useState('');
-  const [uploadMode, setUploadMode] = useState('append'); // 'append' | 'replace'
+  const [uploadMode, setUploadMode] = useState('append');
   const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState(null);   // { kind: 'success' | 'error', message }
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
-
-  const handleExcelUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file || !uploadTarget) return;
-    setUploading(true);
-    try {
-      const parsedWeeks = await parseExcelToWeeks(file);
-      const existing = athletes[uploadTarget]?.weeks || [];
-      const updated = uploadMode === 'replace' ? parsedWeeks : [...existing, ...parsedWeeks];
-      onSave(uploadTarget, updated);
-      setSelectedEmail(uploadTarget);
-      alert(`✅ Imported ${parsedWeeks.length} weeks for ${athletes[uploadTarget]?.name || uploadTarget}`);
-    } catch (err) {
-      alert('❌ Failed to parse Excel: ' + err.message);
-    }
-    setUploading(false);
-    e.target.value = '';
-  };
 
   const athleteList = Object.entries(athletes || {}).map(([email, data]) => ({
     email,
-    name: data.name || email.split('@')[0]
+    name: data?.name || email.split('@')[0],
   }));
 
   useEffect(() => {
@@ -354,14 +193,27 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     }
   }, [selectedEmail, athletes]);
 
+  const handleExcelUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !uploadTarget) return;
+    setUploading(true);
+    try {
+      const parsedWeeks = await parseExcelToWeeks(file);
+      const existing = athletes[uploadTarget]?.weeks || [];
+      const updated = uploadMode === 'replace' ? parsedWeeks : [...existing, ...parsedWeeks];
+      await Promise.resolve(onSave(uploadTarget, updated));
+      setSelectedEmail(uploadTarget);
+      setStatus({ kind: 'success', message: `Imported ${parsedWeeks.length} week${parsedWeeks.length === 1 ? '' : 's'} for ${athletes[uploadTarget]?.name || uploadTarget}.` });
+    } catch (err) {
+      setStatus({ kind: 'error', message: `Failed to parse Excel: ${err.message}` });
+    }
+    setUploading(false);
+    e.target.value = '';
+  };
+
   const handleAddWeek = () => {
     if (!newWeekLabel || !newWeekStart) return;
-    const newWeek = {
-      id: Date.now().toString(),
-      weekLabel: newWeekLabel,
-      weekStart: newWeekStart,
-      sessions: []
-    };
+    const newWeek = { id: newId(), weekLabel: newWeekLabel, weekStart: newWeekStart, sessions: [] };
     setWeeks([...weeks, newWeek]);
     setNewWeekLabel('');
     setNewWeekStart('');
@@ -373,250 +225,189 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   };
 
   const handleAddSession = (weekId) => {
-    const newSession = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      day: '',
-      type: 'EASY',
-      tag: 'easy',
-      pace: '',
-      terrain: '',
-      desc: ''
-    };
-    setWeeks(weeks.map(w => {
-      if (w.id === weekId) {
-        return { ...w, sessions: [...w.sessions, newSession] };
-      }
-      return w;
-    }));
+    const newSession = { id: newId(), day: '', type: 'EASY', tag: 'easy', pace: '', terrain: '', desc: '' };
+    setWeeks(weeks.map(w => w.id === weekId ? { ...w, sessions: [...w.sessions, newSession] } : w));
   };
 
   const handleSessionChange = (weekId, sessionId, field, value) => {
     setWeeks(weeks.map(w => {
-      if (w.id === weekId) {
-        const updatedSessions = w.sessions.map(s => {
-          if (s.id === sessionId) {
-            const updates = { [field]: value };
-            if (field === 'type') {
-              updates.tag = getTagFromType(value);
-            }
-            return { ...s, ...updates };
-          }
-          return s;
-        });
-        return { ...w, sessions: updatedSessions };
-      }
-      return w;
+      if (w.id !== weekId) return w;
+      const sessions = w.sessions.map(s => {
+        if (s.id !== sessionId) return s;
+        const updates = { [field]: value };
+        if (field === 'type') updates.tag = getTagFromType(value);
+        return { ...s, ...updates };
+      });
+      return { ...w, sessions };
     }));
   };
 
   const handleDeleteSession = (weekId, sessionId) => {
-    setWeeks(weeks.map(w => {
-      if (w.id === weekId) {
-        return { ...w, sessions: w.sessions.filter(s => s.id !== sessionId) };
-      }
-      return w;
-    }));
+    setWeeks(weeks.map(w => w.id === weekId ? { ...w, sessions: w.sessions.filter(s => s.id !== sessionId) } : w));
   };
 
-  const handleSave = () => {
-    if (selectedEmail && onSave) {
-      console.log('Saving plan for', selectedEmail, weeks.length, 'weeks');
-      onSave(selectedEmail, weeks);
-    } else {
-      console.warn('Save called without selectedEmail or onSave');
+  const handleSave = async () => {
+    if (!selectedEmail) return;
+    setSaving(true);
+    try {
+      await Promise.resolve(onSave(selectedEmail, weeks));
+      setStatus({ kind: 'success', message: `Plan saved for ${athletes[selectedEmail]?.name || selectedEmail}.` });
+    } catch (err) {
+      setStatus({ kind: 'error', message: `Save failed: ${err.message}` });
     }
+    setSaving(false);
   };
-
-  const selectedAthlete = athletes?.[selectedEmail];
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>🏃 Coach Dashboard</div>
+    <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px 16px 80px', fontFamily: S.bodyFont, color: C.navy }}>
+      <StatusBanner status={status} onDismiss={() => setStatus(null)} />
 
       {/* ── Excel Upload ── */}
-      <div style={{ background:'#252525', borderRadius:8, padding:16, marginBottom:20, border:'1px solid #333' }}>
-        <div style={{ fontSize:14, fontWeight:600, color:'#bbb', marginBottom:10 }}>📥 Import from Excel</div>
-        <select style={styles.select} value={uploadTarget} onChange={e => setUploadTarget(e.target.value)}>
-          <option value="">Select athlete to import into...</option>
+      <div style={cardStyle}>
+        <div style={{ fontSize: 10, letterSpacing: 2, color: C.crimson, textTransform: 'uppercase', marginBottom: 10 }}>Import from Excel</div>
+        <select style={{ ...inputStyle, marginBottom: 10 }} value={uploadTarget} onChange={e => setUploadTarget(e.target.value)}>
+          <option value="">Select athlete to import into…</option>
           {athleteList.map(a => <option key={a.email} value={a.email}>{a.name}</option>)}
         </select>
-        <div style={{ display:'flex', gap:8, marginBottom:10 }}>
-          {['append','replace'].map(mode => (
-            <button key={mode} onClick={() => setUploadMode(mode)}
-              style={{ ...styles.button, flex:1, background: uploadMode===mode ? '#3d5afe' : '#444', color:'#fff', fontSize:13 }}>
-              {mode === 'append' ? '➕ Append weeks' : '🔄 Replace all'}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          {['append', 'replace'].map(mode => (
+            <button key={mode} type="button" onClick={() => setUploadMode(mode)}
+              style={{
+                flex: 1, padding: '8px 10px', borderRadius: 2, fontSize: 12, cursor: 'pointer',
+                background: uploadMode === mode ? C.navy   : C.white,
+                color:      uploadMode === mode ? C.cream  : C.mid,
+                border: `1px solid ${uploadMode === mode ? C.navy : C.rule}`,
+                letterSpacing: 0.5, fontWeight: 600,
+              }}>
+              {mode === 'append' ? '+ Append weeks' : '↻ Replace all'}
             </button>
           ))}
         </div>
-        <input ref={fileInputRef} type="file" accept=".xlsx" style={{ display:'none' }} onChange={handleExcelUpload} />
-        <button
-          style={{ ...styles.button, ...styles.addBtn, width:'100%', opacity: !uploadTarget ? 0.5 : 1 }}
-          disabled={!uploadTarget || uploading}
+        <input ref={fileInputRef} type="file" accept=".xlsx" style={{ display: 'none' }} onChange={handleExcelUpload} />
+        <button type="button"
           onClick={() => fileInputRef.current?.click()}
-        >
-          {uploading ? 'Importing...' : '📂 Choose Excel File (.xlsx)'}
+          disabled={!uploadTarget || uploading}
+          style={S.primaryBtn(C.navy, !uploadTarget || uploading)}>
+          {uploading ? 'Importing…' : 'Choose Excel file (.xlsx)'}
         </button>
       </div>
 
-      <select
-        style={styles.select}
-        value={selectedEmail}
-        onChange={(e) => setSelectedEmail(e.target.value)}
-      >
-        <option value="">Select an athlete...</option>
-        {athleteList.map(athlete => (
-          <option key={athlete.email} value={athlete.email}>
-            {athlete.name} ({athlete.email})
-          </option>
-        ))}
-      </select>
+      {/* ── Athlete picker ── */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 10 }}>Athlete</div>
+        <select style={inputStyle} value={selectedEmail} onChange={e => setSelectedEmail(e.target.value)}>
+          <option value="">Select an athlete…</option>
+          {athleteList.map(a => (
+            <option key={a.email} value={a.email}>{a.name} ({a.email})</option>
+          ))}
+        </select>
+      </div>
 
-      {selectedEmail && (
+      {selectedEmail ? (
         <>
-          <div style={styles.section}>
-            <div style={styles.sectionTitle}>Weeks</div>
-            
-            {weeks.map(week => (
-              <div key={week.id} style={styles.weekCard}>
-                <div style={styles.weekHeader}>
-                  <div>
-                    <span style={styles.weekLabel}>{week.weekLabel}</span>
-                    <span style={{ marginLeft: '12px', color: '#888', fontSize: '14px' }}>
-                      {week.weekStart}
-                    </span>
-                  </div>
-                  <button
-                    style={{ ...styles.button, ...styles.deleteBtn }}
-                    onClick={() => handleDeleteWeek(week.id)}
-                  >
-                    Delete Week
-                  </button>
+          {weeks.map(week => (
+            <div key={week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: C.navy, fontFamily: S.displayFont, fontSize: 16 }}>{week.weekLabel || 'Untitled week'}</div>
+                  <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{week.weekStart}</div>
                 </div>
+                <button type="button" onClick={() => handleDeleteWeek(week.id)} style={{
+                  background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
+                  borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                }}>Delete week</button>
+              </div>
 
-                {week.sessions.map(session => (
-                  <div key={session.id} style={styles.sessionCard}>
-                    <div style={styles.row}>
+              {week.sessions.map(session => {
+                const accent = TYPE_ACCENT[session.type] || C.mid;
+                return (
+                  <div key={session.id} style={{
+                    background: C.white, border: `1px solid ${C.lightRule}`, borderLeft: `3px solid ${accent}`,
+                    borderRadius: 2, padding: 12, marginBottom: 8,
+                  }}>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
                       <input
-                        style={{ ...styles.input, flex: '0 0 80px' }}
-                        placeholder="Day (e.g. Mon 24)"
+                        style={{ ...inputStyle, flex: '0 0 90px' }}
+                        placeholder="Mon 24"
                         value={session.day}
-                        onChange={(e) => handleSessionChange(week.id, session.id, 'day', e.target.value)}
+                        onChange={e => handleSessionChange(week.id, session.id, 'day', e.target.value)}
                       />
                       <select
-                        style={{ ...styles.input, flex: '0 0 140px' }}
+                        style={{ ...inputStyle, flex: '1 1 140px', color: accent, fontWeight: 600 }}
                         value={session.type}
-                        onChange={(e) => handleSessionChange(week.id, session.id, 'type', e.target.value)}
+                        onChange={e => handleSessionChange(week.id, session.id, 'type', e.target.value)}
                       >
-                        {SESSION_TYPES.map(type => (
-                          <option key={type} value={type}>{type}</option>
-                        ))}
+                        {SESSION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
-                      <span style={{
-                        ...styles.sessionType,
-                        backgroundColor: getTypeColor(session.type),
-                        color: '#fff'
-                      }}>
-                        {session.type}
-                      </span>
-                      <span style={{
-                        ...styles.tagBadge,
-                        backgroundColor: getTagColor(session.tag),
-                        color: '#fff'
-                      }}>
-                        {session.tag}
-                      </span>
                     </div>
-                    <div style={styles.row}>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                       <input
-                        style={styles.input}
+                        style={{ ...inputStyle, flex: 1 }}
                         placeholder="Pace (e.g. 5:00/km)"
                         value={session.pace}
-                        onChange={(e) => handleSessionChange(week.id, session.id, 'pace', e.target.value)}
+                        onChange={e => handleSessionChange(week.id, session.id, 'pace', e.target.value)}
                       />
                       <input
-                        style={styles.input}
-                        placeholder="Terrain (e.g. trail, road)"
+                        style={{ ...inputStyle, flex: 1 }}
+                        placeholder="Terrain"
                         value={session.terrain}
-                        onChange={(e) => handleSessionChange(week.id, session.id, 'terrain', e.target.value)}
+                        onChange={e => handleSessionChange(week.id, session.id, 'terrain', e.target.value)}
                       />
                     </div>
                     <textarea
-                      style={styles.textarea}
-                      placeholder="Session description..."
+                      style={{ ...S.textarea, minHeight: 64, marginBottom: 8 }}
+                      placeholder="Session description…"
                       value={session.desc}
-                      onChange={(e) => handleSessionChange(week.id, session.id, 'desc', e.target.value)}
+                      onChange={e => handleSessionChange(week.id, session.id, 'desc', e.target.value)}
                     />
-                    <button
-                      style={{ ...styles.button, ...styles.deleteBtn, marginTop: '8px' }}
-                      onClick={() => handleDeleteSession(week.id, session.id)}
-                    >
-                      Delete Session
-                    </button>
+                    <button type="button" onClick={() => handleDeleteSession(week.id, session.id)} style={{
+                      background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
+                      borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                    }}>Delete session</button>
                   </div>
-                ))}
+                );
+              })}
 
-                <button
-                  style={{ ...styles.button, ...styles.addBtn }}
-                  onClick={() => handleAddSession(week.id)}
-                >
-                  + Add Session
-                </button>
+              <button type="button" onClick={() => handleAddSession(week.id)} style={{
+                ...S.ghostBtn, marginTop: 4,
+              }}>+ Add session</button>
+            </div>
+          ))}
+
+          {showAddWeek ? (
+            <div style={cardStyle}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                <input
+                  style={{ ...inputStyle, flex: 1 }}
+                  placeholder="Week label (e.g. Week 1)"
+                  value={newWeekLabel}
+                  onChange={e => setNewWeekLabel(e.target.value)}
+                />
+                <input
+                  type="date"
+                  style={{ ...inputStyle, flex: 1 }}
+                  value={newWeekStart}
+                  onChange={e => setNewWeekStart(e.target.value)}
+                />
               </div>
-            ))}
-
-            {showAddWeek ? (
-              <div style={styles.weekCard}>
-                <div style={styles.row}>
-                  <input
-                    style={styles.input}
-                    placeholder="Week Label (e.g. Week 1)"
-                    value={newWeekLabel}
-                    onChange={(e) => setNewWeekLabel(e.target.value)}
-                  />
-                  <input
-                    type="date"
-                    style={styles.input}
-                    value={newWeekStart}
-                    onChange={(e) => setNewWeekStart(e.target.value)}
-                  />
-                </div>
-                <div style={styles.row}>
-                  <button
-                    style={{ ...styles.button, ...styles.addBtn, flex: '1' }}
-                    onClick={handleAddWeek}
-                  >
-                    Add Week
-                  </button>
-                  <button
-                    style={{ ...styles.button, backgroundColor: '#616161', color: '#fff', flex: '1' }}
-                    onClick={() => setShowAddWeek(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" style={{ ...S.primaryBtn(C.navy, !newWeekLabel || !newWeekStart), flex: 1 }}
+                  disabled={!newWeekLabel || !newWeekStart} onClick={handleAddWeek}>Add week</button>
+                <button type="button" style={{ ...S.ghostBtn, flex: 1, marginTop: 0 }}
+                  onClick={() => setShowAddWeek(false)}>Cancel</button>
               </div>
-            ) : (
-              <button
-                style={{ ...styles.button, ...styles.addBtn, width: '100%' }}
-                onClick={() => setShowAddWeek(true)}
-              >
-                + Add Week
-              </button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setShowAddWeek(true)} style={S.ghostBtn}>+ Add week</button>
+          )}
 
-          <button
-            style={{ ...styles.button, ...styles.saveBtn }}
-            onClick={handleSave}
-          >
-            Save Plan
+          <button type="button" onClick={handleSave} disabled={saving} style={{ ...S.primaryBtn(C.crimson, saving), marginTop: 16 }}>
+            {saving ? 'Saving…' : 'Save plan'}
           </button>
         </>
-      )}
-
-      {!selectedEmail && (
-        <div style={styles.noData}>
-          Select an athlete to view and edit their training plan
+      ) : (
+        <div style={{ ...cardStyle, textAlign: 'center', color: C.mid, fontSize: 13 }}>
+          Select an athlete to view and edit their training plan.
         </div>
       )}
     </div>
