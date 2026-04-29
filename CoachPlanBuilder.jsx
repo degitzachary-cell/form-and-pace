@@ -202,6 +202,113 @@ function StatusBanner({ status, onDismiss }) {
   );
 }
 
+// Per-type color for the score grid — terracotta for endurance, hot for
+// VO2, cool for recovery, plum for long, amber for tempo, mute for rest.
+// Matches the COMPLY/typeStyle palette used elsewhere.
+const SCORE_TYPE_COLOR = {
+  EASY:        C.accent,
+  RECOVERY:    C.cool,
+  "LONG RUN":  "#7B5A8C",
+  LONG:        "#7B5A8C",
+  TEMPO:       C.warn,
+  SPEED:       C.hot,
+  RACE:        C.ink,
+  "RACE DAY":  C.ink,
+  REST:        C.mute,
+  STRENGTH:    "#5A6B7B",
+  HYROX:       "#C79541",
+};
+const scoreTypeColor = (t) => SCORE_TYPE_COLOR[String(t || "").toUpperCase()] || C.accent;
+
+// Read-only "score" view of the athlete's plan — each week as a horizontal
+// row with seven day cells (Mon-Sun) showing the type dot + total km. Lets
+// the coach see the rhythm of the plan at a glance before drilling into the
+// editor below. Renders nothing if no weeks exist yet.
+function PlanScoreGrid({ weeks, blockLabel }) {
+  if (!Array.isArray(weeks) || weeks.length === 0) return null;
+  const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 8px", borderBottom: `1px solid ${C.rule}` }}>
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: C.mute }}>The score</span>
+        {blockLabel && <span style={{ fontFamily: S.monoFont || "JetBrains Mono, monospace", fontSize: 11, letterSpacing: "0.1em", color: C.mute, textTransform: "uppercase" }}>{blockLabel}</span>}
+      </div>
+      {/* Header row — day initials */}
+      <div style={{ display: "grid", gridTemplateColumns: "100px 80px repeat(7, 1fr)", padding: "10px 0", borderBottom: `1px solid ${C.rule}` }}>
+        <span style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.mute }}>Week</span>
+        <span style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.mute, textAlign: "right", paddingRight: 8 }}>Km</span>
+        {days.map(d => (
+          <span key={d} style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: C.mute, textAlign: "center" }}>{d}</span>
+        ))}
+      </div>
+      {weeks.map((w, i) => {
+        const sessions = Array.isArray(w.sessions) ? w.sessions : [];
+        const totalKm = sessions.reduce((acc, s) => {
+          const km = parseFloat(s.distance_km || s.distance || 0);
+          return acc + (isNaN(km) ? 0 : km);
+        }, 0);
+        // Pick a phase label heuristically: largest km week in a run of >=3 == BUILD,
+        // others fall back to the week's existing weekLabel hint.
+        const phase = (() => {
+          const lbl = (w.weekLabel || "").toUpperCase();
+          if (lbl.includes("RECOVER")) return "RECOVER";
+          if (lbl.includes("TAPER"))   return "TAPER";
+          if (lbl.includes("PEAK"))    return "PEAK";
+          return "BUILD";
+        })();
+        const phaseColor = phase === "RECOVER" ? C.cool : phase === "TAPER" ? C.cool : phase === "PEAK" ? C.hot : C.accent;
+        return (
+          <div key={w.id || i} style={{ display: "grid", gridTemplateColumns: "100px 80px repeat(7, 1fr)", padding: "12px 0", borderBottom: `1px solid ${C.ruleSoft}`, alignItems: "stretch" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: S.displayFont, fontSize: 18, lineHeight: 1, color: C.ink }}>
+                {w.weekLabel || `WK ${String(i + 1).padStart(2, "0")}`}
+              </div>
+              <div style={{ marginTop: 4, display: "inline-flex", padding: "2px 7px", border: `1px solid ${phaseColor}`, color: phaseColor, fontSize: 9, letterSpacing: "0.14em", fontWeight: 600 }}>
+                {phase}
+              </div>
+            </div>
+            <div style={{ textAlign: "right", paddingRight: 8 }}>
+              <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, color: C.ink, fontVariantNumeric: "tabular-nums" }}>
+                {Math.round(totalKm)}
+              </span>
+            </div>
+            {days.map(dayInitial => {
+              // Find sessions whose day starts with this initial (Mon, Tue, ...).
+              const dayKey = dayInitial.charAt(0) + dayInitial.slice(1).toLowerCase();
+              const found = sessions.find(s => (s.day || "").slice(0, 3) === dayKey);
+              if (!found || (found.type || "").toUpperCase() === "REST") {
+                return (
+                  <div key={dayInitial} style={{ borderLeft: `1px solid ${C.ruleSoft}`, padding: "4px 6px", minHeight: 48, color: C.mute, fontSize: 11, fontStyle: "italic", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {found ? "rest" : ""}
+                  </div>
+                );
+              }
+              const dot = scoreTypeColor(found.type);
+              const km = parseFloat(found.distance_km || found.distance || 0);
+              return (
+                <div key={dayInitial} style={{ borderLeft: `1px solid ${C.ruleSoft}`, padding: "4px 6px", minHeight: 48 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                    <span style={{ width: 5, height: 5, borderRadius: 999, background: dot, display: "inline-block" }}/>
+                    <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: C.mute }}>
+                      {String(found.type || "").slice(0, 6)}
+                    </span>
+                  </div>
+                  {km > 0 && (
+                    <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: C.ink, fontVariantNumeric: "tabular-nums" }}>
+                      {km}
+                      <span style={{ color: C.mute, fontSize: 9 }}>km</span>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // Inline structured-step editor. Lives next to the freeform desc on each
 // session card. Coaches can mix-and-match — type a desc, build steps, or
 // both. When steps are present the athlete view will render them as a
@@ -609,6 +716,10 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
               />
             </div>
           </div>
+
+          {selectedEmail && weeks.length > 0 && (
+            <PlanScoreGrid weeks={weeks} blockLabel={`${weeks.length} ${weeks.length === 1 ? "week" : "weeks"} planned`} />
+          )}
 
           {clipboardWeek && selectedEmail && (
             <div style={{

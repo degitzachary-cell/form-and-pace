@@ -42,6 +42,297 @@ export function RtssPillFor({ durationMin, distanceKm, profile, size = 11 }) {
   return <RtssPill rtss={rtss} size={size}/>;
 }
 
+// ─── LETTERHEAD REPLY MODAL ──────────────────────────────────────────────────
+// Ceremonial reply experience for the coach. Opens over a scrim, displays
+// the athlete's recap as a pull-quote, then a generous textarea for the
+// coach to write back. Sign-off auto-line in mono mute. Saves as a normal
+// thread message via onSend.
+//
+// Props:
+//   open       — boolean controlling visibility
+//   onClose    — close (× or ESC)
+//   athleteName, coachName
+//   recap      — the athlete's note/feedback to anchor the reply
+//   recapByline — e.g. "8km tempo · 3 hours ago"
+//   onSend(body) — async; on success the modal clears + closes
+export function LetterheadReplyModal({ open, onClose, athleteName, coachName, recap, recapByline, onSend }) {
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  if (!open) return null;
+  const handleSend = async () => {
+    if (!draft.trim() || sending) return;
+    setSending(true);
+    try {
+      await onSend?.(draft);
+      setDraft("");
+      onClose?.();
+    } catch (e) { console.error("letterhead send failed", e); }
+    finally { setSending(false); }
+  };
+  const today = new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(26, 24, 20, 0.55)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 100, padding: 24,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "var(--c-paper)", border: "1px solid var(--c-rule)",
+        maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto",
+        padding: "32px 36px",
+      }}>
+        {/* Letterhead header */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+          <span className="fp-seal" style={{ fontSize: 28, color: "var(--c-accent)" }}>✻</span>
+          <button onClick={onClose}
+            style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--c-mute)", fontSize: 20, fontFamily: "var(--f-display)", lineHeight: 1, padding: 0 }}
+            aria-label="Close">×</button>
+        </div>
+
+        <div className="t-display-italic" style={{ fontSize: 16, color: "var(--c-mute)", marginBottom: 4 }}>
+          From {coachName || "Coach"}
+        </div>
+        <div className="t-mono" style={{ fontSize: 11, color: "var(--c-mute)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 22 }}>
+          {today}
+        </div>
+
+        {/* Athlete recap pull-quote */}
+        {recap && (
+          <div style={{ position: "relative", padding: "0 0 0 36px", marginBottom: 28 }}>
+            <span style={{ position: "absolute", left: 0, top: -6, fontFamily: "var(--f-display)", fontSize: 56, color: "var(--c-rule)", lineHeight: 1, fontStyle: "italic" }}>“</span>
+            <p style={{ fontFamily: "var(--f-display)", fontStyle: "italic", fontSize: 17, lineHeight: 1.55, color: "var(--c-inkSoft)", margin: 0 }}>
+              {recap}
+            </p>
+            {(recapByline || athleteName) && (
+              <div className="t-mono" style={{ fontSize: 10, color: "var(--c-mute)", letterSpacing: "0.14em", marginTop: 10, textTransform: "uppercase" }}>
+                — {athleteName || "Athlete"}{recapByline ? ` · ${recapByline}` : ""}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Reply textarea — display serif, big and quiet */}
+        <textarea
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder={athleteName ? `Write back to ${athleteName.split(" ")[0]}…` : "Write back…"}
+          autoFocus
+          style={{
+            width: "100%", minHeight: 200, padding: "14px 0",
+            background: "transparent", border: 0,
+            borderTop: "1px solid var(--c-rule)", borderBottom: "1px solid var(--c-rule)",
+            color: "var(--c-ink)",
+            fontFamily: "var(--f-display)", fontSize: 20, lineHeight: 1.55,
+            resize: "vertical", outline: "none",
+          }}
+        />
+
+        {/* Sign-off auto-line */}
+        <div className="t-mono" style={{ marginTop: 14, fontSize: 11, color: "var(--c-mute)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+          — {coachName ? coachName.split(" ")[0] : "Coach"}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10, marginTop: 28, alignItems: "center", justifyContent: "flex-end" }}>
+          <button onClick={onClose} type="button"
+            style={{ background: "transparent", border: 0, color: "var(--c-mute)", padding: "10px 14px", fontFamily: "var(--f-body)", fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer" }}>
+            Save draft
+          </button>
+          <button onClick={handleSend} type="button" disabled={!draft.trim() || sending}
+            className="fp-btn fp-btn--accent"
+            style={{ padding: "12px 24px", opacity: !draft.trim() || sending ? 0.5 : 1 }}>
+            {sending ? "Sending…" : "Send reply"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── COACH LEFT RAIL (desktop) ───────────────────────────────────────────────
+// Heavy ink panel on the left edge, paper-tinted text. Five nav items
+// (Dashboard / Athletes / Plans / Inbox / Library) with an inbox count badge,
+// then a bottom hairline + Settings + Sign out. Reserved for desktop layouts;
+// on mobile the coach uses the existing top-bar nav (rail returns null).
+//
+// `current` is the active screen key. `unread` is rendered as a small pill
+// next to Inbox when > 0. `onNav` receives the clicked key.
+export function CoachLeftRail({ current, onNav, unread = 0, coachName = "Coach", onSignOut, onSettings, isDesktop }) {
+  if (!isDesktop) return null;
+
+  const items = [
+    { key: "dashboard", label: "Dashboard" },
+    { key: "athletes", label: "Athletes" },
+    { key: "plans",    label: "Plans" },
+    { key: "inbox",    label: "Inbox", badge: unread > 0 ? unread : null },
+    { key: "library",  label: "Library" },
+  ];
+
+  return (
+    <aside style={{
+      position: "sticky", top: 0,
+      width: 220, minWidth: 220,
+      height: "100vh",
+      background: "var(--c-bgDeep)",
+      color: "var(--c-paper)",
+      borderRight: "1px solid var(--c-ink)",
+      display: "flex", flexDirection: "column",
+      padding: "28px 22px 22px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
+        <span className="fp-seal" style={{ fontSize: 22, color: "var(--c-paper)" }}>✻</span>
+        <span className="t-mono" style={{ fontSize: 11, letterSpacing: "0.18em", color: "var(--c-paper)" }}>FORM &amp; PACE</span>
+      </div>
+
+      <div style={{ marginBottom: 28, paddingBottom: 22, borderBottom: "1px solid var(--c-inkSoft)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 999,
+            background: "var(--c-paper)", color: "var(--c-ink)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "var(--f-display)", fontSize: 15, fontWeight: 500,
+          }}>
+            {(coachName || "C").slice(0, 1).toUpperCase()}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: "var(--f-display)", fontSize: 15, color: "var(--c-paper)", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{coachName}</div>
+            <div className="t-mono" style={{ fontSize: 9, letterSpacing: "0.16em", color: "var(--c-mute)", marginTop: 2 }}>HEAD COACH</div>
+          </div>
+        </div>
+      </div>
+
+      <nav style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+        {items.map(it => {
+          const active = it.key === current;
+          return (
+            <button key={it.key} onClick={() => onNav?.(it.key)}
+              style={{
+                background: active ? "var(--c-ink)" : "transparent",
+                border: 0, color: active ? "var(--c-paper)" : "var(--c-mute)",
+                fontFamily: "var(--f-body)", fontSize: 13, fontWeight: active ? 600 : 500,
+                letterSpacing: "0.04em",
+                padding: "10px 12px", textAlign: "left", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderLeft: active ? "2px solid var(--c-accent)" : "2px solid transparent",
+              }}>
+              <span>{it.label}</span>
+              {it.badge != null && (
+                <span style={{
+                  background: "var(--c-accent)", color: "var(--c-accentInk)",
+                  fontFamily: "var(--f-mono)", fontSize: 10,
+                  padding: "2px 7px", borderRadius: 999, fontWeight: 600, letterSpacing: "0.04em",
+                }}>{it.badge}</span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div style={{ paddingTop: 22, borderTop: "1px solid var(--c-inkSoft)", display: "flex", flexDirection: "column", gap: 6 }}>
+        <button onClick={onSettings}
+          style={{ background: "transparent", border: 0, color: "var(--c-mute)", padding: "8px 12px", fontFamily: "var(--f-body)", fontSize: 12, textAlign: "left", cursor: "pointer", letterSpacing: "0.04em" }}>
+          Settings
+        </button>
+        <button onClick={onSignOut}
+          style={{ background: "transparent", border: 0, color: "var(--c-hot)", padding: "8px 12px", fontFamily: "var(--f-body)", fontSize: 12, textAlign: "left", cursor: "pointer", letterSpacing: "0.04em" }}>
+          Sign out
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ─── MOBILE TAB BAR ──────────────────────────────────────────────────────────
+// Sticky bottom nav for the athlete on small screens. Four destinations:
+// Today / Week / Log / Profile. Hairline-top, paper background, ink dot
+// under the active item. No hover effects; tap-only.
+//
+// `current` is one of: "today" | "home" | "log" | "profile". The Log tab is
+// special — instead of a standalone screen, tapping it routes the parent
+// into the log-activity flow via `onTapLog`. All other taps call onTab(name).
+//
+// Hidden on tablet/desktop where a different navigation pattern applies.
+export function MobileTabBar({ current, onTab, onTapLog, isDesktop }) {
+  if (isDesktop) return null;
+
+  const Item = ({ name, label, glyph, onClick }) => {
+    const active = current === name;
+    return (
+      <button
+        onClick={onClick}
+        style={{
+          flex: 1, background: "transparent", border: 0,
+          padding: "10px 4px 8px",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+          cursor: "pointer", color: active ? "var(--c-ink)" : "var(--c-mute)",
+        }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 18 }}>
+          {glyph}
+        </div>
+        <span className="t-mono" style={{
+          fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase",
+          fontWeight: active ? 600 : 500,
+        }}>{label}</span>
+        <span style={{
+          width: 4, height: 4, borderRadius: 999,
+          background: active ? "var(--c-ink)" : "transparent",
+          marginTop: 1,
+        }}/>
+      </button>
+    );
+  };
+
+  // All glyphs are stroke-only SVG to match the spec's "no decorative icons"
+  // rule — these are wayfinding marks, drawn at hairline weight in current
+  // color so they inherit the active/inactive ink/mute treatment.
+  const sw = 1.4;
+  const Today = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="2.5" y="3.5" width="13" height="11" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="2.5" y1="6.5" x2="15.5" y2="6.5" stroke="currentColor" strokeWidth={sw}/>
+      <circle cx="9" cy="10.5" r="1.4" fill="currentColor"/>
+    </svg>
+  );
+  const Week = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="2.5" y="3.5" width="13" height="11" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="2.5"  y1="7" x2="15.5" y2="7" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="6.5"  y1="3.5" x2="6.5"  y2="14.5" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="11.5" y1="3.5" x2="11.5" y2="14.5" stroke="currentColor" strokeWidth={sw}/>
+    </svg>
+  );
+  const Log = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <line x1="9" y1="3" x2="9"  y2="15" stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
+      <line x1="3" y1="9" x2="15" y2="9"  stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
+    </svg>
+  );
+  const Profile = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <circle cx="9" cy="6.2" r="2.6" stroke="currentColor" strokeWidth={sw}/>
+      <path d="M3.5 15.5 C 4.5 11.8, 13.5 11.8, 14.5 15.5"
+            stroke="currentColor" strokeWidth={sw} strokeLinecap="round" fill="none"/>
+    </svg>
+  );
+
+  return (
+    <div style={{
+      position: "fixed", left: 0, right: 0, bottom: 0,
+      background: "var(--c-bg)",
+      borderTop: "1px solid var(--c-rule)",
+      paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      zIndex: 50,
+    }}>
+      <div style={{ maxWidth: 500, margin: "0 auto", display: "flex" }}>
+        <Item name="today"   label="Today"   glyph={Today}   onClick={() => onTab("today")}/>
+        <Item name="home"    label="Week"    glyph={Week}    onClick={() => onTab("home")}/>
+        <Item name="log"     label="Log"     glyph={Log}     onClick={onTapLog}/>
+        <Item name="profile" label="Profile" glyph={Profile} onClick={() => onTab("profile")}/>
+      </div>
+    </div>
+  );
+}
+
 // ─── THREAD PANEL ────────────────────────────────────────────────────────────
 // Renders a chronological thread of athlete↔coach messages plus an inline
 // reply box. Pure presentational — owner provides the thread array (already

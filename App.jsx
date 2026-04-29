@@ -5,7 +5,7 @@ import { supabase, exchangeStravaCode } from "./lib/supabase.js";
 import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail } from "./lib/strava.js";
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr, getWeekBounds,
-  prettyEmailName, todayStr, newId,
+  prettyEmailName, todayStr, newId, ymd,
   snapToMonday, thisMonday,
 } from "./lib/helpers.js";
 import { C, S, TAG_STYLE, TYPE_STYLE, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
@@ -16,7 +16,7 @@ import {
 import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel } from "./components.jsx";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -327,6 +327,10 @@ export default function App() {
 
   // Coach state
   const [coachScreen,   setCoachScreen]   = useState("dashboard");
+  // Sub-tab inside the coach athlete detail screen: plan / logs / messages.
+  // Profile tab routes to coachScreen "profile" instead.
+  const [coachAthleteTab, setCoachAthleteTab] = useState("plan");
+  const [letterheadOpen, setLetterheadOpen] = useState(false);
   const [dashAthlete,   setDashAthlete]   = useState(null);
   const [coachReply,    setCoachReply]    = useState("");
   const [coachFilter,   setCoachFilter]   = useState("all");
@@ -757,6 +761,67 @@ export default function App() {
     if (error) setAuthError(error.message);
   };
 
+  // ── Sign in / sign up with email + password ──
+  // Uses Supabase auth. Unifies the two flows under one call: if mode is
+  // "signin" we call signInWithPassword; if "signup" we call signUp. Errors
+  // surface via setAuthError; on success the auth listener picks up the
+  // session and resolves the user.
+  const [authMode, setAuthMode] = useState("signin");      // "signin" | "signup"
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authNotice, setAuthNotice] = useState(null);
+
+  const signInWithEmail = async (e) => {
+    if (e?.preventDefault) e.preventDefault();
+    setAuthError(null);
+    setAuthNotice(null);
+    if (!authEmail.trim() || !authPassword) {
+      setAuthError("Email and password are required.");
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      if (authMode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email: authEmail.trim().toLowerCase(),
+          password: authPassword,
+          options: { emailRedirectTo: window.location.origin },
+        });
+        if (error) throw error;
+        setAuthNotice("Check your email to confirm — then sign in.");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: authEmail.trim().toLowerCase(),
+          password: authPassword,
+        });
+        if (error) throw error;
+      }
+    } catch (err) {
+      setAuthError(err.message || "Sign-in failed.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const requestPasswordReset = async () => {
+    setAuthError(null);
+    setAuthNotice(null);
+    if (!authEmail.trim()) { setAuthError("Type your email above first."); return; }
+    setAuthBusy(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(authEmail.trim().toLowerCase(), {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      setAuthNotice("Reset link sent — check your email.");
+    } catch (err) {
+      setAuthError(err.message || "Couldn't send reset link.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null); setRole(null); setProfile(null);
@@ -1114,42 +1179,94 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   //  LOGIN SCREEN
   // ────────────────────────────────────────────────────────────
-  if (!user) return (
-    <div style={{ ...S.page, display:"flex", flexDirection:"column", padding:"40px 28px", maxWidth:520, margin:"0 auto" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span className="fp-seal" style={{ fontSize:28, color:C.hot }}>✻</span>
-        <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.mute }}>A TRAINING JOURNAL</span>
-      </div>
-      <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", margin:"60px 0 40px" }}>
-        <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.2em", color:C.hot, marginBottom:24 }}>FOR DISTANCE RUNNERS</span>
-        <h1 className="t-display" style={{ fontSize:88, fontWeight:400, lineHeight:0.92, margin:0, color:C.ink }}>
-          Form
-          <br/>
-          <span className="t-display-italic" style={{ color:C.mute }}>&amp;</span>
-          <br/>
-          Pace.
+  if (!user) {
+    const underlineInput = {
+      width: "100%",
+      background: "transparent",
+      border: "none",
+      borderBottom: `1px solid ${C.rule}`,
+      borderRadius: 0,
+      padding: "8px 0",
+      fontFamily: S.bodyFont,
+      fontSize: 16,
+      color: C.ink,
+      outline: "none",
+      caretColor: C.accent,
+    };
+    return (
+      <div style={{ ...S.page, display:"flex", flexDirection:"column", padding:"40px 28px", maxWidth:520, margin:"0 auto", minHeight:"100vh" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", marginBottom:48 }}>
+          <span className="fp-seal" style={{ fontSize:48, color:C.accent }}>✻</span>
+        </div>
+
+        <h1 className="t-display" style={{ fontSize:48, fontWeight:400, lineHeight:1.0, margin:"0 0 14px", color:C.ink, textAlign:"center" }}>
+          Run with intention.
         </h1>
-        <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:19, lineHeight:1.5, color:C.inkSoft, marginTop:28, maxWidth:360 }}>
-          For distance runners and the coaches who push them. Write what you ran. Listen to what your body says back.
+        <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:17, lineHeight:1.5, color:C.mute, textAlign:"center", margin:"0 0 40px" }}>
+          A training journal for distance runners and the coaches who push them.
+        </p>
+
+        <form onSubmit={signInWithEmail} autoComplete="on">
+          <div style={{ marginBottom:20 }}>
+            <label className="t-eyebrow" htmlFor="login-email" style={{ display:"block", marginBottom:6 }}>Email</label>
+            <input
+              id="login-email" type="email" autoComplete="email" required
+              value={authEmail} onChange={e => setAuthEmail(e.target.value)}
+              style={underlineInput}
+            />
+          </div>
+          <div style={{ marginBottom:8 }}>
+            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6 }}>
+              <label className="t-eyebrow" htmlFor="login-password">Password</label>
+              <button type="button" onClick={requestPasswordReset}
+                style={{ background:"none", border:"none", color:C.accent, fontFamily:S.bodyFont, fontSize:11, letterSpacing:"0.1em", cursor:"pointer", padding:0 }}>
+                Forgot?
+              </button>
+            </div>
+            <input
+              id="login-password" type="password" autoComplete={authMode === "signup" ? "new-password" : "current-password"} required
+              value={authPassword} onChange={e => setAuthPassword(e.target.value)}
+              style={underlineInput}
+            />
+          </div>
+          {authError && (
+            <div style={{ marginTop:14, color:C.hot, fontSize:13, fontFamily:S.bodyFont }}>{authError}</div>
+          )}
+          {authNotice && (
+            <div style={{ marginTop:14, color:C.accent, fontSize:13, fontFamily:S.bodyFont }}>{authNotice}</div>
+          )}
+          <button type="submit" disabled={authBusy} className="fp-btn fp-btn--accent"
+            style={{ width:"100%", padding:"16px", marginTop:24, opacity:authBusy ? 0.6 : 1 }}>
+            {authBusy ? (authMode === "signup" ? "Creating…" : "Signing in…") : (authMode === "signup" ? "Create account" : "Sign in")}
+          </button>
+        </form>
+
+        <div style={{ display:"flex", alignItems:"center", gap:12, margin:"28px 0" }}>
+          <div style={{ flex:1, height:1, background:C.rule }}/>
+          <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.18em", color:C.mute }}>OR</span>
+          <div style={{ flex:1, height:1, background:C.rule }}/>
+        </div>
+
+        <button onClick={signInWithGoogle} type="button" className="fp-btn fp-btn--ghost" style={{ width:"100%", padding:"14px" }}>
+          <svg width="16" height="16" viewBox="0 0 48 48" style={{ display:"inline-block" }}>
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        <p style={{ marginTop:36, textAlign:"center", fontFamily:S.displayFont, fontSize:15, color:C.inkSoft, fontStyle:"italic" }}>
+          {authMode === "signup" ? "Already have an account? " : "New to Form & Pace? "}
+          <button type="button" onClick={() => { setAuthMode(authMode === "signup" ? "signin" : "signup"); setAuthError(null); setAuthNotice(null); }}
+            style={{ background:"none", border:"none", color:C.accent, cursor:"pointer", fontFamily:S.displayFont, fontSize:15, fontStyle:"italic", padding:0, textDecoration:"underline" }}>
+            {authMode === "signup" ? "Sign in." : "Start here."}
+          </button>
         </p>
       </div>
-      <button onClick={signInWithGoogle} className="fp-btn" style={{ width:"100%", padding:"18px" }}>
-        <svg width="16" height="16" viewBox="0 0 48 48" style={{ display:"inline-block" }}>
-          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-        </svg>
-        Continue with Google
-      </button>
-      {authError && (
-        <div style={{ marginTop:16, color:C.hot, fontSize:13, fontFamily:S.bodyFont, textAlign:"center" }}>{authError}</div>
-      )}
-      <div className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.1em", textAlign:"center", marginTop:16 }}>
-        ATHLETES ARE LINKED TO THEIR COACH BY EMAIL.
-      </div>
-    </div>
-  );
+    );
+  }
 
   // ────────────────────────────────────────────────────────────
   //  ATHLETE NOT FOUND
@@ -1423,8 +1540,29 @@ export default function App() {
       </>
     );
 
+    // Inbox unread count for the left-rail badge — sum of athletes who
+    // have at least one log/activity awaiting a coach reply.
+    const totalRepliesNeeded = athleteRows.reduce((acc, r) => acc + (r.repliesNeeded || 0), 0);
+
     return (
-      <div style={{ ...S.page, ...(isDesktop ? { display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden" } : {}) }}>
+      <div style={{ ...S.page, ...(isDesktop ? { display:"flex", height:"100vh", overflow:"hidden" } : {}) }}>
+        {isDesktop && (
+          <CoachLeftRail
+            current="dashboard"
+            isDesktop={isDesktop}
+            unread={totalRepliesNeeded}
+            coachName={user.user_metadata?.full_name || user.email}
+            onNav={(k) => {
+              if (k === "dashboard" || k === "athletes") setCoachScreen("dashboard");
+              else if (k === "inbox") setCoachScreen("inbox");
+              else if (k === "plans") setCoachScreen("plan-builder");
+              else if (k === "library") setCoachScreen("templates");
+            }}
+            onSignOut={signOut}
+            onSettings={() => alert("Coach settings — coming soon.")}
+          />
+        )}
+        <div style={{ ...(isDesktop ? { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" } : {}) }}>
         <div style={S.grain}/>
         <Header
           title="Athletes"
@@ -1441,15 +1579,96 @@ export default function App() {
               {rosterContent}
             </div>
 
-            {/* Right panel — athlete week detail */}
+            {/* Right panel — athlete week detail (or inbox preview when none) */}
             <div style={{ flex:1, overflowY:"auto", background:C.cream, padding:"28px 36px 80px" }}>
-              {!dpAthlete ? (
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60%", flexDirection:"column", gap:16, color:C.mid }}>
-                  <div style={{ fontSize:48, opacity:0.2, fontFamily:S.displayFont }}>←</div>
-                  <div style={{ fontSize:16, fontFamily:S.displayFont, color:C.navy }}>Select an athlete</div>
-                  <div style={{ fontSize:13 }}>Their training week will appear here</div>
-                </div>
-              ) : (
+              {!dpAthlete ? (() => {
+                // Inbox preview — latest 5 logs/activities across all athletes,
+                // newest first. Mirrors the full /inbox screen but in a quiet
+                // panel so coaches can land on dashboard and spot what's hot.
+                const previews = [];
+                for (const [email, data] of athletes) {
+                  const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
+                  const actsForA = activitiesByEmail.get(email.toLowerCase()) || [];
+                  for (const w of weeksList) {
+                    for (const s of (w.sessions || [])) {
+                      const log = logs[s.id];
+                      if (!log?.feedback && !log?.analysis?.distance_km) continue;
+                      const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
+                      previews.push({
+                        kind: "log", email, athleteName: data.name || prettyEmailName(email),
+                        excerpt: log?.feedback || `${log?.analysis?.distance_km}km logged`,
+                        ts: log?.updated_at || log?.created_at || onDate,
+                        sess: s, weekStart: w.weekStart,
+                      });
+                    }
+                  }
+                  for (const a of actsForA) {
+                    if (a.source === "session") continue;
+                    previews.push({
+                      kind: "act", email, athleteName: data.name || prettyEmailName(email),
+                      excerpt: a.notes || `${a.distance_km}km extra activity`,
+                      ts: a.updated_at || a.created_at || a.activity_date,
+                      act: a,
+                    });
+                  }
+                }
+                previews.sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
+                const top = previews.slice(0, 5);
+                const fmtAgo = (ts) => {
+                  if (!ts) return "";
+                  const then = new Date(ts);
+                  const minsAgo = Math.max(0, Math.round((Date.now() - then.getTime()) / 60000));
+                  if (minsAgo < 60) return `${minsAgo}m`;
+                  const hrs = Math.round(minsAgo / 60);
+                  if (hrs < 24) return `${hrs}h`;
+                  return `${Math.round(hrs / 24)}d`;
+                };
+                return (
+                  <div style={{ maxWidth:560 }}>
+                    <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", paddingBottom:12, borderBottom:`1px solid ${C.rule}` }}>
+                      <span className="t-eyebrow" style={{ color:C.ink }}>Inbox</span>
+                      <button onClick={() => setCoachScreen("inbox")}
+                        style={{ background:"transparent", border:0, color:C.accent, fontFamily:S.bodyFont, fontSize:11, letterSpacing:"0.1em", cursor:"pointer" }}>
+                        Open inbox →
+                      </button>
+                    </div>
+                    {top.length === 0 ? (
+                      <div style={{ marginTop:18, fontFamily:S.displayFont, fontStyle:"italic", color:C.mute, fontSize:15 }}>
+                        Nothing waiting. The athletes are quiet.
+                      </div>
+                    ) : (
+                      <div>
+                        {top.map((it, i) => (
+                          <div key={i} onClick={() => {
+                              setDashAthlete(it.email);
+                              if (it.kind === "log") {
+                                setActiveSession({ ...it.sess, weekStart: it.weekStart, athleteEmail: it.email });
+                                setCoachScreen("session");
+                              } else {
+                                setActiveExtraActivity(it.act);
+                                setCoachScreen("extra-activity");
+                              }
+                            }}
+                            style={{ padding:"14px 0", borderBottom:`1px solid ${C.ruleSoft}`, cursor:"pointer" }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:10 }}>
+                              <span style={{ fontFamily:S.displayFont, fontSize:17, color:C.ink }}>{it.athleteName}</span>
+                              <span className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.08em" }}>{fmtAgo(it.ts).toUpperCase()}</span>
+                            </div>
+                            <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:14, color:C.inkSoft, margin:"4px 0 0", lineHeight:1.45, overflow:"hidden", textOverflow:"ellipsis", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                              "{it.excerpt}"
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginTop:32, padding:"24px", border:`1px dashed ${C.rule}`, textAlign:"center", color:C.mute }}>
+                      <span style={{ fontFamily:S.displayFont, fontSize:15, fontStyle:"italic" }}>
+                        Pick an athlete from the roster to see their week.
+                      </span>
+                    </div>
+                  </div>
+                );
+              })() : (
                 <>
                   {/* Athlete header */}
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:22 }}>
@@ -1572,6 +1791,7 @@ export default function App() {
             {rosterContent}
           </div>
         )}
+        </div>
       </div>
     );
   }
@@ -1849,11 +2069,12 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   //  PROFILE EDITOR — shared renderer for athlete-self and coach-edit-on-behalf
   // ────────────────────────────────────────────────────────────
-  const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight }) => (
+  const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight, tabBar = null, statsBlock = null, settingsBlock = null }) => (
     <div style={S.page}>
       <div style={S.grain}/>
       <Header title={title} subtitle={subtitle} onBack={onBack} right={headerRight} />
-      <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 80px" }}>
+      <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 96px" }}>
+        {statsBlock}
         <ProfileForm form={profileForm} setForm={setProfileForm} email={email} />
         {profileStatus && (
           <div style={{ marginBottom: 12, padding: "10px 12px", fontSize: 13, borderRadius: 2,
@@ -1867,7 +2088,9 @@ export default function App() {
           style={S.primaryBtn(C.crimson, profileSaving)}>
           {profileSaving ? "Saving…" : "Save profile"}
         </button>
+        {settingsBlock}
       </div>
+      {tabBar}
     </div>
   );
 
@@ -1911,8 +2134,36 @@ export default function App() {
             ))}
           </div>
 
+          {/* Tab strip — Plan / Logs / Messages / Profile */}
+          <div style={{ display:"flex", gap:24, padding:"6px 0 0", marginBottom:20, borderBottom:`1px solid ${C.rule}` }}>
+            {[
+              { key:"plan",     label:"Plan" },
+              { key:"logs",     label:"Logs" },
+              { key:"messages", label:"Messages" },
+              { key:"profile",  label:"Profile" },
+            ].map(t => {
+              const active = (t.key === "profile") ? false : coachAthleteTab === t.key;
+              return (
+                <button key={t.key}
+                  onClick={() => {
+                    if (t.key === "profile") setCoachScreen("profile");
+                    else setCoachAthleteTab(t.key);
+                  }}
+                  style={{
+                    background:"transparent", border:0, cursor:"pointer",
+                    padding:"10px 0",
+                    fontFamily:S.bodyFont, fontSize:12, letterSpacing:"0.14em", textTransform:"uppercase",
+                    color: active ? C.ink : C.mute,
+                    fontWeight: active ? 700 : 500,
+                    borderBottom: active ? `2px solid ${C.ink}` : "2px solid transparent",
+                    marginBottom:-1,
+                  }}>{t.label}</button>
+              );
+            })}
+          </div>
+
           {/* Performance Management Chart — 90-day fitness/fatigue/form */}
-          {(() => {
+          {coachAthleteTab === "plan" && (() => {
             const daActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
             const dailyRtss = dailyRtssFromActivities(daActs, da);
             const today = new Date();
@@ -1927,7 +2178,7 @@ export default function App() {
           })()}
 
           {/* Calendar markers — race / sick / taper / travel */}
-          {(() => {
+          {coachAthleteTab === "plan" && (() => {
             const list = markersByEmail[dashAthlete?.toLowerCase()] || [];
             const upcoming = list.filter(m => (m.end_date || m.marker_date) >= todayStr()).slice(0, 5);
             const addMarker = async () => {
@@ -1981,12 +2232,116 @@ export default function App() {
             );
           })()}
 
-          <button onClick={() => setCoachScreen("profile")}
-            style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"10px", fontSize:13, fontWeight:600 }}>
-            Edit Profile (name, goal, PB)
-          </button>
+          {coachAthleteTab === "plan" && (
+            <button onClick={() => setCoachScreen("profile")}
+              style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"10px", fontSize:13, fontWeight:600 }}>
+              Edit Profile (name, goal, PB)
+            </button>
+          )}
 
-          {coachActiveMonday && (() => {
+          {/* ─── LOGS tab ──────────────────────────────────────────── */}
+          {coachAthleteTab === "logs" && (() => {
+            const athActs = (activitiesByEmail.get(dashAthlete?.toLowerCase()) || [])
+              .slice()
+              .sort((a, b) => (b.activity_date || "").localeCompare(a.activity_date || ""))
+              .slice(0, 30);
+            if (athActs.length === 0) {
+              return (
+                <div style={{ padding:"40px 0", textAlign:"center", color:C.mute, fontFamily:S.displayFont, fontStyle:"italic" }}>
+                  Nothing logged yet.
+                </div>
+              );
+            }
+            return (
+              <div>
+                {athActs.map(a => {
+                  const r = a.rtss != null ? Number(a.rtss) : null;
+                  return (
+                    <div key={a.id} onClick={() => { setActiveExtraActivity(a); setCoachScreen("extra-activity"); }}
+                      style={{ padding:"16px 0", borderBottom:`1px solid ${C.ruleSoft}`, cursor:"pointer", display:"flex", alignItems:"baseline", justifyContent:"space-between", gap:12 }}>
+                      <div style={{ minWidth:0 }}>
+                        <div className="t-mono" style={{ fontSize:11, color:C.mute, letterSpacing:"0.08em" }}>{a.activity_date}</div>
+                        <div style={{ fontFamily:S.displayFont, fontSize:18, color:C.ink, marginTop:2 }}>{a.activity_type || "Run"}</div>
+                        {a.notes && <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:13, color:C.mute, margin:"3px 0 0", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>"{a.notes}"</p>}
+                      </div>
+                      <div style={{ textAlign:"right", flexShrink:0 }}>
+                        <Num size={16}>{a.distance_km ? Number(a.distance_km).toFixed(1) : "—"}</Num>
+                        <span className="t-mono" style={{ fontSize:11, color:C.mute, marginLeft:3 }}>km</span>
+                        {r != null && <div className="t-mono" style={{ fontSize:11, color:C.mute, marginTop:2 }}>rTSS {r}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* ─── MESSAGES tab ──────────────────────────────────────── */}
+          {coachAthleteTab === "messages" && (() => {
+            const athActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
+            // Pull every log + activity that has any thread content (legacy
+            // coach_reply or messages array). Sort newest first.
+            const threads = [];
+            for (const w of (da.weeks || [])) {
+              for (const s of (w.sessions || [])) {
+                const log = logs[s.id];
+                if (!log) continue;
+                const hasThread = log.coach_reply || (Array.isArray(log.messages) && log.messages.length);
+                if (!hasThread) continue;
+                threads.push({ kind:"log", id:log.id, source:log, sess:s, weekStart:w.weekStart, ts: log.updated_at || log.created_at });
+              }
+            }
+            for (const a of athActs) {
+              if (a.source === "session") continue;
+              const hasThread = a.coach_reply || (Array.isArray(a.messages) && a.messages.length);
+              if (!hasThread) continue;
+              threads.push({ kind:"act", id:a.id, source:a, act:a, ts: a.updated_at || a.created_at });
+            }
+            threads.sort((x, y) => (y.ts || "").localeCompare(x.ts || ""));
+            if (threads.length === 0) {
+              return (
+                <div style={{ padding:"40px 0", textAlign:"center", color:C.mute, fontFamily:S.displayFont, fontStyle:"italic" }}>
+                  No messages yet.
+                </div>
+              );
+            }
+            return (
+              <div>
+                {threads.slice(0, 20).map(t => {
+                  const thread = getThread(t.source);
+                  const last = thread[thread.length - 1];
+                  if (!last) return null;
+                  const dateStr = (t.kind === "log")
+                    ? (t.source.analysis?.actual_date || sessionDateStr(t.weekStart, t.sess.day))
+                    : t.act.activity_date;
+                  return (
+                    <div key={t.id} onClick={() => {
+                        if (t.kind === "log") {
+                          setActiveSession({ ...t.sess, weekStart: t.weekStart, athleteEmail: dashAthlete });
+                          setCoachScreen("session");
+                        } else {
+                          setActiveExtraActivity(t.act);
+                          setCoachScreen("extra-activity");
+                        }
+                      }}
+                      style={{ padding:"16px 0", borderBottom:`1px solid ${C.ruleSoft}`, cursor:"pointer" }}>
+                      <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", gap:10 }}>
+                        <span className="t-mono" style={{ fontSize:11, color:C.mute, letterSpacing:"0.08em" }}>{dateStr}</span>
+                        <span className="t-mono" style={{ fontSize:9, color:last.author === "coach" ? C.accent : C.mute, letterSpacing:"0.14em" }}>
+                          {last.author === "coach" ? "YOU →" : "← THEM"}
+                        </span>
+                      </div>
+                      <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:15, color:C.ink, lineHeight:1.5, margin:"4px 0 0", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                        "{last.body}"
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {coachAthleteTab === "plan" && coachActiveMonday && (() => {
             const athActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
             const today = new Date(); today.setHours(0,0,0,0);
             const monDate = new Date(coachActiveMonday + "T00:00:00");
@@ -2330,26 +2685,49 @@ export default function App() {
                 // Prefer the session log thread; fall back to the activity.
                 const threadSource = (log?.messages?.length || log?.coach_reply) ? log : (linkedAthAct || null);
                 const thread = threadSource ? getThread(threadSource) : [];
+                const sendCoachReply = async (body) => {
+                  const next = appendMessage(threadSource?.messages || [], { author: "coach", body });
+                  if (!next) return;
+                  const ts = new Date().toISOString();
+                  let wroteAnywhere = false;
+                  if (linkedAthAct) {
+                    const { data: actUpd } = await supabase
+                      .from("activities").update({ messages: next, coach_reply: body }).eq("id", linkedAthAct.id).select().maybeSingle();
+                    if (actUpd) { setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a)); wroteAnywhere = true; }
+                  }
+                  const { data: updated } = await supabase
+                    .from("session_logs").update({ messages: next, coach_reply: body, updated_at: ts }).eq("session_id", activeSession.id).select().maybeSingle();
+                  if (updated) { setLogs(prev => ({ ...prev, [activeSession.id]: updated })); wroteAnywhere = true; }
+                  if (!wroteAnywhere) alert("No session log or activity found for this session.");
+                };
+                const recap = log?.feedback || linkedAthAct?.notes || (an?.distance_km ? `${an.distance_km}km logged.` : null);
+                const athleteName = activeSession?.athleteEmail
+                  ? (athletePrograms[activeSession.athleteEmail.toLowerCase()]?.name || prettyEmailName(activeSession.athleteEmail))
+                  : null;
                 return (
-                  <ThreadPanel
-                    thread={thread}
-                    viewerRole="coach"
-                    onSend={async (body) => {
-                      const next = appendMessage(threadSource?.messages || [], { author: "coach", body });
-                      if (!next) return;
-                      const ts = new Date().toISOString();
-                      let wroteAnywhere = false;
-                      if (linkedAthAct) {
-                        const { data: actUpd } = await supabase
-                          .from("activities").update({ messages: next, coach_reply: body }).eq("id", linkedAthAct.id).select().maybeSingle();
-                        if (actUpd) { setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a)); wroteAnywhere = true; }
-                      }
-                      const { data: updated } = await supabase
-                        .from("session_logs").update({ messages: next, coach_reply: body, updated_at: ts }).eq("session_id", activeSession.id).select().maybeSingle();
-                      if (updated) { setLogs(prev => ({ ...prev, [activeSession.id]: updated })); wroteAnywhere = true; }
-                      if (!wroteAnywhere) alert("No session log or activity found for this session.");
-                    }}
-                  />
+                  <>
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                      <button type="button" onClick={() => setLetterheadOpen(true)}
+                        className="fp-btn fp-btn--ghost"
+                        style={{ padding:"8px 14px", fontSize:11 }}>
+                        Reply by letter →
+                      </button>
+                    </div>
+                    <ThreadPanel
+                      thread={thread}
+                      viewerRole="coach"
+                      onSend={sendCoachReply}
+                    />
+                    <LetterheadReplyModal
+                      open={letterheadOpen}
+                      onClose={() => setLetterheadOpen(false)}
+                      athleteName={athleteName}
+                      coachName={user.user_metadata?.full_name || user.email}
+                      recap={recap}
+                      recapByline={activeSession?.type ? `${activeSession.type}` : null}
+                      onSend={sendCoachReply}
+                    />
+                  </>
                 );
               })()}
             </>
@@ -2606,12 +2984,116 @@ export default function App() {
   }
 
   if (role === "athlete" && screen === "profile") {
+    // Compute the spec'd stats trio: weekly avg over the last 12 weeks,
+    // current calendar year total, and the longest current activity streak
+    // (consecutive days ending today with at least one logged run).
+    const myActsForStats = activities.filter(a => a.athlete_email === user.email?.toLowerCase());
+    const now = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const yearStartStr = ymd(yearStart);
+    const yearKm = myActsForStats.reduce((acc, a) => {
+      if (a.activity_date >= yearStartStr) return acc + (parseFloat(a.distance_km) || 0);
+      return acc;
+    }, 0);
+
+    // Weekly avg: sum the last 84 days, divide by 12.
+    const cutoff = new Date(now); cutoff.setDate(now.getDate() - 84);
+    const cutoffStr = ymd(cutoff);
+    const last12 = myActsForStats
+      .filter(a => a.activity_date >= cutoffStr)
+      .reduce((acc, a) => acc + (parseFloat(a.distance_km) || 0), 0);
+    const weeklyAvg = last12 / 12;
+
+    // Streak: walk backwards from today, breaking at the first gap.
+    const datesWithRuns = new Set(myActsForStats.map(a => a.activity_date));
+    let streak = 0;
+    for (let i = 0; i < 400; i++) {
+      const d = new Date(now); d.setDate(now.getDate() - i);
+      if (datesWithRuns.has(ymd(d))) streak++;
+      else if (i === 0) continue;  // a rest day TODAY shouldn't break a streak
+      else break;
+    }
+
+    const StatTrio = (
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:0, marginBottom:24, borderTop:`1px solid ${C.rule}`, borderBottom:`1px solid ${C.rule}` }}>
+        <div style={{ padding:"16px 12px", borderRight:`1px solid ${C.rule}` }}>
+          <Eyebrow>Weekly avg</Eyebrow>
+          <div style={{ marginTop:6 }}>
+            <BigNum size={28}>{weeklyAvg.toFixed(1)}</BigNum>
+            <span className="t-mono" style={{ fontSize:11, color:C.mute, marginLeft:4 }}>km</span>
+          </div>
+        </div>
+        <div style={{ padding:"16px 12px", borderRight:`1px solid ${C.rule}` }}>
+          <Eyebrow>{now.getFullYear()} km</Eyebrow>
+          <div style={{ marginTop:6 }}>
+            <BigNum size={28}>{Math.round(yearKm)}</BigNum>
+          </div>
+        </div>
+        <div style={{ padding:"16px 12px" }}>
+          <Eyebrow>Streak</Eyebrow>
+          <div style={{ marginTop:6 }}>
+            <BigNum size={28} color={streak > 0 ? "var(--c-accent)" : undefined}>{streak}</BigNum>
+            <span className="t-mono" style={{ fontSize:11, color:C.mute, marginLeft:4 }}>{streak === 1 ? "day" : "days"}</span>
+          </div>
+        </div>
+      </div>
+    );
+
+    // Settings list — Strava, Notifications, Units, Help, then a hot-tinted
+    // sign-out and a mono version footer. Tap rows that have a screen route
+    // somewhere; placeholders flash a transient notice for now.
+    const SettingsRow = ({ label, value, onClick, danger }) => (
+      <button onClick={onClick}
+        style={{
+          width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
+          background:"transparent", border:"none",
+          borderBottom:`1px solid ${C.ruleSoft}`,
+          padding:"14px 0", cursor:"pointer", textAlign:"left",
+          fontFamily:S.bodyFont,
+        }}>
+        <span style={{ fontFamily:S.displayFont, fontSize:17, color: danger ? C.hot : C.ink }}>{label}</span>
+        <span style={{ display:"flex", alignItems:"center", gap:10 }}>
+          {value && <span className="t-mono" style={{ fontSize:11, color:C.mute, letterSpacing:"0.06em" }}>{value}</span>}
+          <span style={{ color: danger ? C.hot : C.mute, fontFamily:S.displayFont, fontSize:18 }}>→</span>
+        </span>
+      </button>
+    );
+
+    const flashSoon = (what) => setProfileStatus({ kind:"info", message: `${what} settings — coming soon.` });
+
+    const SettingsBlock = (
+      <div style={{ marginTop:36 }}>
+        <div className="t-eyebrow" style={{ marginBottom:8, color:C.ink }}>Account</div>
+        <div style={{ borderTop:`1px solid ${C.rule}` }}>
+          <SettingsRow
+            label="Strava"
+            value={stravaConnected ? "Connected" : "Not connected"}
+            onClick={() => stravaConnected ? flashSoon("Disconnect Strava") : connectStrava()}
+          />
+          <SettingsRow label="Notifications" onClick={() => flashSoon("Notifications")} />
+          <SettingsRow label="Units" value="Kilometres" onClick={() => flashSoon("Units")} />
+          <SettingsRow label="Help"  onClick={() => { window.location.href = "mailto:hello@formandpace.app?subject=Form%20%26%20Pace%20support"; }} />
+        </div>
+        <button onClick={signOut}
+          className="fp-btn fp-btn--ghost"
+          style={{ marginTop:20, width:"100%", padding:"12px", color:C.hot, borderColor:C.hot }}>
+          Sign out
+        </button>
+        <div className="t-mono" style={{ marginTop:18, textAlign:"center", fontSize:10, color:C.mute, letterSpacing:"0.14em" }}>
+          FORM &amp; PACE · v0.1
+        </div>
+      </div>
+    );
+
     return renderProfileScreen({
       title: "My Profile",
       subtitle: "Edit your details",
       email: user.email,
       onBack: () => setScreen("today"),
       headerRight: <button onClick={signOut} style={S.signOutBtn}>Sign out</button>,
+      statsBlock: StatTrio,
+      settingsBlock: SettingsBlock,
+      tabBar: <MobileTabBar current="profile" isDesktop={isDesktop} onTab={(s) => setScreen(s)} onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}/>,
     });
   }
 
@@ -3262,6 +3744,12 @@ export default function App() {
 
           </>}
         </div>
+        <MobileTabBar
+          current="today"
+          isDesktop={isDesktop}
+          onTab={(s) => setScreen(s)}
+          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+        />
       </div>
     );
   }
@@ -3559,6 +4047,12 @@ export default function App() {
             );
           })()}
         </div>
+        <MobileTabBar
+          current="home"
+          isDesktop={isDesktop}
+          onTab={(s) => setScreen(s)}
+          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+        />
       </div>
     );
   }
@@ -3825,10 +4319,28 @@ export default function App() {
           </div>
         </SectionCard>
 
-        <div style={{ fontSize:11, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:10 }}>How did it go?</div>
+        <div style={{ fontSize:11, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:10 }}>Notes</div>
         <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)}
-          placeholder="Tell me about the session... how did it feel? Did you hit the paces? Any soreness or highlights?"
+          placeholder="Anything else…"
           style={S.textarea}/>
+        {/* Quick chips — tap to append a phrase to the notes. Saves typing
+            on the most common notes. Inserts with leading space if there's
+            already content so the chips read as a comma-separated phrase. */}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:-6, marginBottom:14 }}>
+          {[
+            { label: "legs heavy",     phrase: "Legs heavy." },
+            { label: "felt strong",    phrase: "Felt strong." },
+            { label: "weather rough",  phrase: "Weather was rough." },
+            { label: "trail not road", phrase: "Trail not road." },
+          ].map(c => (
+            <button key={c.label} type="button"
+              onClick={() => setFeedbackText(prev => prev?.trim() ? `${prev.trimEnd()} ${c.phrase}` : c.phrase)}
+              className="fp-pill"
+              style={{ fontSize:11, padding:"4px 10px", cursor:"pointer", color:C.inkSoft, background:"transparent", borderColor:C.rule, fontFamily:S.bodyFont, letterSpacing:"0.06em" }}>
+              + {c.label}
+            </button>
+          ))}
+        </div>
 
         <button type="submit"
           disabled={!sessionDistKm||isSaving}
@@ -4188,6 +4700,12 @@ export default function App() {
             );
           })}
         </div>
+        <MobileTabBar
+          current="home"
+          isDesktop={isDesktop}
+          onTab={(s) => setScreen(s)}
+          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+        />
       </div>
     );
   }
