@@ -7,7 +7,6 @@ import {
 } from "./lib/helpers.js";
 import { C, S, TAG_STYLE, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker } from "./components.jsx";
-import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
 // Programs are stored in the coach_plans table; coaches edit via Plan Builder.
@@ -84,99 +83,6 @@ function fmtPbGoal(obj) {
   }
   if (obj.other) parts.push(obj.other);
   return parts.length ? parts.join(" · ") : null;
-}
-
-// ─── ATHLETE WEEK GRID ────────────────────────────────────────────────────────
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const DAY_LONG   = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
-
-function DraggableSession({ session, log, linkedAct, onClick }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `session:${session.id}`,
-  });
-  const ts = TAG_STYLE[session.tag] || TAG_STYLE.easy;
-  const isLogged = !!log || !!linkedAct;
-  const style = {
-    background: isLogged ? "#f0f7ee" : C.white,
-    border: `1px solid ${isLogged ? "#b8d4b4" : C.rule}`,
-    borderRadius: 2,
-    padding: "10px 12px",
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    cursor: "grab",
-    touchAction: "none",
-    opacity: isDragging ? 0.4 : 1,
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    transition: isDragging ? "none" : "transform 120ms ease",
-  };
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes} onClick={onClick}>
-      <div style={{ width: 32, height: 32, borderRadius: "50%", background: ts.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
-        {log?.analysis?.emoji || (session.tag === "speed" ? "⚡" : session.tag === "tempo" ? "🎯" : "🏃")}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.type}</div>
-          {isLogged && <div style={{ fontSize: 10, color: C.green, flexShrink: 0 }}>✓</div>}
-        </div>
-        <div style={{ fontSize: 11, color: ts.accent, marginTop: 2, fontFamily: "monospace" }}>{session.pace}</div>
-        {(linkedAct || log?.analysis?.distance_km) && (
-          <div style={{ fontSize: 10, color: C.mid, marginTop: 2 }}>
-            {linkedAct?.distance_km ?? log?.analysis?.distance_km}km
-            {linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds / 60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ExtraActivityCard({ act, onClick }) {
-  return (
-    <div onClick={onClick} style={{
-      background: "#1a0505", border: "1px solid #7f1d1d", borderRadius: 2,
-      padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
-    }}>
-      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#3b0a0a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>➕</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "#fffdf8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.activity_type || "Run"}</div>
-          <div style={{ fontSize: 10, color: C.crimson, flexShrink: 0 }}>EXTRA</div>
-        </div>
-        <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>
-          {act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds / 60)}min` : ""}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DayRow({ dateStr, dayLabel, isToday, children, hasItems }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr}` });
-  const dayHeader = `${dayLabel.toUpperCase()} · ${dateStr.slice(5).replace("-", "/")}`;
-  return (
-    <div ref={setNodeRef} style={{
-      marginBottom: 8,
-      border: `1px dashed ${isOver ? C.crimson : "transparent"}`,
-      borderRadius: 4,
-      padding: isOver ? 4 : 0,
-      transition: "border-color 120ms ease, padding 120ms ease",
-    }}>
-      <div style={{
-        fontSize: 10, letterSpacing: 2, color: isToday ? C.crimson : C.mid,
-        fontWeight: isToday ? 700 : 500, marginBottom: 4, paddingLeft: 2,
-      }}>{dayHeader}{isToday ? " · TODAY" : ""}</div>
-      {hasItems ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{children}</div>
-      ) : (
-        <div style={{
-          background: C.white, border: `1px dashed ${C.rule}`, borderRadius: 2,
-          padding: "12px", fontSize: 11, color: C.mid, textAlign: "center", letterSpacing: 1,
-        }}>NO WORKOUT</div>
-      )}
-    </div>
-  );
 }
 
 // Shared form used by athlete self-edit and coach edit-on-behalf screens.
@@ -692,26 +598,6 @@ export default function App() {
   } : null;
   const weeks       = athleteData?.weeks || [];
   const allSessions = useMemo(() => weeks.flatMap(w => w.sessions), [weeks]);
-
-  // Drag sensors: small distance threshold so taps still register as clicks.
-  const dndSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor,   { activationConstraint: { delay: 180, tolerance: 6 } }),
-  );
-
-  // Persist a session's actual_date when dragged to a new day in the same week.
-  const handleSessionDrop = async (sessionId, newDate, weekStart) => {
-    const session = (weeks.find(w => w.weekStart === weekStart)?.sessions || []).find(s => s.id === sessionId);
-    if (!session) return;
-    const scheduledDate = sessionDateStr(weekStart, session.day);
-    const existing = logs[sessionId];
-    const existingAnalysis = existing?.analysis || {};
-    const nextAnalysis = { ...existingAnalysis };
-    if (newDate === scheduledDate) delete nextAnalysis.actual_date;
-    else nextAnalysis.actual_date = newDate;
-    try { await saveLog(sessionId, { analysis: nextAnalysis }); }
-    catch (e) { console.error("drag-move saveLog error:", e); }
-  };
 
   // Default the athlete week dropdown to the current week (or last if all in past).
   useEffect(() => {
@@ -1743,58 +1629,49 @@ export default function App() {
                 </div>
 
                 <div style={{ marginBottom:14 }}>
-                  <DndContext
-                    sensors={dndSensors}
-                    onDragEnd={({ active, over }) => {
-                      if (!over) return;
-                      const [aKind, aId] = String(active.id).split(":");
-                      const [oKind, oDate] = String(over.id).split(":");
-                      if (aKind !== "session" || oKind !== "day") return;
-                      handleSessionDrop(aId, oDate, w.weekStart);
-                    }}
-                  >
-                    {DAY_LABELS.map(dayLabel => {
-                      const dayDate = sessionDateStr(w.weekStart, dayLabel);
-                      const isToday = dayDate === todayStr();
-                      const sessionsHere = w.sessions
-                        .map(s => ({ s, log: logs[s.id] }))
-                        .filter(({ s, log }) => (log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day)) === dayDate);
-                      const extrasHere = extraActs.filter(a => a.activity_date === dayDate);
-                      const hasItems = sessionsHere.length + extrasHere.length > 0;
-                      return (
-                        <DayRow key={dayLabel} dateStr={dayDate} dayLabel={dayLabel} isToday={isToday} hasItems={hasItems}>
-                          {sessionsHere.map(({ s, log }) => {
-                            const sDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
-                            const linkedAct = actByDate[sDate];
-                            const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
-                            return (
-                              <DraggableSession
-                                key={s.id}
-                                session={s}
-                                log={log}
-                                linkedAct={linkedAct}
-                                onClick={() => {
-                                  setActiveSession({ ...s, weekStart: w.weekStart });
-                                  setFeedbackText("");
-                                  setSessionDistKm("");
-                                  setSessionDurMin("");
-                                  setSessionDateOverride(log?.analysis?.actual_date || linkedAct?.activity_date || todayStr());
-                                  setScreen((log && hasFullFeedback) ? "result" : "session");
-                                }}
-                              />
-                            );
-                          })}
-                          {extrasHere.map(act => (
-                            <ExtraActivityCard
-                              key={act.id}
-                              act={act}
-                              onClick={() => { setActiveExtraActivity(act); setScreen("extra-activity"); }}
-                            />
-                          ))}
-                        </DayRow>
-                      );
-                    })}
-                  </DndContext>
+                  {w.sessions.map(s => {
+                    const log = logs[s.id];
+                    const ts  = TAG_STYLE[s.tag] || TAG_STYLE.easy;
+                    const sDate = sessionDateStr(w.weekStart, s.day);
+                    const linkedAct = actByDate[sDate];
+                    const isLogged = !!log || !!linkedAct;
+                    const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
+                    return (
+                      <div key={s.id}
+                        onClick={()=>{ setActiveSession({...s, weekStart: w.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionDateOverride(log?.analysis?.actual_date || actByDate[sDate]?.activity_date || todayStr()); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
+                        style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"14px 16px", marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
+                        <div style={{ width:40, height:40, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
+                          {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
+                        </div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between" }}>
+                            <div style={{ fontSize:12, color:C.mid }}>{s.day}</div>
+                            {isLogged && <div style={{ fontSize:11, color:C.green }}>✓ LOGGED</div>}
+                          </div>
+                          <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{s.type}</div>
+                          <div style={{ fontSize:11, color:ts.accent, marginTop:2, fontFamily:"monospace" }}>{s.pace}</div>
+                          {(linkedAct || log?.analysis?.distance_km) && <div style={{ fontSize:11, color:C.mid, marginTop:3 }}>{linkedAct?.distance_km ?? log?.analysis?.distance_km}km{linkedAct?.duration_seconds ? ` · ${Math.round(linkedAct.duration_seconds/60)}min` : log?.analysis?.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
+                          {(log?.coach_reply || linkedAct?.coach_reply) && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
+                        </div>
+                        <div style={{ color:"#2a2a2a", fontSize:18 }}>›</div>
+                      </div>
+                    );
+                  })}
+                  {extraActs.map(act => (
+                    <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setScreen("extra-activity"); }} style={{ background:"#1a0505", border:"1px solid #7f1d1d", borderRadius:2, padding:"14px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}>
+                      <div style={{ width:40, height:40, borderRadius:"50%", background:"#3b0a0a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>➕</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between" }}>
+                          <div style={{ fontSize:12, color:C.mid }}>{act.activity_date.slice(5).replace("-"," ")}</div>
+                          <div style={{ fontSize:11, color:C.crimson }}>EXTRA RUN</div>
+                        </div>
+                        <div style={{ fontWeight:700, fontSize:15, marginTop:2 }}>{act.activity_type || "Run"}</div>
+                        <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}</div>
+                        {act.notes && <div style={{ fontSize:11, color:C.mid, marginTop:3, fontStyle:"italic" }}>"{act.notes}"</div>}
+                        {act.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 Coach replied</div>}
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 <button onClick={()=>setScreen("history")} style={{
