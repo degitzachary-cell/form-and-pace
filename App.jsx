@@ -5,6 +5,7 @@ import { supabase, STRAVA_CLIENT_ID, exchangeStravaCode, stravaCall } from "./li
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr,
   extractStravaData, getStats, prettyEmailName, todayStr, newId,
+  snapToMonday, thisMonday,
 } from "./lib/helpers.js";
 import { C, S, TAG_STYLE, TYPE_STYLE, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
 import {
@@ -435,14 +436,7 @@ export default function App() {
       return;
     }
     if (coachActiveMonday) return;
-    const t = new Date(); t.setHours(0, 0, 0, 0);
-    const dow = t.getDay();
-    const offset = dow === 0 ? -6 : 1 - dow;
-    t.setDate(t.getDate() + offset);
-    const y = t.getFullYear();
-    const m = String(t.getMonth() + 1).padStart(2, "0");
-    const d = String(t.getDate()).padStart(2, "0");
-    setCoachActiveMonday(`${y}-${m}-${d}`);
+    setCoachActiveMonday(thisMonday());
   }, [role, coachScreen, dashAthlete, coachActiveMonday, isDesktop]);
 
   // ── Live sync: subscribe to session_logs + activities changes ──
@@ -839,14 +833,7 @@ export default function App() {
   // Default the athlete week to the current week (Monday of today) on first mount.
   useEffect(() => {
     if (role !== "athlete" || activeMonday !== null) return;
-    const t = new Date(); t.setHours(0, 0, 0, 0);
-    const dow = t.getDay();              // 0 = Sun, 1 = Mon, ... 6 = Sat
-    const offset = dow === 0 ? -6 : 1 - dow;
-    t.setDate(t.getDate() + offset);
-    const y = t.getFullYear();
-    const m = String(t.getMonth() + 1).padStart(2, "0");
-    const d = String(t.getDate()).padStart(2, "0");
-    setActiveMonday(`${y}-${m}-${d}`);
+    setActiveMonday(thisMonday());
   }, [role, activeMonday]);
 
   // Index activities by athlete + date for O(1) lookups in render loops.
@@ -1874,17 +1861,9 @@ export default function App() {
             const actByDate = {};
             for (const a of athActs) if (a.source === "session") actByDate[a.activity_date] = a;
 
-            const snapToMonday = (dateStr) => {
-              if (!dateStr) return;
-              const d = new Date(dateStr + "T00:00:00");
-              if (isNaN(d)) return;
-              const dow = d.getDay();
-              const off = dow === 0 ? -6 : 1 - dow;
-              d.setDate(d.getDate() + off);
-              const y = d.getFullYear();
-              const m = String(d.getMonth() + 1).padStart(2, "0");
-              const dy = String(d.getDate()).padStart(2, "0");
-              setCoachActiveMonday(`${y}-${m}-${dy}`);
+            const snapCoachMonday = (dateStr) => {
+              const mon = snapToMonday(dateStr);
+              if (mon) setCoachActiveMonday(mon);
             };
 
             return (
@@ -1894,7 +1873,7 @@ export default function App() {
                   <input
                     type="date"
                     value={coachActiveMonday}
-                    onChange={(e) => snapToMonday(e.target.value)}
+                    onChange={(e) => snapCoachMonday(e.target.value)}
                     style={{
                       width:"100%",
                       background: isCurrent ? C.crimson : C.white,
@@ -2952,17 +2931,9 @@ export default function App() {
             );
             const sessionsDone = w.sessions.filter(s => logs[s.id] || actByDate[sessionDateStr(w.weekStart, s.day)]).length;
 
-            const snapToMonday = (dateStr) => {
-              if (!dateStr) return;
-              const d = new Date(dateStr + "T00:00:00");
-              if (isNaN(d)) return;
-              const dow = d.getDay();
-              const off = dow === 0 ? -6 : 1 - dow;
-              d.setDate(d.getDate() + off);
-              const y = d.getFullYear();
-              const m = String(d.getMonth() + 1).padStart(2, "0");
-              const dy = String(d.getDate()).padStart(2, "0");
-              setActiveMonday(`${y}-${m}-${dy}`);
+            const snapAthleteMonday = (dateStr) => {
+              const mon = snapToMonday(dateStr);
+              if (mon) setActiveMonday(mon);
             };
 
             return (
@@ -2972,7 +2943,7 @@ export default function App() {
                   <input
                     type="date"
                     value={activeMonday}
-                    onChange={(e) => snapToMonday(e.target.value)}
+                    onChange={(e) => snapAthleteMonday(e.target.value)}
                     style={{
                       width:"100%",
                       background: isCurrent ? C.crimson : C.white,
