@@ -121,6 +121,11 @@ function DraggableSession({ session, log, linkedAct, onClick }) {
           {isLogged && <div style={{ fontSize: 10, color: C.green, flexShrink: 0 }}>✓</div>}
         </div>
         <div style={{ fontSize: 11, color: ts.accent, marginTop: 2, fontFamily: "monospace" }}>{session.pace}</div>
+        {log?.analysis?.actual_date && session.day && (
+          <div style={{ fontSize: 9, color: C.crimson, marginTop: 3, letterSpacing: 1, fontWeight: 600 }}>
+            ↪ MOVED FROM {session.day.slice(0, 3).toUpperCase()}
+          </div>
+        )}
         {(linkedAct || log?.analysis?.distance_km) && (
           <div style={{ fontSize: 10, color: C.mid, marginTop: 2 }}>
             {linkedAct?.distance_km ?? log?.analysis?.distance_km}km
@@ -475,6 +480,65 @@ export default function App() {
     setCoachActiveMonday(`${y}-${m}-${d}`);
   }, [role, coachScreen, dashAthlete, coachActiveMonday]);
 
+  // ── Live sync: subscribe to session_logs + activities changes ──
+  // Both roles benefit: athlete sees coach replies live; coach sees athlete
+  // logs and drag-reschedules without a refresh.
+  useEffect(() => {
+    if (!user || !role) return;
+    const email = user.email?.toLowerCase();
+    const applyLog = (row) => {
+      if (!row) return;
+      if (role === "athlete" && row.athlete_email?.toLowerCase() !== email) return;
+      setLogs(prev => ({ ...prev, [row.session_id]: row }));
+    };
+    const removeLog = (row) => {
+      if (!row?.session_id) return;
+      setLogs(prev => { const next = { ...prev }; delete next[row.session_id]; return next; });
+    };
+    const applyAct = (row) => {
+      if (!row) return;
+      if (role === "athlete" && row.athlete_email?.toLowerCase() !== email) return;
+      setActivities(prev => {
+        const i = prev.findIndex(a => a.id === row.id);
+        if (i === -1) return [row, ...prev];
+        const next = prev.slice(); next[i] = row; return next;
+      });
+    };
+    const removeAct = (row) => {
+      if (!row?.id) return;
+      setActivities(prev => prev.filter(a => a.id !== row.id));
+    };
+    const ch = supabase
+      .channel("form-pace-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "session_logs" }, payload => {
+        if (payload.eventType === "DELETE") removeLog(payload.old);
+        else applyLog(payload.new);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "activities" }, payload => {
+        if (payload.eventType === "DELETE") removeAct(payload.old);
+        else applyAct(payload.new);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user, role]);
+
+  // ── Refresh logs+activities when coach opens an athlete or returns to tab ──
+  // The boot-time loadLogs() runs once; without this the coach sees stale data
+  // when athletes drag-reschedule or log new runs.
+  useEffect(() => {
+    if (role !== "coach") return;
+    if (coachScreen === "athlete" && dashAthlete) {
+      Promise.all([loadLogs(), loadActivities()]).catch(e => console.error("coach refresh error:", e));
+    }
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        Promise.all([loadLogs(), loadActivities()]).catch(e => console.error("coach refresh error:", e));
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [role, coachScreen, dashAthlete]);
+
   // ── Refresh session log when coach opens a session detail ──
   // Single round-trip; no separate activities re-fetch (the home query already
   // pulls them, and clicking a row already re-renders against the latest state).
@@ -739,11 +803,29 @@ export default function App() {
     const scheduledDate = sessionDateStr(weekStart, session.day);
     const existing = logs[sessionId];
     const existingAnalysis = existing?.analysis || {};
+    const prevDate = existingAnalysis.actual_date || scheduledDate;
     const nextAnalysis = { ...existingAnalysis };
     if (newDate === scheduledDate) delete nextAnalysis.actual_date;
     else nextAnalysis.actual_date = newDate;
     try { await saveLog(sessionId, { analysis: nextAnalysis }); }
     catch (e) { console.error("drag-move saveLog error:", e); }
+
+    // Keep the linked activity's date in sync so coach views, weekly km totals,
+    // and actByDate lookups land on the new day too. Only updates if a
+    // matching activity exists at the previous date.
+    if (prevDate && prevDate !== newDate) {
+      const linked = findAthAct(user.email, prevDate);
+      if (linked) {
+        const { data: updAct, error } = await supabase
+          .from("activities")
+          .update({ activity_date: newDate })
+          .eq("id", linked.id)
+          .select()
+          .single();
+        if (error) console.error("drag-move activity sync error:", error);
+        if (updAct) setActivities(prev => prev.map(a => a.id === updAct.id ? updAct : a));
+      }
+    }
   };
 
   // Default the athlete week to the current week (Monday of today) on first mount.
@@ -1368,6 +1450,9 @@ export default function App() {
                                     </div>
                                     {log?.analysis?.distance_km && (
                                       <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>
+                                    )}
+                                    {log?.analysis?.actual_date && s.day && (
+                                      <div style={{ fontSize:9, color:C.crimson, marginTop:2, letterSpacing:1, fontWeight:600 }}>↪ MOVED FROM {s.day.slice(0,3).toUpperCase()}</div>
                                     )}
                                     {log?.coach_reply && <div style={{ fontSize:10, color:"#14365f", marginTop:2 }}>💬 You replied</div>}
                                   </div>
