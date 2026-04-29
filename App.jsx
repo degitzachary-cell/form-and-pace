@@ -13,11 +13,49 @@ import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPick
 // New athletes get a blank program until their coach creates one.
 const ATHLETE_PROGRAMS = {};
 
+// Distance categories used in the profile form. "other" is free text;
+// the rest accept time strings (MM:SS or H:MM:SS). All fields are optional.
+const PROFILE_DISTANCES = [
+  { key: "5k",             label: "5km",           placeholder: "MM:SS"   },
+  { key: "10k",            label: "10km",          placeholder: "MM:SS"   },
+  { key: "half_marathon",  label: "Half Marathon", placeholder: "H:MM:SS" },
+  { key: "full_marathon",  label: "Full Marathon", placeholder: "H:MM:SS" },
+];
+
+const EMPTY_PB_GOAL = { "5k": "", "10k": "", "half_marathon": "", "full_marathon": "", "other": "" };
+
+const PB_GOAL_LABEL = { "5k": "5K", "10k": "10K", "half_marathon": "HM", "full_marathon": "FM" };
+
+// Strip empty fields out of a pbs/goals object. Returns null if nothing's left,
+// so we don't end up with `{}` rows in the DB.
+function cleanPbGoal(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  const cleaned = {};
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    if (typeof v === "string" && v.trim()) cleaned[k] = v.trim();
+  }
+  return Object.keys(cleaned).length ? cleaned : null;
+}
+
+// Render a pbs/goals object as "5K 19:25 · HM 1:30:14 · FM 3:15:42"
+// (plus the free-text "other" appended last).
+function fmtPbGoal(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  const parts = [];
+  for (const k of ["5k", "10k", "half_marathon", "full_marathon"]) {
+    if (obj[k]) parts.push(`${PB_GOAL_LABEL[k]} ${obj[k]}`);
+  }
+  if (obj.other) parts.push(obj.other);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 // Shared form used by athlete self-edit and coach edit-on-behalf screens.
 function ProfileForm({ form, setForm, email }) {
   const inputStyle = { ...S.input };
   const labelStyle = { fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: "uppercase", marginBottom: 6 };
   const setField = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  const setNested = (group, k) => (e) => setForm(f => ({ ...f, [group]: { ...f[group], [k]: e.target.value } }));
   return (
     <div style={{ background: C.white, border: `1px solid ${C.rule}`, borderRadius: 2, padding: "16px 18px", marginBottom: 14 }}>
       {email && (
@@ -30,17 +68,33 @@ function ProfileForm({ form, setForm, email }) {
         <div style={labelStyle}>Name</div>
         <input style={inputStyle} value={form.name} onChange={setField("name")} placeholder="Full name" />
       </div>
-      <div style={{ marginBottom: 14 }}>
-        <div style={labelStyle}>Goal</div>
-        <input style={inputStyle} value={form.goal} onChange={setField("goal")} placeholder="e.g. <1:30 HM" />
-      </div>
-      <div style={{ marginBottom: 14 }}>
-        <div style={labelStyle}>Current PB</div>
-        <input style={inputStyle} value={form.current_pb} onChange={setField("current_pb")} placeholder="e.g. HM 1:32 / FM 3:18" />
-      </div>
-      <div>
+      <div style={{ marginBottom: 18 }}>
         <div style={labelStyle}>Avatar (initials)</div>
         <input style={inputStyle} maxLength={3} value={form.avatar} onChange={setField("avatar")} placeholder="e.g. JB" />
+      </div>
+
+      <div style={{ fontSize: 10, letterSpacing: 2, color: C.crimson, textTransform: "uppercase", marginBottom: 4 }}>PBs &amp; Goals</div>
+      <div style={{ fontSize: 11, color: C.mid, marginBottom: 10, lineHeight: 1.5 }}>
+        Leave any field blank if you don't have a PB or goal for that distance.
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 6, paddingLeft: 110 }}>
+        <div style={{ flex: 1, ...labelStyle, marginBottom: 0 }}>Current PB</div>
+        <div style={{ flex: 1, ...labelStyle, marginBottom: 0 }}>Goal</div>
+      </div>
+
+      {PROFILE_DISTANCES.map(({ key, label, placeholder }) => (
+        <div key={key} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <div style={{ flex: "0 0 102px", fontSize: 13, color: C.navy, fontWeight: 600 }}>{label}</div>
+          <input style={{ ...inputStyle, flex: 1 }} value={form.pbs[key]   || ""} onChange={setNested("pbs",   key)} placeholder={placeholder} />
+          <input style={{ ...inputStyle, flex: 1 }} value={form.goals[key] || ""} onChange={setNested("goals", key)} placeholder={placeholder} />
+        </div>
+      ))}
+
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 4 }}>
+        <div style={{ flex: "0 0 102px", fontSize: 13, color: C.navy, fontWeight: 600, paddingTop: 8 }}>Other</div>
+        <textarea style={{ ...S.textarea, flex: 1, minHeight: 50 }} value={form.pbs.other   || ""} onChange={setNested("pbs",   "other")} placeholder="e.g. Trail 50km PB" />
+        <textarea style={{ ...S.textarea, flex: 1, minHeight: 50 }} value={form.goals.other || ""} onChange={setNested("goals", "other")} placeholder="e.g. Sub-elite by 2027" />
       </div>
     </div>
   );
@@ -69,7 +123,7 @@ export default function App() {
 
   // Profile editor state — used by both athlete (self-edit) and coach
   // (edit-on-behalf). The form is populated when entering either profile screen.
-  const [profileForm, setProfileForm] = useState({ name: "", goal: "", current_pb: "", avatar: "" });
+  const [profileForm, setProfileForm] = useState({ name: "", avatar: "", pbs: { ...EMPTY_PB_GOAL }, goals: { ...EMPTY_PB_GOAL } });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileStatus, setProfileStatus] = useState(null);
 
@@ -155,6 +209,8 @@ export default function App() {
             ...(p.goal        ? { goal:    p.goal        } : {}),
             ...(p.current_pb  ? { current: p.current_pb  } : {}),
             ...(p.avatar      ? { avatar:  p.avatar      } : {}),
+            ...(p.pbs         ? { pbs:     p.pbs         } : {}),
+            ...(p.goals       ? { goals:   p.goals       } : {}),
             weeks: existing.weeks || [],
           };
         });
@@ -596,13 +652,15 @@ export default function App() {
 
   // ── Profile editor ──
   // Populate the form whenever an athlete or coach enters the profile screen.
+  // Pre-fill from the JSONB pbs/goals if present; falls back to empty fields
+  // when the athlete hasn't migrated to the structured format yet.
   useEffect(() => {
     if (role === "athlete" && screen === "profile" && profile) {
       setProfileForm({
         name: profile.name || "",
-        goal: profile.goal || "",
-        current_pb: profile.current_pb || "",
         avatar: profile.avatar || "",
+        pbs:   { ...EMPTY_PB_GOAL, ...(profile.pbs   || {}) },
+        goals: { ...EMPTY_PB_GOAL, ...(profile.goals || {}) },
       });
       setProfileStatus(null);
     }
@@ -613,9 +671,9 @@ export default function App() {
       const ap = athletePrograms[dashAthlete] || {};
       setProfileForm({
         name: ap.name || "",
-        goal: ap.goal && ap.goal !== "—" ? ap.goal : "",
-        current_pb: ap.current && ap.current !== "—" ? ap.current : "",
         avatar: ap.avatar || "",
+        pbs:   { ...EMPTY_PB_GOAL, ...(ap.pbs   || {}) },
+        goals: { ...EMPTY_PB_GOAL, ...(ap.goals || {}) },
       });
       setProfileStatus(null);
     }
@@ -627,12 +685,17 @@ export default function App() {
     setProfileStatus(null);
     try {
       const key = targetEmail.toLowerCase();
+      const cleanedPbs   = cleanPbGoal(profileForm.pbs);
+      const cleanedGoals = cleanPbGoal(profileForm.goals);
       const payload = {
         email: key,
         name: profileForm.name.trim() || null,
-        goal: profileForm.goal.trim() || null,
-        current_pb: profileForm.current_pb.trim() || null,
         avatar: profileForm.avatar.trim() || null,
+        pbs:   cleanedPbs,
+        goals: cleanedGoals,
+        // Keep legacy text columns in sync for screens that still read them.
+        current_pb: fmtPbGoal(cleanedPbs),
+        goal:       fmtPbGoal(cleanedGoals),
         role: "athlete",
       };
       const { data, error } = await supabase
@@ -654,6 +717,8 @@ export default function App() {
             goal:    data.goal       || existing.goal,
             current: data.current_pb || existing.current,
             avatar:  data.avatar     || existing.avatar,
+            pbs:     data.pbs        ?? existing.pbs,
+            goals:   data.goals      ?? existing.goals,
             weeks:   existing.weeks  || [],
           },
         };
@@ -830,7 +895,7 @@ export default function App() {
                   </div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontWeight:700, fontSize:16, color:C.navy, fontFamily:S.displayFont }}>{displayName}</div>
-                    <div style={{ fontSize:12, color:C.mid, marginTop:2 }}>Goal: {data.goal || "—"} · PB: {data.current || "—"}</div>
+                    <div style={{ fontSize:12, color:C.mid, marginTop:2 }}>Goal: {fmtPbGoal(data.goals) || data.goal || "—"} · PB: {fmtPbGoal(data.pbs) || data.current || "—"}</div>
                   </div>
                   <div style={{ textAlign:"right" }}>
                     <div style={{ fontSize:16, fontWeight:900, color:C.navy }}>{thisWeekKm.toFixed(1)}</div>
@@ -1387,8 +1452,8 @@ export default function App() {
               <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>Season Goal</div>
               <div style={{ fontSize:11, color:C.mid }}>Edit ›</div>
             </div>
-            <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>{athleteData.goal || "Set your goal"}</div>
-            <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>Current PB: {athleteData.current || "—"}</div>
+            <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>{fmtPbGoal(profile?.goals) || athleteData.goal || "Set your goal"}</div>
+            <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>Current PB: {fmtPbGoal(profile?.pbs) || athleteData.current || "—"}</div>
           </div>
 
           {/* 8-Week Rolling Volume */}
