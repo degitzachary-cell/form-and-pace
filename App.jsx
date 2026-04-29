@@ -914,8 +914,14 @@ export default function App() {
 
   // Drag sensors: small distance threshold so taps still register as clicks.
   const dndSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor,   { activationConstraint: { delay: 180, tolerance: 6 } }),
+    // Desktop: small move threshold so a click on a session card still opens
+    // the detail; only a deliberate drag (>= 8px) starts the drag overlay.
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    // Touch: require a 500ms hold before dragging activates. Below that
+    // delay, finger moves are treated as scrolls. Tolerance lets the user's
+    // finger drift up to 10px during the press without cancelling — phones
+    // wobble — while still cancelling the press if they actually scroll.
+    useSensor(TouchSensor, { activationConstraint: { delay: 500, tolerance: 10 } }),
   );
 
   // Persist a session's actual_date when dragged to a new day in the same week.
