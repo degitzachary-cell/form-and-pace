@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Form & Pace — Screens · Batch 4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#fbfaf7;--ink:#1c1d22;--muted:#8a8a8f;--rule:#e7e4dc;--accent:#b85a3c;--accent-soft:#f1d9cf;
+    --type-easy:#2f5d3a;--type-speed:#8a2a2a;--type-tempo:#c2691f;--type-recovery:#335f86;--type-long:#5b3a7a}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#ece9e2;font-family:'Inter',system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:48px 24px 80px}
+  .wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+  h1.lab{font-family:'Fraunces',serif;font-weight:400;font-size:22px;letter-spacing:-0.01em;margin:0}
+  .row{display:flex;gap:32px;flex-wrap:wrap;justify-content:center}
+  .case{display:flex;flex-direction:column;gap:12px;align-items:center}
+  .case .caption{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted)}
+  .phone{width:380px;background:var(--paper);border-radius:36px;box-shadow:0 30px 60px -30px rgba(20,20,30,0.25);overflow:hidden}
+  .phone-inner{padding:28px 26px 36px;min-height:760px;display:flex;flex-direction:column}
+
+  .navbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+  .navbar .back,.navbar .save{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);cursor:pointer}
+  .navbar .save{color:var(--accent)}
+  .navbar .title{font-family:'Fraunces',serif;font-size:18px}
+
+  .h-display{font-family:'Fraunces',serif;font-size:30px;letter-spacing:-0.02em;margin:0 0 4px}
+  .lede{color:var(--muted);font-size:13px;margin-bottom:24px}
+
+  /* Coach home — athlete list */
+  .athlete{display:flex;gap:14px;padding:18px 0;border-bottom:1px solid var(--rule);align-items:center}
+  .athlete:last-child{border-bottom:0}
+  .ath-mono{width:42px;height:42px;border-radius:50%;background:var(--accent-soft);display:grid;place-items:center;font-family:'Fraunces',serif;font-size:16px;color:var(--accent);flex-shrink:0}
+  .ath-body{flex:1;min-width:0}
+  .ath-name{font-family:'Fraunces',serif;font-size:17px;letter-spacing:-0.01em;line-height:1.2;margin-bottom:3px}
+  .ath-sub{font-size:11.5px;color:var(--muted);letter-spacing:0.01em}
+  .ath-status{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;display:flex;align-items:center;gap:6px;margin-top:4px}
+  .ath-status.on{color:var(--type-easy)}
+  .ath-status.warn{color:var(--type-tempo)}
+  .ath-status.off{color:var(--muted)}
+  .ath-status::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+  .ath-arrow{color:var(--muted);font-size:18px}
+
+  .seg{display:flex;border:1px solid var(--rule);border-radius:999px;padding:3px;margin-bottom:18px}
+  .seg button{flex:1;height:30px;border:0;background:transparent;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);cursor:pointer;border-radius:999px}
+  .seg button.on{background:var(--ink);color:var(--paper)}
+
+  /* Coach week (re-uses week view, plus + ADD WORKOUT affordance per day) */
+  .hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
+  .hdr .month{font-family:'Fraunces',serif;font-size:22px;letter-spacing:-0.02em}
+  .hdr .week-meta{font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)}
+  .athlete-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:var(--accent-soft);color:var(--accent);border-radius:999px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:14px;align-self:flex-start}
+  .weekbar{display:flex;align-items:center;justify-content:space-between;padding:6px 0 14px;border-bottom:1px solid var(--rule);margin-bottom:6px}
+  .weekbar .arrow{width:24px;height:24px;display:grid;place-items:center;color:var(--muted);font-size:14px}
+  .weekbar .range{font-family:'Fraunces',serif;font-size:14px}
+
+  .timeline{position:relative;padding-left:62px}
+  .timeline::before{content:"";position:absolute;left:54px;top:6px;bottom:6px;width:1px;background:var(--rule)}
+  .day{position:relative;padding:14px 0 14px 18px;border-bottom:1px solid var(--rule)}
+  .day:last-child{border-bottom:0}
+  .day .stamp{position:absolute;left:-62px;top:14px;width:54px;text-align:right;padding-right:18px}
+  .day .num{font-family:'Fraunces',serif;font-weight:300;font-size:26px;line-height:1;letter-spacing:-0.02em}
+  .day .dow{margin-top:3px;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted)}
+  .day::after{content:"";position:absolute;left:-3px;top:20px;width:7px;height:14px;border-radius:1.5px;background:var(--paper);box-shadow:0 0 0 1px var(--rule)}
+  .day[data-type="easy"]::after{background:var(--type-easy);box-shadow:none}
+  .day[data-type="speed"]::after{background:var(--type-speed);box-shadow:none}
+  .day[data-type="tempo"]::after{background:var(--type-tempo);box-shadow:none}
+  .day[data-type="recovery"]::after{background:var(--type-recovery);box-shadow:none}
+  .day[data-type="long"]::after{background:var(--type-long);box-shadow:none}
+  .workout-type{font-size:9.5px;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+  .day[data-type="easy"] .workout-type{color:var(--type-easy)}
+  .day[data-type="speed"] .workout-type{color:var(--type-speed)}
+  .day[data-type="tempo"] .workout-type{color:var(--type-tempo)}
+  .day[data-type="recovery"] .workout-type{color:var(--type-recovery)}
+  .day[data-type="long"] .workout-type{color:var(--type-long)}
+  .workout-title{font-family:'Fraunces',serif;font-weight:400;font-size:15px;line-height:1.25;margin:0 0 4px;letter-spacing:-0.01em}
+  .workout-meta{font-size:11.5px;color:var(--muted)}
+  .workout-meta b{color:var(--ink);font-weight:500}
+  .add{margin-top:4px;display:inline-block;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);background:transparent;border:0;padding:0;cursor:pointer}
+  .day.empty .workout-title{color:var(--muted);font-style:italic;font-weight:300}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1 class="lab">Batch 4 — Coach home · Coach week view</h1>
+
+  <div class="row">
+
+    <!-- Coach home -->
+    <div class="case">
+      <div class="phone"><div class="phone-inner">
+        <div class="navbar"><div class="back">Profile</div><div class="title">Athletes</div><div class="save">+ Add</div></div>
+
+        <h2 class="h-display">Hey, Coach.</h2>
+        <p class="lede">12 athletes · 4 logged today</p>
+
+        <div class="seg">
+          <button class="on">All</button>
+          <button>Active</button>
+          <button>Behind</button>
+        </div>
+
+        <div class="athlete">
+          <div class="ath-mono">AD</div>
+          <div class="ath-body">
+            <div class="ath-name">Alex Doyle</div>
+            <div class="ath-sub">Dublin Marathon · 2:50 target</div>
+            <div class="ath-status on">Logged Tue tempo</div>
+          </div>
+          <div class="ath-arrow">›</div>
+        </div>
+
+        <div class="athlete">
+          <div class="ath-mono">JH</div>
+          <div class="ath-body">
+            <div class="ath-name">Jamie Hughes</div>
+            <div class="ath-sub">Hyrox Pro · sub-1:05</div>
+            <div class="ath-status warn">Missed Mon easy</div>
+          </div>
+          <div class="ath-arrow">›</div>
+        </div>
+
+        <div class="athlete">
+          <div class="ath-mono">CS</div>
+          <div class="ath-body">
+            <div class="ath-name">Chase Stevens</div>
+            <div class="ath-sub">Cork Half · 1:18 target</div>
+            <div class="ath-status on">Logged Mon easy</div>
+          </div>
+          <div class="ath-arrow">›</div>
+        </div>
+
+        <div class="athlete">
+          <div class="ath-mono">ZD</div>
+          <div class="ath-body">
+            <div class="ath-name">Z. Degit</div>
+            <div class="ath-sub">5K · 16:30 target</div>
+            <div class="ath-status off">No recent activity</div>
+          </div>
+          <div class="ath-arrow">›</div>
+        </div>
+
+        <div class="athlete">
+          <div class="ath-mono">MR</div>
+          <div class="ath-body">
+            <div class="ath-name">Mara Reilly</div>
+            <div class="ath-sub">Berlin Marathon · 3:10</div>
+            <div class="ath-status on">On track</div>
+          </div>
+          <div class="ath-arrow">›</div>
+        </div>
+      </div></div>
+      <div class="caption">Coach home</div>
+    </div>
+
+    <!-- Coach week view -->
+    <div class="case">
+      <div class="phone"><div class="phone-inner">
+        <div class="navbar"><div class="back">‹ Athletes</div><div class="title">Plan</div><div class="save">Upload</div></div>
+
+        <span class="athlete-pill">Alex Doyle</span>
+        <div class="hdr"><div class="month">April</div><div class="week-meta">Week 4 · Build</div></div>
+        <div class="weekbar"><div class="arrow">‹</div><div class="range">28 Apr — 4 May</div><div class="arrow">›</div></div>
+
+        <div class="timeline">
+          <div class="day" data-type="easy">
+            <div class="stamp"><div class="num">28</div><div class="dow">Mon</div></div>
+            <div class="workout-type">Easy</div>
+            <h2 class="workout-title">Aerobic shakeout</h2>
+            <div class="workout-meta"><b>6 km</b> · 5:30/km</div>
+          </div>
+          <div class="day" data-type="tempo">
+            <div class="stamp"><div class="num">29</div><div class="dow">Tue</div></div>
+            <div class="workout-type">Tempo</div>
+            <h2 class="workout-title">3 × 2 km @ threshold</h2>
+            <div class="workout-meta"><b>10 km</b> · 4:15/km</div>
+          </div>
+          <div class="day" data-type="recovery">
+            <div class="stamp"><div class="num">30</div><div class="dow">Wed</div></div>
+            <div class="workout-type">Recovery</div>
+            <h2 class="workout-title">Easy 45'</h2>
+            <div class="workout-meta">zone 2</div>
+          </div>
+          <div class="day empty">
+            <div class="stamp"><div class="num">01</div><div class="dow">Thu</div></div>
+            <h2 class="workout-title">Rest</h2>
+            <button class="add">+ add workout</button>
+          </div>
+          <div class="day" data-type="speed">
+            <div class="stamp"><div class="num">02</div><div class="dow">Fri</div></div>
+            <div class="workout-type">Speed</div>
+            <h2 class="workout-title">8 × 400m</h2>
+            <div class="workout-meta">@ 5K pace</div>
+          </div>
+          <div class="day" data-type="long">
+            <div class="stamp"><div class="num">03</div><div class="dow">Sat</div></div>
+            <div class="workout-type">Long</div>
+            <h2 class="workout-title">Long run + surges</h2>
+            <div class="workout-meta"><b>22 km</b></div>
+          </div>
+          <div class="day empty">
+            <div class="stamp"><div class="num">04</div><div class="dow">Sun</div></div>
+            <h2 class="workout-title">Rest</h2>
+            <button class="add">+ add workout</button>
+          </div>
+        </div>
+      </div></div>
+      <div class="caption">Coach · week view per athlete</div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
