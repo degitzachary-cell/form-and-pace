@@ -1252,12 +1252,13 @@ export default function App() {
 
       // Replies needed: each athlete-day with content needs at most one reply.
       // Activity is canonical; session_log only adds to the count if no
-      // matching activity exists for that date.
+      // matching activity exists for that date. Read (coach_read_at) items
+      // are excluded.
       const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
       const cutoffStr = fmtDate(cutoff);
       const datesNeedingReply = new Set();
       for (const a of myActs) {
-        if (a.activity_date >= cutoffStr && !a.coach_reply) datesNeedingReply.add(a.activity_date);
+        if (a.activity_date >= cutoffStr && !a.coach_reply && !a.coach_read_at) datesNeedingReply.add(a.activity_date);
       }
       for (const w of weeksList) {
         for (const s of (w.sessions || [])) {
@@ -1267,7 +1268,8 @@ export default function App() {
           if (onDate < cutoffStr) continue;
           const linkedAct = actsByDate.get(onDate);
           const replied = linkedAct?.coach_reply || log.coach_reply;
-          if (!replied) datesNeedingReply.add(onDate);
+          const read = linkedAct?.coach_read_at || log.coach_read_at;
+          if (!replied && !read) datesNeedingReply.add(onDate);
         }
       }
       const repliesNeeded = datesNeedingReply.size;
@@ -1503,12 +1505,13 @@ export default function App() {
         if (onDate < cutoffStr) continue;
         const linkedAct = myActsByDate.get(onDate);
         if ((linkedAct?.coach_reply) || log.coach_reply) continue;
-        items.push({ kind:"session", date: onDate, email, athleteName: data.name || prettyEmailName(email), title: sess.type, snippet: log.feedback, sess, log });
+        if ((linkedAct?.coach_read_at) || log.coach_read_at) continue;
+        items.push({ kind:"session", date: onDate, email, athleteName: data.name || prettyEmailName(email), title: sess.type, snippet: log.feedback, sess, log, linkedAct });
         seen.add(`${email}|${onDate}`);
       }
     }
     for (const a of activities) {
-      if (a.coach_reply) continue;
+      if (a.coach_reply || a.coach_read_at) continue;
       if (a.activity_date < cutoffStr) continue;
       const data = athletePrograms[a.athlete_email?.toLowerCase()];
       if (!data) continue;
@@ -1524,33 +1527,92 @@ export default function App() {
         <div style={S.grain}/>
         <Header title="Reply Inbox" subtitle={`${items.length} awaiting reply`} onBack={() => setCoachScreen("dashboard")} />
         <div style={{ maxWidth:520, margin:"0 auto", padding:"24px 16px 80px" }}>
+          {items.length > 0 && (
+            <button onClick={async () => {
+              if (!confirm(`Mark all ${items.length} comment${items.length === 1 ? "" : "s"} as read?`)) return;
+              const ts = new Date().toISOString();
+              const actIds = items.filter(it => it.kind === "activity").map(it => it.act.id)
+                .concat(items.filter(it => it.linkedAct?.id).map(it => it.linkedAct.id));
+              const sessionIds = items.filter(it => it.kind === "session").map(it => it.log.session_id);
+              const updates = [];
+              if (actIds.length) {
+                updates.push(supabase.from("activities").update({ coach_read_at: ts }).in("id", actIds).select());
+              }
+              if (sessionIds.length) {
+                updates.push(supabase.from("session_logs").update({ coach_read_at: ts }).in("session_id", sessionIds).select());
+              }
+              const results = await Promise.all(updates);
+              for (const r of results) {
+                if (r.error) { alert("Mark-as-read failed: " + r.error.message); return; }
+              }
+              // Refresh local state from results
+              if (actIds.length) {
+                const updated = results[0].data || [];
+                setActivities(prev => prev.map(a => updated.find(u => u.id === a.id) || a));
+              }
+              if (sessionIds.length) {
+                const idx = actIds.length ? 1 : 0;
+                const updated = results[idx].data || [];
+                setLogs(prev => {
+                  const next = { ...prev };
+                  for (const u of updated) next[u.session_id] = u;
+                  return next;
+                });
+              }
+            }}
+              style={{ width:"100%", marginBottom:14, background:C.navy, color:C.cream, border:0, borderRadius:2, padding:"12px", fontSize:11, letterSpacing:2, fontWeight:700, cursor:"pointer" }}>
+              ✓ MARK ALL AS READ
+            </button>
+          )}
           {items.length === 0 ? (
             <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"32px", textAlign:"center" }}>
               <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:6 }}>Inbox zero.</div>
               <div style={{ fontSize:12, color:C.mid }}>No athlete logs awaiting your reply.</div>
             </div>
           ) : items.map((it, i) => (
-            <div key={i} onClick={() => {
-                setDashAthlete(it.email);
-                if (it.kind === "session") {
-                  setActiveSession({ ...it.sess, athleteEmail: it.email });
-                  setCoachScreen("session");
-                } else {
-                  setActiveExtraActivity(it.act);
-                  setCoachScreen("extra-activity");
-                }
-              }}
-              style={{ ...S.card, marginBottom:10, cursor:"pointer", padding:"14px 16px" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:4 }}>
-                <div style={{ fontWeight:700, fontSize:14, color:C.navy, fontFamily:S.displayFont }}>{it.athleteName}</div>
-                <div style={{ fontSize:10, color:C.mid, letterSpacing:1 }}>{it.date.slice(5).replace("-", "/")}</div>
+            <div key={i}
+              style={{ ...S.card, marginBottom:10, padding:"14px 16px", display:"flex", gap:10, alignItems:"flex-start" }}>
+              <div onClick={() => {
+                  setDashAthlete(it.email);
+                  if (it.kind === "session") {
+                    setActiveSession({ ...it.sess, athleteEmail: it.email });
+                    setCoachScreen("session");
+                  } else {
+                    setActiveExtraActivity(it.act);
+                    setCoachScreen("extra-activity");
+                  }
+                }} style={{ flex:1, cursor:"pointer", minWidth:0 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:4 }}>
+                  <div style={{ fontWeight:700, fontSize:14, color:C.navy, fontFamily:S.displayFont }}>{it.athleteName}</div>
+                  <div style={{ fontSize:10, color:C.mid, letterSpacing:1 }}>{it.date.slice(5).replace("-", "/")}</div>
+                </div>
+                <div style={{ fontSize:12, color: it.kind === "activity" ? C.crimson : C.mid, letterSpacing:1, marginBottom:6, fontWeight: it.kind === "activity" ? 700 : 500 }}>
+                  {it.kind === "activity" ? "EXTRA · " : ""}{it.title.toUpperCase()}
+                </div>
+                <div style={{ fontSize:13, color:C.navy, lineHeight:1.45, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>
+                  {it.snippet}
+                </div>
               </div>
-              <div style={{ fontSize:12, color: it.kind === "activity" ? C.crimson : C.mid, letterSpacing:1, marginBottom:6, fontWeight: it.kind === "activity" ? 700 : 500 }}>
-                {it.kind === "activity" ? "EXTRA · " : ""}{it.title.toUpperCase()}
-              </div>
-              <div style={{ fontSize:13, color:C.navy, lineHeight:1.45, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>
-                {it.snippet}
-              </div>
+              <button onClick={async (e) => {
+                  e.stopPropagation();
+                  const ts = new Date().toISOString();
+                  if (it.kind === "activity") {
+                    const { data, error } = await supabase.from("activities").update({ coach_read_at: ts }).eq("id", it.act.id).select().single();
+                    if (error) { alert("Mark read failed: " + error.message); return; }
+                    if (data) setActivities(prev => prev.map(a => a.id === data.id ? data : a));
+                  } else {
+                    const { data, error } = await supabase.from("session_logs").update({ coach_read_at: ts }).eq("session_id", it.log.session_id).select().single();
+                    if (error) { alert("Mark read failed: " + error.message); return; }
+                    if (data) setLogs(prev => ({ ...prev, [data.session_id]: data }));
+                    if (it.linkedAct?.id) {
+                      await supabase.from("activities").update({ coach_read_at: ts }).eq("id", it.linkedAct.id);
+                    }
+                  }
+                }}
+                title="Mark as read"
+                style={{ background:"transparent", border:`1px solid ${C.rule}`, borderRadius:2, padding:"4px 8px", color:C.mid, fontSize:10, letterSpacing:1, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
+                ✓ READ
+              </button>
             </div>
           ))}
         </div>
