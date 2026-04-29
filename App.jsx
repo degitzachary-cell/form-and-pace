@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { useWindowWidth, useRealtimeSync } from "./lib/hooks.js";
+import { useWindowWidth, useRealtimeSync, useAthleteStats } from "./lib/hooks.js";
 import CoachPlanBuilder from "./CoachPlanBuilder";
 import { supabase, exchangeStravaCode } from "./lib/supabase.js";
 import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail } from "./lib/strava.js";
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr,
-  getStats, prettyEmailName, todayStr, newId,
+  prettyEmailName, todayStr, newId,
   snapToMonday, thisMonday,
 } from "./lib/helpers.js";
 import { C, S, TAG_STYLE, TYPE_STYLE, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
@@ -932,28 +932,7 @@ export default function App() {
     } catch(e) { console.error("coach reply save error:", e); }
   };
 
-  // ── Compliance stats (memoised per athlete) ──
-  // Pre-bucket activities by email so each athlete card avoids a full O(N) filter.
-  const activitiesByEmail = useMemo(() => {
-    const m = new Map();
-    for (const a of activities) {
-      const k = a.athlete_email;
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(a);
-    }
-    return m;
-  }, [activities]);
-
-  const statsCache = useMemo(() => {
-    const m = new Map();
-    for (const [email, prog] of Object.entries(athletePrograms)) {
-      const acts = activitiesByEmail.get(email) || [];
-      m.set(email, getStats(prog, acts, logs, email));
-    }
-    return m;
-  }, [athletePrograms, activitiesByEmail, logs]);
-
-  const statsFor = (email) => statsCache.get(email) || { total: 0, done: 0, missed: 0, partial: 0, rate: 0 };
+  const { activitiesByEmail, statsFor } = useAthleteStats({ activities, athletePrograms, logs });
 
   // ────────────────────────────────────────────────────────────
   //  LOADING
