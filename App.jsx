@@ -251,7 +251,7 @@ export default function App() {
   const [authError,     setAuthError]     = useState(null);
 
   // Athlete state
-  const [screen,        setScreen]        = useState("home");
+  const [screen,        setScreen]        = useState("today");
   const [activeSession, setActiveSession] = useState(null);
   const [activeExtraActivity, setActiveExtraActivity] = useState(null);
   const [activeMonday, setActiveMonday] = useState(null);
@@ -274,7 +274,9 @@ export default function App() {
   const [coachScreen,   setCoachScreen]   = useState("dashboard");
   const [dashAthlete,   setDashAthlete]   = useState(null);
   const [coachReply,    setCoachReply]    = useState("");
+  const [coachFilter,   setCoachFilter]   = useState("all");
   const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
+  const [workoutTemplates, setWorkoutTemplates] = useState([]);
 
   // Load saved plans from Supabase. Athletes only see their own plan;
   // coaches see every plan.
@@ -522,6 +524,17 @@ export default function App() {
     return () => { supabase.removeChannel(ch); };
   }, [user, role]);
 
+  // ── Load coach's workout templates once ──
+  useEffect(() => {
+    if (role !== "coach" || !user?.email) return;
+    supabase.from("workout_templates").select("*").eq("coach_email", user.email.toLowerCase())
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) { console.error("templates load error:", error); return; }
+        setWorkoutTemplates(data || []);
+      });
+  }, [role, user?.email]);
+
   // ── Refresh logs+activities when coach opens an athlete or returns to tab ──
   // The boot-time loadLogs() runs once; without this the coach sees stale data
   // when athletes drag-reschedule or log new runs.
@@ -703,7 +716,7 @@ export default function App() {
     setActiveMonday(null); setCoachActiveMonday(null); setHoveredWeekIdx(null);
     setCoachReply(""); setFeedbackText("");
     setSessionDistKm(""); setSessionDurMin(""); setSessionDateOverride(null);
-    setScreen("home"); setCoachScreen("dashboard");
+    setScreen("today"); setCoachScreen("dashboard");
     setDashAthlete(null);
   };
 
@@ -986,7 +999,7 @@ export default function App() {
       });
       setProfileStatus({ kind: "success", message: "Profile saved." });
       setTimeout(() => {
-        if (role === "athlete") setScreen("home");
+        if (role === "athlete") setScreen("today");
         else setCoachScreen("athlete");
       }, 600);
     } catch (e) {
@@ -1107,80 +1120,172 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   if (role === "coach" && coachScreen === "dashboard") {
     const athletes = Object.entries(athletePrograms);
+    const today = todayStr();
+    const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+
+    // Compute per-athlete: 7-day dot strip, replies-needed count, status flag.
+    const athleteRows = athletes.map(([email, data]) => {
+      const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
+      const sessionsByDate = new Map();
+      for (const w of weeksList) {
+        for (const s of (w.sessions || [])) {
+          const log = logs[s.id];
+          const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
+          if (onDate) sessionsByDate.set(onDate, { s, log });
+        }
+      }
+      const myActs = (activities || []).filter(a => a.athlete_email?.toLowerCase() === email.toLowerCase());
+      const actsByDate = new Map();
+      for (const a of myActs) actsByDate.set(a.activity_date, a);
+
+      const days = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - i);
+        const dStr = fmtDate(d);
+        const isToday = dStr === today;
+        const planned = sessionsByDate.get(dStr);
+        const act = actsByDate.get(dStr);
+        const isLogged = !!act || !!planned?.log?.analysis?.distance_km;
+        let color = C.lightRule;
+        if (isLogged && planned) color = C.green;
+        else if (isLogged) color = "#7a96b8";
+        else if (planned && dStr < today) color = C.crimson;
+        else if (planned) color = C.mid;
+        days.push({ dStr, isToday, color, hasPlan: !!planned, isLogged });
+      }
+
+      // Replies needed: any session_log or activity from this athlete in last 14 days
+      // with no coach_reply.
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
+      const cutoffStr = fmtDate(cutoff);
+      let repliesNeeded = 0;
+      for (const a of myActs) {
+        if (a.activity_date >= cutoffStr && !a.coach_reply) repliesNeeded++;
+      }
+      for (const w of weeksList) {
+        for (const s of (w.sessions || [])) {
+          const log = logs[s.id];
+          if (!log) continue;
+          const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
+          if (onDate >= cutoffStr && log.feedback && !log.coach_reply) repliesNeeded++;
+        }
+      }
+
+      const lastDay = days[days.length-1];
+      const last3 = days.slice(-3);
+      const behind = last3.filter(d => d.hasPlan && !d.isLogged && d.dStr < today).length >= 2;
+      const activeToday = lastDay.isLogged;
+
+      return { email, data, days, repliesNeeded, behind, activeToday };
+    });
+
+    const filteredRows = athleteRows.filter(r => {
+      if (coachFilter === "all") return true;
+      if (coachFilter === "behind") return r.behind;
+      if (coachFilter === "replies") return r.repliesNeeded > 0;
+      if (coachFilter === "active") return r.activeToday;
+      return true;
+    });
+
+    const totalReplies = athleteRows.reduce((a, r) => a + r.repliesNeeded, 0);
+    const logsToday = Object.values(logs).filter(l => l.updated_at?.startsWith(today)).length
+                    + activities.filter(a => a.activity_date === today).length;
+
     return (
       <div style={S.page}>
         <div style={S.grain}/>
         <Header
-          title="Coach Dashboard"
+          title="Athletes"
           subtitle={user.user_metadata?.full_name || user.email}
           right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}
         />
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"24px 16px 80px" }}>
+        <div style={{ maxWidth:520, margin:"0 auto", padding:"24px 16px 80px" }}>
 
-          {/* Summary */}
-          <div style={{ display:"flex", gap:10, marginBottom:28 }}>
+          {/* Summary strip */}
+          <div style={{ display:"flex", gap:10, marginBottom:20 }}>
+            <div style={S.statBox}>
+              <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{athletes.length}</div>
+              <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Athletes</div>
+            </div>
+            <div style={S.statBox}>
+              <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{logsToday}</div>
+              <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Today's Logs</div>
+            </div>
+            <div style={S.statBox}>
+              <div style={{ fontSize:22, fontWeight:900, color: totalReplies > 0 ? C.crimson : C.navy }}>{totalReplies}</div>
+              <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Replies Due</div>
+            </div>
+          </div>
+
+          {/* Tools */}
+          <div style={{ display:"flex", gap:8, marginBottom:18 }}>
+            <button onClick={() => setCoachScreen("inbox")}
+              style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", position:"relative" }}>
+              REPLY INBOX
+              {totalReplies > 0 && <span style={{ position:"absolute", top:-6, right:-6, background:C.crimson, color:C.white, borderRadius:"50%", minWidth:18, height:18, fontSize:10, display:"inline-flex", alignItems:"center", justifyContent:"center", padding:"0 5px", fontWeight:700 }}>{totalReplies}</span>}
+            </button>
+            <button onClick={() => setCoachScreen("templates")}
+              style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>
+              TEMPLATES
+            </button>
+            <button onClick={() => setCoachScreen("plan-builder")}
+              style={{ flex:1, background:"#1a2744", border:"1px solid #2a3a5c", borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:"#e8dcc8", fontWeight:700, cursor:"pointer" }}>
+              PLAN BUILDER
+            </button>
+          </div>
+
+          {/* Filter chips */}
+          <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
             {[
-              { label:"Athletes",    val: athletes.length },
-              { label:"Logs Today",  val: Object.values(logs).filter(l => l.updated_at?.startsWith(new Date().toISOString().split("T")[0])).length },
-              { label:"Avg Compliance", val: athletes.length ? Math.round(athletes.reduce((a,[e])=>a+statsFor(e).rate,0)/athletes.length)+"%" : "–" },
-            ].map((s,i)=>(
-              <div key={i} style={S.statBox}>
-                <div style={{ fontSize:24, fontWeight:900, color:C.navy }}>{s.val}</div>
-                <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>{s.label}</div>
-              </div>
+              { k:"all", label:`All · ${athletes.length}` },
+              { k:"active", label:`Active today · ${athleteRows.filter(r=>r.activeToday).length}` },
+              { k:"behind", label:`Behind · ${athleteRows.filter(r=>r.behind).length}` },
+              { k:"replies", label:`Replies · ${totalReplies}` },
+            ].map(f => (
+              <button key={f.k} onClick={()=>setCoachFilter(f.k)}
+                style={{
+                  background: coachFilter === f.k ? C.navy : "transparent",
+                  color: coachFilter === f.k ? C.cream : C.mid,
+                  border:`1px solid ${coachFilter === f.k ? C.navy : C.rule}`,
+                  borderRadius:99, padding:"6px 12px", fontSize:10, letterSpacing:1.5, fontWeight:700, cursor:"pointer", textTransform:"uppercase"
+                }}>{f.label}</button>
             ))}
           </div>
 
-          {/* Plan Builder button */}
-          <button
-            onClick={() => setCoachScreen("plan-builder")}
-            style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"12px", fontSize:14, fontWeight:700, background:"#1a2744", color:"#e8dcc8", border:"1px solid #2a3a5c", borderRadius:8 }}
-          >
-            ✏️ Plan Builder
-          </button>
-
-          {/* Athlete cards */}
-          {athletes.map(([email, data]) => {
-            const st = statsFor(email);
-            const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
-            const recentSessions = weeksList.flatMap(w=>w.sessions || []).filter(s=>logs[s.id]).slice(-3);
-            const thisWeekKm = weekKm(activities, email, 0);
+          {/* Athlete rows */}
+          {filteredRows.length === 0 ? (
+            <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"24px", textAlign:"center", fontSize:12, color:C.mid }}>
+              No athletes match this filter.
+            </div>
+          ) : filteredRows.map(({ email, data, days, repliesNeeded }) => {
             const displayName = data.name || prettyEmailName(email);
             const avatar = data.avatar || displayName.slice(0, 2).toUpperCase();
+            const goalText = fmtPbGoal(data.goals) || data.goal || "—";
             return (
               <div key={email} onClick={()=>{ setDashAthlete(email); setCoachScreen("athlete"); }}
-                style={{ ...S.card, marginBottom:12, cursor:"pointer" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:14 }}>
-                  <div style={{ width:46, height:46, borderRadius:"50%", background:C.navy, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:14, flexShrink:0, color:C.cream }}>
+                style={{ ...S.card, marginBottom:10, cursor:"pointer", padding:"14px 16px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ width:38, height:38, borderRadius:"50%", background:C.navy, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:12, flexShrink:0, color:C.cream }}>
                     {avatar}
                   </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:700, fontSize:16, color:C.navy, fontFamily:S.displayFont }}>{displayName}</div>
-                    <div style={{ fontSize:12, color:C.mid, marginTop:2 }}>Goal: {fmtPbGoal(data.goals) || data.goal || "—"} · PB: {fmtPbGoal(data.pbs) || data.current || "—"}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{displayName}</div>
+                      {repliesNeeded > 0 && <span style={{ background:C.crimson, color:C.white, borderRadius:99, padding:"1px 7px", fontSize:9, fontWeight:700, letterSpacing:0.5 }}>{repliesNeeded}</span>}
+                    </div>
+                    <div style={{ fontSize:11, color:C.mid, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{goalText}</div>
                   </div>
-                  <div style={{ textAlign:"right" }}>
-                    <div style={{ fontSize:16, fontWeight:900, color:C.navy }}>{thisWeekKm.toFixed(1)}</div>
-                    <div style={{ fontSize:9, color:C.mid, letterSpacing:1, textTransform:"uppercase" }}>km/wk</div>
-                  </div>
-                  <div style={{ color:C.mid, fontSize:20 }}>›</div>
+                  <div style={{ color:C.mid, fontSize:18, flexShrink:0 }}>›</div>
                 </div>
-                <div style={{ background:C.lightRule, borderRadius:2, height:5, marginBottom:8 }}>
-                  <div style={{ width:`${st.rate}%`, height:5, borderRadius:2, background: st.rate>75?C.green:st.rate>40?C.amber:C.crimson, transition:"width 0.5s" }}/>
+                <div style={{ display:"flex", gap:5, marginTop:12, paddingLeft:50 }}>
+                  {days.map((d, i) => (
+                    <div key={i} title={d.dStr} style={{
+                      flex:1, height:8, borderRadius:2, background: d.color,
+                      border: d.isToday ? `2px solid ${C.navy}` : "none",
+                      boxSizing: d.isToday ? "border-box" : "content-box"
+                    }}/>
+                  ))}
                 </div>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:C.mid }}>
-                  <span>{st.done}/{st.total} sessions · {st.rate}% compliance</span>
-                  {st.missed > 0 && <span style={{ color:C.crimson }}>{st.missed} missed</span>}
-                </div>
-                {recentSessions.length > 0 && (
-                  <div style={{ marginTop:10, display:"flex", gap:6, alignItems:"center" }}>
-                    {recentSessions.map(s=>(
-                      <span key={s.id} style={{ background:C.lightRule, borderRadius:2, padding:"3px 8px", fontSize:16 }}>
-                        {logs[s.id]?.analysis?.emoji || "📝"}
-                      </span>
-                    ))}
-                    <span style={{ fontSize:11, color:C.mid, marginLeft:2 }}>recent</span>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -1273,6 +1378,112 @@ export default function App() {
       },
     }));
   };
+
+  if (role === "coach" && coachScreen === "inbox") {
+    const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
+    const cutoffStr = fmtDate(cutoff);
+
+    // Build inbox items: any session_log w/ feedback + no reply, OR activity w/ no reply.
+    const items = [];
+    for (const [email, data] of Object.entries(athletePrograms)) {
+      const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
+      const sessionsById = {};
+      for (const w of weeksList) for (const s of (w.sessions || [])) sessionsById[s.id] = { ...s, weekStart: w.weekStart };
+      for (const log of Object.values(logs)) {
+        if (log.athlete_email?.toLowerCase() !== email.toLowerCase()) continue;
+        if (!log.feedback || log.coach_reply) continue;
+        const sess = sessionsById[log.session_id];
+        if (!sess) continue;
+        const onDate = log.analysis?.actual_date || sessionDateStr(sess.weekStart, sess.day);
+        if (onDate < cutoffStr) continue;
+        items.push({ kind:"session", date: onDate, email, athleteName: data.name || prettyEmailName(email), title: sess.type, snippet: log.feedback, sess, log });
+      }
+    }
+    for (const a of activities) {
+      if (a.coach_reply) continue;
+      if (a.activity_date < cutoffStr) continue;
+      const data = athletePrograms[a.athlete_email?.toLowerCase()];
+      if (!data) continue;
+      // Skip if this activity is linked to a planned session that already appears above.
+      const linkedSession = Object.values(athletePrograms).flatMap(d => (d.weeks || []).flatMap(w => w.sessions.map(s => ({ ...s, weekStart: w.weekStart }))))
+        .find(s => sessionDateStr(s.weekStart, s.day) === a.activity_date && s.athlete_email === a.athlete_email);
+      if (linkedSession) continue;
+      items.push({ kind:"activity", date: a.activity_date, email: a.athlete_email, athleteName: data.name || prettyEmailName(a.athlete_email), title: a.activity_type || "Run", snippet: a.notes || `${a.distance_km}km`, act: a });
+    }
+    items.sort((a, b) => b.date.localeCompare(a.date));
+
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title="Reply Inbox" subtitle={`${items.length} awaiting reply`} onBack={() => setCoachScreen("dashboard")} />
+        <div style={{ maxWidth:520, margin:"0 auto", padding:"24px 16px 80px" }}>
+          {items.length === 0 ? (
+            <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"32px", textAlign:"center" }}>
+              <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:6 }}>Inbox zero.</div>
+              <div style={{ fontSize:12, color:C.mid }}>No athlete logs awaiting your reply.</div>
+            </div>
+          ) : items.map((it, i) => (
+            <div key={i} onClick={() => {
+                setDashAthlete(it.email);
+                if (it.kind === "session") {
+                  setActiveSession({ ...it.sess, athleteEmail: it.email });
+                  setCoachScreen("session");
+                } else {
+                  setActiveExtraActivity(it.act);
+                  setCoachScreen("extra-activity");
+                }
+              }}
+              style={{ ...S.card, marginBottom:10, cursor:"pointer", padding:"14px 16px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:4 }}>
+                <div style={{ fontWeight:700, fontSize:14, color:C.navy, fontFamily:S.displayFont }}>{it.athleteName}</div>
+                <div style={{ fontSize:10, color:C.mid, letterSpacing:1 }}>{it.date.slice(5).replace("-", "/")}</div>
+              </div>
+              <div style={{ fontSize:12, color: it.kind === "activity" ? C.crimson : C.mid, letterSpacing:1, marginBottom:6, fontWeight: it.kind === "activity" ? 700 : 500 }}>
+                {it.kind === "activity" ? "EXTRA · " : ""}{it.title.toUpperCase()}
+              </div>
+              <div style={{ fontSize:13, color:C.navy, lineHeight:1.45, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>
+                {it.snippet}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (role === "coach" && coachScreen === "templates") {
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title="Workout Templates" subtitle={`${workoutTemplates.length} saved`} onBack={() => setCoachScreen("dashboard")} />
+        <div style={{ maxWidth:520, margin:"0 auto", padding:"24px 16px 80px" }}>
+          {workoutTemplates.length === 0 ? (
+            <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"32px", textAlign:"center" }}>
+              <div style={{ fontSize:16, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:6 }}>No templates yet.</div>
+              <div style={{ fontSize:12, color:C.mid, lineHeight:1.5 }}>When editing a workout, hit "Save as template" to reuse it on any athlete's plan.</div>
+            </div>
+          ) : workoutTemplates.map(t => (
+            <div key={t.id} style={{ ...S.card, marginBottom:10, padding:"14px 16px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:10, letterSpacing:2, color:TAG_STYLE[t.tag]?.accent || C.mid, fontWeight:700, marginBottom:4 }}>{(t.tag || "").toUpperCase()}</div>
+                  <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, marginBottom:4 }}>{t.name}</div>
+                  {t.description && <div style={{ fontSize:12, color:C.mid, lineHeight:1.5, marginBottom:4 }}>{t.description}</div>}
+                  {t.pace && <div style={{ fontSize:11, color:C.mid, fontFamily:"monospace" }}>{t.pace}{t.terrain ? ` · ${t.terrain}` : ""}</div>}
+                </div>
+                <button onClick={async () => {
+                  if (!confirm("Delete this template?")) return;
+                  const { error } = await supabase.from("workout_templates").delete().eq("id", t.id);
+                  if (!error) setWorkoutTemplates(prev => prev.filter(x => x.id !== t.id));
+                }} style={{ background:"transparent", border:0, color:C.crimson, fontSize:11, letterSpacing:1, cursor:"pointer", fontWeight:700 }}>DELETE</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (role === "coach" && coachScreen === "plan-builder") {
     return (
@@ -1730,6 +1941,24 @@ export default function App() {
         <div style={S.grain}/>
         <Header title={isNew ? "Add Workout" : "Edit Workout"} subtitle={`${ew.athleteEmail} · ${dayDisplay}`} onBack={()=>{ setEditingWorkout(null); setCoachScreen("athlete"); }}/>
         <div style={{ maxWidth:500, margin:"0 auto", padding:"24px 16px 80px" }}>
+          {workoutTemplates.length > 0 && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Apply Template</div>
+              <select onChange={(e) => {
+                  const tpl = workoutTemplates.find(t => t.id === e.target.value);
+                  if (!tpl) return;
+                  setEditingWorkout(prev => ({ ...prev, prefill: { ...(prev.prefill || {}), type: tpl.type || "EASY", desc: tpl.description || "", pace: tpl.pace || "", terrain: tpl.terrain || "" } }));
+                  e.target.value = "";
+                }}
+                defaultValue=""
+                style={{ ...S.input, width:"100%" }}>
+                <option value="" disabled>Choose a saved template…</option>
+                {workoutTemplates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name} {t.tag ? `· ${t.tag}` : ""}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Type</div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -1777,6 +2006,23 @@ export default function App() {
           }} style={{ ...S.primaryBtn(C.crimson, !canSave), width:"100%", marginBottom:8 }}>
             {isNew ? "Add Workout" : "Save Changes"}
           </button>
+          <button disabled={!canSave} onClick={async () => {
+            const name = prompt("Template name?", (f.desc || "").split("\n")[0].slice(0, 60) || (f.type || "Workout"));
+            if (!name) return;
+            const type = f.type || "EASY";
+            const { data, error } = await supabase.from("workout_templates").insert({
+              coach_email: user.email?.toLowerCase(),
+              name,
+              type,
+              tag: tagFor(type),
+              description: (f.desc || "").trim(),
+              pace: (f.pace || "").trim(),
+              terrain: (f.terrain || "").trim(),
+            }).select().single();
+            if (error) { alert("Save template failed: " + error.message); return; }
+            if (data) setWorkoutTemplates(prev => [data, ...prev]);
+            alert("Template saved.");
+          }} style={{ ...S.ghostBtn, marginBottom:8 }}>Save as template</button>
           {!isNew && (
             <button onClick={async () => {
               if (!confirm("Delete this workout from the plan?")) return;
@@ -1824,7 +2070,148 @@ export default function App() {
   }
 
   // ────────────────────────────────────────────────────────────
-  //  ATHLETE — HOME
+  //  ATHLETE — TODAY (default)
+  // ────────────────────────────────────────────────────────────
+  if (role === "athlete" && screen === "today") {
+    const myActs = activitiesByEmail.get(user.email?.toLowerCase()) || [];
+    const today = todayStr();
+    const t = new Date(); t.setHours(0,0,0,0);
+    const dow = t.getDay();
+    const dayLabel = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dow];
+    const monOff = dow === 0 ? -6 : 1 - dow;
+    const monDate = new Date(t); monDate.setDate(t.getDate() + monOff);
+    const monStr = `${monDate.getFullYear()}-${String(monDate.getMonth()+1).padStart(2,"0")}-${String(monDate.getDate()).padStart(2,"0")}`;
+    const thisWeek = (programEntry?.weeks || []).find(w => w.weekStart === monStr);
+    const allWithMoves = (thisWeek?.sessions || []).map(s => {
+      const log = logs[s.id];
+      const overrideDate = log?.analysis?.actual_date;
+      const onDate = overrideDate || sessionDateStr(monStr, s.day);
+      return { s, log, onDate };
+    });
+    const todaysSession = allWithMoves.find(x => x.onDate === today);
+    const todaysActivity = myActs.find(a => a.activity_date === today);
+    const todaysStrava = stravaActivities.find(a => a.start_date_local?.split("T")[0] === today);
+    const todaysStravaUnimported = todaysStrava && !myActs.some(a => a.strava_data?.id === todaysStrava.id);
+    const dateNice = t.toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" });
+
+    const weekStrip = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => {
+      const dDate = sessionDateStr(monStr, d);
+      const sessionHere = allWithMoves.find(x => x.onDate === dDate);
+      const actHere = myActs.find(a => a.activity_date === dDate);
+      const isLogged = !!actHere || !!sessionHere?.log?.analysis?.distance_km;
+      const isToday = dDate === today;
+      let dotColor = C.lightRule;
+      if (isLogged) dotColor = C.green;
+      else if (sessionHere && dDate < today) dotColor = C.crimson;
+      else if (sessionHere) dotColor = C.mid;
+      return { d, dDate, isToday, isLogged, dotColor, hasPlan: !!sessionHere };
+    });
+
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header
+          title={athleteData.name}
+          subtitle={dateNice}
+          right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}
+        />
+        <div style={{ maxWidth:500, margin:"0 auto", padding:"0 0 80px" }}>
+
+          {/* Today's planned hero */}
+          <div style={{ margin:"20px 16px" }}>
+            <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase", marginBottom:8, fontFamily:S.bodyFont, fontWeight:700 }}>
+              TODAY · {dayLabel.toUpperCase()}
+            </div>
+            {todaysSession ? (
+              <div onClick={() => {
+                  const s = todaysSession.s;
+                  setActiveSession({ ...s, weekStart: monStr });
+                  setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                  setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
+                  const isLogged = !!todaysSession.log || !!todaysActivity;
+                  setScreen(isLogged ? "result" : "session");
+                }}
+                style={{ background:C.white, border:`1px solid ${C.rule}`, borderLeft:`4px solid ${TAG_STYLE[todaysSession.s.tag]?.accent || C.crimson}`, borderRadius:2, padding:"18px 20px", cursor:"pointer" }}>
+                <div style={{ fontSize:11, letterSpacing:2, color:TAG_STYLE[todaysSession.s.tag]?.accent || C.mid, marginBottom:6, fontWeight:700 }}>
+                  {(todaysSession.s.tag || "RUN").toUpperCase()}
+                </div>
+                <div style={{ fontSize:22, fontWeight:900, color:C.navy, fontFamily:S.displayFont, lineHeight:1.15, marginBottom:6 }}>
+                  {todaysSession.s.type}
+                </div>
+                {todaysSession.s.pace && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{todaysSession.s.pace}</div>}
+                {todaysSession.s.description && <div style={{ fontSize:13, color:C.mid, marginTop:8, lineHeight:1.5 }}>{todaysSession.s.description}</div>}
+                {(todaysSession.log || todaysActivity) && (
+                  <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${C.rule}`, fontSize:11, color:C.green, letterSpacing:1, fontWeight:700 }}>
+                    ✓ LOGGED · {todaysActivity?.distance_km ?? todaysSession.log?.analysis?.distance_km}KM
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"24px", textAlign:"center" }}>
+                <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:4 }}>Rest day</div>
+                <div style={{ fontSize:12, color:C.mid }}>No workout scheduled.</div>
+              </div>
+            )}
+          </div>
+
+          {/* Strava slot */}
+          {todaysStravaUnimported && (
+            <div style={{ margin:"0 16px 16px", background:"#fff5e6", border:`1px solid #ffd699`, borderLeft:`3px solid #fc4c02`, borderRadius:2, padding:"12px 16px" }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:"#fc4c02", fontWeight:700, marginBottom:4 }}>FROM STRAVA · UNIMPORTED</div>
+              <div style={{ fontSize:14, fontWeight:700, color:C.navy, marginBottom:2 }}>{todaysStrava.name}</div>
+              <div style={{ fontSize:12, color:C.mid }}>{(todaysStrava.distance/1000).toFixed(1)}km · {Math.round(todaysStrava.moving_time/60)}min</div>
+              <button
+                onClick={() => {
+                  if (todaysSession) {
+                    const s = todaysSession.s;
+                    setActiveSession({ ...s, weekStart: monStr });
+                    setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                    setSessionDateOverride(today);
+                    setSelectedStravaId(todaysStrava.id);
+                    setScreen("session");
+                  } else {
+                    setLogForm({ date: today, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
+                    setEditingActivityId(null);
+                    setSelectedStravaId(todaysStrava.id);
+                    setScreen("log-activity");
+                  }
+                }}
+                style={{ marginTop:8, background:"#fc4c02", color:C.white, border:0, borderRadius:2, padding:"6px 14px", fontSize:11, letterSpacing:1, fontWeight:700, cursor:"pointer" }}>
+                IMPORT &amp; LOG →
+              </button>
+            </div>
+          )}
+
+          {/* Week strip */}
+          <div style={{ margin:"0 16px 16px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 16px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, fontWeight:700 }}>THIS WEEK</div>
+              <button onClick={() => setScreen("home")} style={{ background:"transparent", border:0, color:C.crimson, fontSize:11, letterSpacing:1, fontWeight:700, cursor:"pointer", padding:0 }}>OPEN WEEK ›</button>
+            </div>
+            <div style={{ display:"flex", gap:6 }}>
+              {weekStrip.map(d => (
+                <div key={d.d} onClick={() => setScreen("home")} style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
+                  <div style={{ fontSize:9, color: d.isToday ? C.crimson : C.mid, fontWeight: d.isToday ? 700 : 500, letterSpacing:1, marginBottom:6 }}>{d.d.slice(0,1)}</div>
+                  <div style={{ width:10, height:10, borderRadius:"50%", background:d.dotColor, margin:"0 auto", border: d.isToday ? `2px solid ${C.navy}` : "none", boxSizing:"content-box" }}/>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick links */}
+          <div style={{ margin:"0 16px", display:"flex", gap:8 }}>
+            <button onClick={() => setScreen("home")} style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>WEEK</button>
+            <button onClick={() => setScreen("history")} style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>HISTORY</button>
+            <button onClick={() => setScreen("profile")} style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>PROFILE</button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  ATHLETE — HOME (Week view)
   // ────────────────────────────────────────────────────────────
   if (role === "athlete" && screen === "home") {
     const myActs = activitiesByEmail.get(user.email?.toLowerCase()) || [];
@@ -1845,8 +2232,9 @@ export default function App() {
       <div style={S.page}>
         <div style={S.grain}/>
         <Header
-          title={athleteData.name}
-          subtitle="Training Log"
+          title="This Week"
+          subtitle={athleteData.name}
+          onBack={() => setScreen("today")}
           right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}
         />
         <div style={{ maxWidth:500, margin:"0 auto", padding:"0 0 80px" }}>
