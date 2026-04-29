@@ -60,6 +60,24 @@ function TimeSelect({ value, onChange, withHours }) {
 }
 const EMPTY_PB_GOAL = { "5k": "", "10k": "", "half_marathon": "", "full_marathon": "", "other": "" };
 
+// plan_json comes in two shapes: a bare weeks array (legacy) or an object with
+// {athleteName, athleteGoal, athletePb, weeks}. Returns { weeks, meta } regardless.
+function normalizePlan(pj) {
+  if (!pj) return { weeks: [], meta: {} };
+  if (Array.isArray(pj)) return { weeks: pj, meta: {} };
+  if (typeof pj === "object") {
+    return {
+      weeks: Array.isArray(pj.weeks) ? pj.weeks : [],
+      meta: {
+        name:    pj.athleteName || undefined,
+        goal:    pj.athleteGoal || undefined,
+        current: pj.athletePb   || undefined,
+      },
+    };
+  }
+  return { weeks: [], meta: {} };
+}
+
 const PB_GOAL_LABEL = { "5k": "5K", "10k": "10K", "half_marathon": "HM", "full_marathon": "FM" };
 
 // Strip empty fields out of a pbs/goals object. Returns null if nothing's left,
@@ -297,22 +315,9 @@ export default function App() {
           const key = row.athlete_email?.toLowerCase();
           if (!key) return;
           const existing = updated[key] || {};
-          // plan_json is either a bare weeks array (legacy) or an object with
-          // athleteName/athleteGoal/athletePb/weeks. Coaches edit name/goal/PB
-          // straight into the plan so athletes who haven't signed in yet still
-          // render correctly.
-          const pj = row.plan_json;
-          let weeks = [];
-          let meta = {};
-          if (Array.isArray(pj)) weeks = pj;
-          else if (pj && typeof pj === 'object') {
-            weeks = Array.isArray(pj.weeks) ? pj.weeks : [];
-            meta = {
-              name:    pj.athleteName || undefined,
-              goal:    pj.athleteGoal || undefined,
-              current: pj.athletePb   || undefined,
-            };
-          }
+          // Coaches may edit name/goal/PB straight into the plan so athletes
+          // who haven't signed in yet still render correctly.
+          const { weeks, meta } = normalizePlan(row.plan_json);
           updated[key] = {
             ...existing,
             ...Object.fromEntries(Object.entries(meta).filter(([,v]) => v)),
@@ -727,9 +732,14 @@ export default function App() {
     } catch { setStravaConnected(false); }
   };
 
-  // Auto-fetch recent Strava activities for the rolling volume graph
+  // Auto-fetch recent Strava activities for the rolling volume graph.
+  // Refreshes whenever the tab regains focus so athletes don't manually re-sync.
   useEffect(() => {
-    if (stravaConnected) fetchStravaActivities();
+    if (!stravaConnected) return;
+    fetchStravaActivities();
+    const onVis = () => { if (document.visibilityState === "visible") fetchStravaActivities(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
   }, [stravaConnected]);
 
   const connectStrava = () => {
@@ -1154,22 +1164,27 @@ export default function App() {
         days.push({ dStr, isToday, color, hasPlan: !!planned, isLogged });
       }
 
-      // Replies needed: any session_log or activity from this athlete in last 14 days
-      // with no coach_reply.
+      // Replies needed: each athlete-day with content needs at most one reply.
+      // Activity is canonical; session_log only adds to the count if no
+      // matching activity exists for that date.
       const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
       const cutoffStr = fmtDate(cutoff);
-      let repliesNeeded = 0;
+      const datesNeedingReply = new Set();
       for (const a of myActs) {
-        if (a.activity_date >= cutoffStr && !a.coach_reply) repliesNeeded++;
+        if (a.activity_date >= cutoffStr && !a.coach_reply) datesNeedingReply.add(a.activity_date);
       }
       for (const w of weeksList) {
         for (const s of (w.sessions || [])) {
           const log = logs[s.id];
-          if (!log) continue;
+          if (!log || !log.feedback) continue;
           const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
-          if (onDate >= cutoffStr && log.feedback && !log.coach_reply) repliesNeeded++;
+          if (onDate < cutoffStr) continue;
+          const linkedAct = actsByDate.get(onDate);
+          const replied = linkedAct?.coach_reply || log.coach_reply;
+          if (!replied) datesNeedingReply.add(onDate);
         }
       }
+      const repliesNeeded = datesNeedingReply.size;
 
       const lastDay = days[days.length-1];
       const last3 = days.slice(-3);
@@ -1348,8 +1363,7 @@ export default function App() {
         .select('plan_json')
         .eq('athlete_email', key)
         .maybeSingle();
-      const pj = existing?.plan_json;
-      const existingWeeks = Array.isArray(pj) ? pj : (pj?.weeks || []);
+      const existingWeeks = normalizePlan(existing?.plan_json).weeks;
       if (existingWeeks.length > 0) {
         throw new Error('Refusing to save: existing plan has ' + existingWeeks.length + ' week(s) but the form is empty. Reload the athlete or import a plan first.');
       }
@@ -1384,20 +1398,27 @@ export default function App() {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
     const cutoffStr = fmtDate(cutoff);
 
-    // Build inbox items: any session_log w/ feedback + no reply, OR activity w/ no reply.
+    // Build inbox items: one row per athlete-day. Activity is canonical; if a
+    // session_log + activity both exist for the same date, the session item wins.
     const items = [];
+    const seen = new Set(); // key: email|date
     for (const [email, data] of Object.entries(athletePrograms)) {
       const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
       const sessionsById = {};
       for (const w of weeksList) for (const s of (w.sessions || [])) sessionsById[s.id] = { ...s, weekStart: w.weekStart };
+      const myActsByDate = new Map();
+      for (const a of activities) if (a.athlete_email?.toLowerCase() === email.toLowerCase()) myActsByDate.set(a.activity_date, a);
       for (const log of Object.values(logs)) {
         if (log.athlete_email?.toLowerCase() !== email.toLowerCase()) continue;
-        if (!log.feedback || log.coach_reply) continue;
+        if (!log.feedback) continue;
         const sess = sessionsById[log.session_id];
         if (!sess) continue;
         const onDate = log.analysis?.actual_date || sessionDateStr(sess.weekStart, sess.day);
         if (onDate < cutoffStr) continue;
+        const linkedAct = myActsByDate.get(onDate);
+        if ((linkedAct?.coach_reply) || log.coach_reply) continue;
         items.push({ kind:"session", date: onDate, email, athleteName: data.name || prettyEmailName(email), title: sess.type, snippet: log.feedback, sess, log });
+        seen.add(`${email}|${onDate}`);
       }
     }
     for (const a of activities) {
@@ -1405,11 +1426,10 @@ export default function App() {
       if (a.activity_date < cutoffStr) continue;
       const data = athletePrograms[a.athlete_email?.toLowerCase()];
       if (!data) continue;
-      // Skip if this activity is linked to a planned session that already appears above.
-      const linkedSession = Object.values(athletePrograms).flatMap(d => (d.weeks || []).flatMap(w => w.sessions.map(s => ({ ...s, weekStart: w.weekStart }))))
-        .find(s => sessionDateStr(s.weekStart, s.day) === a.activity_date && s.athlete_email === a.athlete_email);
-      if (linkedSession) continue;
+      const key = `${a.athlete_email?.toLowerCase()}|${a.activity_date}`;
+      if (seen.has(key)) continue;
       items.push({ kind:"activity", date: a.activity_date, email: a.athlete_email, athleteName: data.name || prettyEmailName(a.athlete_email), title: a.activity_type || "Run", snippet: a.notes || `${a.distance_km}km`, act: a });
+      seen.add(key);
     }
     items.sort((a, b) => b.date.localeCompare(a.date));
 
@@ -1500,32 +1520,38 @@ export default function App() {
   }
 
   // ────────────────────────────────────────────────────────────
-  //  COACH → EDIT ATHLETE PROFILE
+  //  PROFILE EDITOR — shared renderer for athlete-self and coach-edit-on-behalf
   // ────────────────────────────────────────────────────────────
+  const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight }) => (
+    <div style={S.page}>
+      <div style={S.grain}/>
+      <Header title={title} subtitle={subtitle} onBack={onBack} right={headerRight} />
+      <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 80px" }}>
+        <ProfileForm form={profileForm} setForm={setProfileForm} email={email} />
+        {profileStatus && (
+          <div style={{ marginBottom: 12, padding: "10px 12px", fontSize: 13, borderRadius: 2,
+            background: profileStatus.kind === "error" ? "#fdf0f0" : "#eef6ec",
+            color:      profileStatus.kind === "error" ? C.crimson : C.green,
+            border: `1px solid ${profileStatus.kind === "error" ? C.crimson : C.green}` }}>
+            {profileStatus.message}
+          </div>
+        )}
+        <button onClick={() => handleSaveProfile(email)} disabled={profileSaving}
+          style={S.primaryBtn(C.crimson, profileSaving)}>
+          {profileSaving ? "Saving…" : "Save profile"}
+        </button>
+      </div>
+    </div>
+  );
+
   if (role === "coach" && coachScreen === "profile" && dashAthlete) {
     const ap = athletePrograms[dashAthlete] || {};
-    const targetName = ap.name || prettyEmailName(dashAthlete);
-    return (
-      <div style={S.page}>
-        <div style={S.grain}/>
-        <Header title={`Edit ${targetName}`} subtitle={dashAthlete} onBack={() => setCoachScreen("athlete")} />
-        <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 80px" }}>
-          <ProfileForm form={profileForm} setForm={setProfileForm} email={dashAthlete} />
-          {profileStatus && (
-            <div style={{ marginBottom: 12, padding: "10px 12px", fontSize: 13, borderRadius: 2,
-              background: profileStatus.kind === "error" ? "#fdf0f0" : "#eef6ec",
-              color:      profileStatus.kind === "error" ? C.crimson : C.green,
-              border: `1px solid ${profileStatus.kind === "error" ? C.crimson : C.green}` }}>
-              {profileStatus.message}
-            </div>
-          )}
-          <button onClick={() => handleSaveProfile(dashAthlete)} disabled={profileSaving}
-            style={S.primaryBtn(C.crimson, profileSaving)}>
-            {profileSaving ? "Saving…" : "Save profile"}
-          </button>
-        </div>
-      </div>
-    );
+    return renderProfileScreen({
+      title: `Edit ${ap.name || prettyEmailName(dashAthlete)}`,
+      subtitle: dashAthlete,
+      email: dashAthlete,
+      onBack: () => setCoachScreen("athlete"),
+    });
   }
 
   // ────────────────────────────────────────────────────────────
@@ -1813,22 +1839,9 @@ export default function App() {
                     <button onClick={async ()=>{
                       if (!coachReply.trim()) return;
                       const ts = new Date().toISOString();
-                      // Try updating session_log first (handles sessions logged via session screen)
-                      const { data: updated, error: updateErr } = await supabase
-                        .from("session_logs")
-                        .update({ coach_reply: coachReply, updated_at: ts })
-                        .eq("session_id", activeSession.id)
-                        .select().maybeSingle();
-                      if (updated) {
-                        setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
-                        setCoachReply("");
-                        return;
-                      }
-                      if (updateErr) {
-                        alert("UPDATE error: " + updateErr.message);
-                        return;
-                      }
-                      // No session_log row — fall back to updating the linked activity
+                      // Write to both stores: activities is canonical (Strava-first),
+                      // session_logs kept populated for backward compatibility.
+                      let wroteAnywhere = false;
                       if (linkedAthAct) {
                         const { data: actUpd, error: actErr } = await supabase
                           .from("activities")
@@ -1837,13 +1850,23 @@ export default function App() {
                           .select().maybeSingle();
                         if (actUpd) {
                           setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a));
-                          setCoachReply("");
-                          return;
-                        }
-                        alert("Activity update error: " + (actErr?.message || "no row returned"));
+                          wroteAnywhere = true;
+                        } else if (actErr) console.error("activity reply error:", actErr);
+                      }
+                      const { data: updated, error: updateErr } = await supabase
+                        .from("session_logs")
+                        .update({ coach_reply: coachReply, updated_at: ts })
+                        .eq("session_id", activeSession.id)
+                        .select().maybeSingle();
+                      if (updated) {
+                        setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
+                        wroteAnywhere = true;
+                      } else if (updateErr) console.error("session_log reply error:", updateErr);
+                      if (!wroteAnywhere) {
+                        alert("No session log or activity found for this session.");
                         return;
                       }
-                      alert("No session log or activity found for this session.");
+                      setCoachReply("");
                     }} disabled={!coachReply.trim()} style={S.primaryBtn("#14365f", !coachReply.trim())}>
                       Send Reply →
                     </button>
@@ -2041,32 +2064,14 @@ export default function App() {
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  //  ATHLETE — PROFILE
-  // ────────────────────────────────────────────────────────────
   if (role === "athlete" && screen === "profile") {
-    return (
-      <div style={S.page}>
-        <div style={S.grain}/>
-        <Header title="My Profile" subtitle="Edit your details" onBack={() => setScreen("home")}
-          right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>} />
-        <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 80px" }}>
-          <ProfileForm form={profileForm} setForm={setProfileForm} email={user.email} />
-          {profileStatus && (
-            <div style={{ marginBottom: 12, padding: "10px 12px", fontSize: 13, borderRadius: 2,
-              background: profileStatus.kind === "error" ? "#fdf0f0" : "#eef6ec",
-              color:      profileStatus.kind === "error" ? C.crimson : C.green,
-              border: `1px solid ${profileStatus.kind === "error" ? C.crimson : C.green}` }}>
-              {profileStatus.message}
-            </div>
-          )}
-          <button onClick={() => handleSaveProfile(user.email)} disabled={profileSaving}
-            style={S.primaryBtn(C.crimson, profileSaving)}>
-            {profileSaving ? "Saving…" : "Save profile"}
-          </button>
-        </div>
-      </div>
-    );
+    return renderProfileScreen({
+      title: "My Profile",
+      subtitle: "Edit your details",
+      email: user.email,
+      onBack: () => setScreen("today"),
+      headerRight: <button onClick={signOut} style={S.signOutBtn}>Sign out</button>,
+    });
   }
 
   // ────────────────────────────────────────────────────────────
