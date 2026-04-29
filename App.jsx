@@ -16,7 +16,7 @@ import {
 import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar } from "./components.jsx";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -1536,8 +1536,29 @@ export default function App() {
       </>
     );
 
+    // Inbox unread count for the left-rail badge — sum of athletes who
+    // have at least one log/activity awaiting a coach reply.
+    const totalRepliesNeeded = athleteRows.reduce((acc, r) => acc + (r.repliesNeeded || 0), 0);
+
     return (
-      <div style={{ ...S.page, ...(isDesktop ? { display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden" } : {}) }}>
+      <div style={{ ...S.page, ...(isDesktop ? { display:"flex", height:"100vh", overflow:"hidden" } : {}) }}>
+        {isDesktop && (
+          <CoachLeftRail
+            current="dashboard"
+            isDesktop={isDesktop}
+            unread={totalRepliesNeeded}
+            coachName={user.user_metadata?.full_name || user.email}
+            onNav={(k) => {
+              if (k === "dashboard" || k === "athletes") setCoachScreen("dashboard");
+              else if (k === "inbox") setCoachScreen("inbox");
+              else if (k === "plans") setCoachScreen("plan-builder");
+              else if (k === "library") setCoachScreen("templates");
+            }}
+            onSignOut={signOut}
+            onSettings={() => alert("Coach settings — coming soon.")}
+          />
+        )}
+        <div style={{ ...(isDesktop ? { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" } : {}) }}>
         <div style={S.grain}/>
         <Header
           title="Athletes"
@@ -1685,6 +1706,7 @@ export default function App() {
             {rosterContent}
           </div>
         )}
+        </div>
       </div>
     );
   }

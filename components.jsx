@@ -42,6 +42,99 @@ export function RtssPillFor({ durationMin, distanceKm, profile, size = 11 }) {
   return <RtssPill rtss={rtss} size={size}/>;
 }
 
+// ─── COACH LEFT RAIL (desktop) ───────────────────────────────────────────────
+// Heavy ink panel on the left edge, paper-tinted text. Five nav items
+// (Dashboard / Athletes / Plans / Inbox / Library) with an inbox count badge,
+// then a bottom hairline + Settings + Sign out. Reserved for desktop layouts;
+// on mobile the coach uses the existing top-bar nav (rail returns null).
+//
+// `current` is the active screen key. `unread` is rendered as a small pill
+// next to Inbox when > 0. `onNav` receives the clicked key.
+export function CoachLeftRail({ current, onNav, unread = 0, coachName = "Coach", onSignOut, onSettings, isDesktop }) {
+  if (!isDesktop) return null;
+
+  const items = [
+    { key: "dashboard", label: "Dashboard" },
+    { key: "athletes", label: "Athletes" },
+    { key: "plans",    label: "Plans" },
+    { key: "inbox",    label: "Inbox", badge: unread > 0 ? unread : null },
+    { key: "library",  label: "Library" },
+  ];
+
+  return (
+    <aside style={{
+      position: "sticky", top: 0,
+      width: 220, minWidth: 220,
+      height: "100vh",
+      background: "var(--c-bgDeep)",
+      color: "var(--c-paper)",
+      borderRight: "1px solid var(--c-ink)",
+      display: "flex", flexDirection: "column",
+      padding: "28px 22px 22px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
+        <span className="fp-seal" style={{ fontSize: 22, color: "var(--c-paper)" }}>✻</span>
+        <span className="t-mono" style={{ fontSize: 11, letterSpacing: "0.18em", color: "var(--c-paper)" }}>FORM &amp; PACE</span>
+      </div>
+
+      <div style={{ marginBottom: 28, paddingBottom: 22, borderBottom: "1px solid var(--c-inkSoft)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 999,
+            background: "var(--c-paper)", color: "var(--c-ink)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "var(--f-display)", fontSize: 15, fontWeight: 500,
+          }}>
+            {(coachName || "C").slice(0, 1).toUpperCase()}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: "var(--f-display)", fontSize: 15, color: "var(--c-paper)", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{coachName}</div>
+            <div className="t-mono" style={{ fontSize: 9, letterSpacing: "0.16em", color: "var(--c-mute)", marginTop: 2 }}>HEAD COACH</div>
+          </div>
+        </div>
+      </div>
+
+      <nav style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+        {items.map(it => {
+          const active = it.key === current;
+          return (
+            <button key={it.key} onClick={() => onNav?.(it.key)}
+              style={{
+                background: active ? "var(--c-ink)" : "transparent",
+                border: 0, color: active ? "var(--c-paper)" : "var(--c-mute)",
+                fontFamily: "var(--f-body)", fontSize: 13, fontWeight: active ? 600 : 500,
+                letterSpacing: "0.04em",
+                padding: "10px 12px", textAlign: "left", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderLeft: active ? "2px solid var(--c-accent)" : "2px solid transparent",
+              }}>
+              <span>{it.label}</span>
+              {it.badge != null && (
+                <span style={{
+                  background: "var(--c-accent)", color: "var(--c-accentInk)",
+                  fontFamily: "var(--f-mono)", fontSize: 10,
+                  padding: "2px 7px", borderRadius: 999, fontWeight: 600, letterSpacing: "0.04em",
+                }}>{it.badge}</span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div style={{ paddingTop: 22, borderTop: "1px solid var(--c-inkSoft)", display: "flex", flexDirection: "column", gap: 6 }}>
+        <button onClick={onSettings}
+          style={{ background: "transparent", border: 0, color: "var(--c-mute)", padding: "8px 12px", fontFamily: "var(--f-body)", fontSize: 12, textAlign: "left", cursor: "pointer", letterSpacing: "0.04em" }}>
+          Settings
+        </button>
+        <button onClick={onSignOut}
+          style={{ background: "transparent", border: 0, color: "var(--c-hot)", padding: "8px 12px", fontFamily: "var(--f-body)", fontSize: 12, textAlign: "left", cursor: "pointer", letterSpacing: "0.04em" }}>
+          Sign out
+        </button>
+      </div>
+    </aside>
+  );
+}
+
 // ─── MOBILE TAB BAR ──────────────────────────────────────────────────────────
 // Sticky bottom nav for the athlete on small screens. Four destinations:
 // Today / Week / Log / Profile. Hairline-top, paper background, ink dot
