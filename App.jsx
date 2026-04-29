@@ -992,42 +992,38 @@ export default function App() {
   //  LOGIN SCREEN
   // ────────────────────────────────────────────────────────────
   if (!user) return (
-    <div style={S.page}>
-      <div style={S.grain}/>
-      <div style={{ maxWidth:400, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
-        <div style={{ fontSize:11, letterSpacing:5, color:C.crimson, textTransform:"uppercase", marginBottom:16, fontFamily:S.bodyFont }}>Training Platform</div>
-        <div style={{ borderTop:`1px solid ${C.rule}`, width:48, margin:"0 auto 24px" }}/>
-        <div style={{ fontSize:48, fontWeight:900, fontFamily:S.displayFont, lineHeight:1.0, marginBottom:6, color:C.navy }}>Form</div>
-        <div style={{ fontSize:14, color:C.mid, fontFamily:S.bodyFont, letterSpacing:4, textTransform:"uppercase", marginBottom:6 }}>&amp;</div>
-        <div style={{ fontSize:48, fontWeight:900, fontFamily:S.displayFont, lineHeight:1.0, marginBottom:24, color:C.navy }}>Pace</div>
-        <div style={{ borderBottom:`1px solid ${C.rule}`, width:48, margin:"0 auto 32px" }}/>
-        <div style={{ fontSize:14, color:C.mid, marginBottom:56, lineHeight:1.6, fontFamily:S.bodyFont }}>
-          Expert coaching for<br/>distance runners
-        </div>
-
-        <button onClick={signInWithGoogle} style={{
-          background:C.navy, color:C.cream, border:"none", borderRadius:2,
-          padding:"16px 28px", fontSize:13, fontWeight:600, cursor:"pointer",
-          display:"flex", alignItems:"center", gap:12, margin:"0 auto",
-          letterSpacing:2, textTransform:"uppercase", fontFamily:S.bodyFont,
-        }}>
-          <svg width="20" height="20" viewBox="0 0 48 48">
-            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-          </svg>
-          Continue with Google
-        </button>
-
-        {authError && (
-          <div style={{ marginTop:20, color:C.crimson, fontSize:13 }}>{authError}</div>
-        )}
-
-        <div style={{ marginTop:48, fontSize:12, color:C.mid, lineHeight:1.8, fontFamily:S.bodyFont }}>
-          Athletes are automatically linked to their program.<br/>
-          Coaches see all athletes and session data.
-        </div>
+    <div style={{ ...S.page, display:"flex", flexDirection:"column", padding:"40px 28px", maxWidth:520, margin:"0 auto" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <span className="fp-seal" style={{ fontSize:28, color:C.hot }}>✻</span>
+        <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.mute }}>A TRAINING JOURNAL</span>
+      </div>
+      <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", margin:"60px 0 40px" }}>
+        <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.2em", color:C.hot, marginBottom:24 }}>FOR DISTANCE RUNNERS</span>
+        <h1 className="t-display" style={{ fontSize:88, fontWeight:400, lineHeight:0.92, margin:0, color:C.ink }}>
+          Form
+          <br/>
+          <span className="t-display-italic" style={{ color:C.mute }}>&amp;</span>
+          <br/>
+          Pace.
+        </h1>
+        <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:19, lineHeight:1.5, color:C.inkSoft, marginTop:28, maxWidth:360 }}>
+          For distance runners and the coaches who push them. Write what you ran. Listen to what your body says back.
+        </p>
+      </div>
+      <button onClick={signInWithGoogle} className="fp-btn" style={{ width:"100%", padding:"18px" }}>
+        <svg width="16" height="16" viewBox="0 0 48 48" style={{ display:"inline-block" }}>
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Continue with Google
+      </button>
+      {authError && (
+        <div style={{ marginTop:16, color:C.hot, fontSize:13, fontFamily:S.bodyFont, textAlign:"center" }}>{authError}</div>
+      )}
+      <div className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.1em", textAlign:"center", marginTop:16 }}>
+        ATHLETES ARE LINKED TO THEIR COACH BY EMAIL.
       </div>
     </div>
   );
