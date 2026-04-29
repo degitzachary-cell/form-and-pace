@@ -1760,8 +1760,12 @@ export default function App() {
                       const isToday = dayDate === todayStr();
                       const sessionsHere = w.sessions
                         .map(s => ({ s, log: logs[s.id] }))
-                        .filter(({ s, log }) => (log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day)) === dayDate);
-                      const extrasHere = extraActs.filter(a => a.activity_date === dayDate);
+                        .filter(({ s, log }) => {
+                          const overrideDate = log?.analysis?.actual_date;
+                          if (overrideDate && dayDate) return overrideDate === dayDate;
+                          return s.day?.slice(0, 3) === dayLabel;
+                        });
+                      const extrasHere = dayDate ? extraActs.filter(a => a.activity_date === dayDate) : [];
                       const hasItems = sessionsHere.length + extrasHere.length > 0;
                       return (
                         <DayRow key={dayLabel} dateStr={dayDate} dayLabel={dayLabel} isToday={isToday} hasItems={hasItems}>
