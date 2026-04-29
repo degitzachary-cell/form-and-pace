@@ -1174,10 +1174,26 @@ export default function App() {
   //  LOADING
   // ────────────────────────────────────────────────────────────
   if (authLoading) return (
-    <div style={{ ...S.page, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ textAlign:"center" }}>
-        <div style={{ fontSize:32, marginBottom:16 }}>⏳</div>
-        <div style={{ color:C.mid, fontSize:14 }}>Loading...</div>
+    <div style={{ ...S.page, display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh" }}>
+      <style>{`
+        @keyframes fp-seal-breathe { 0%,100% { opacity:0.55; transform:scale(1); } 50% { opacity:1; transform:scale(1.04); } }
+        @keyframes fp-dots-fade  { 0%,80%,100% { opacity:0.2; } 40% { opacity:1; } }
+        .fp-loading-seal { animation: fp-seal-breathe 1800ms ease-in-out infinite; transform-origin: center; }
+        .fp-loading-dot  { display:inline-block; animation: fp-dots-fade 1400ms ease-in-out infinite; }
+        .fp-loading-dot:nth-child(2) { animation-delay: 180ms; }
+        .fp-loading-dot:nth-child(3) { animation-delay: 360ms; }
+      `}</style>
+      <div style={{ textAlign:"center", padding:"40px 28px", maxWidth:380 }}>
+        <span className="fp-seal fp-loading-seal" style={{ fontSize:64, color:C.accent, display:"inline-block" }}>✻</span>
+        <div className="t-display" style={{ marginTop:28, fontSize:22, color:C.ink, fontWeight:400, letterSpacing:"-0.01em" }}>
+          One moment
+          <span className="t-display-italic" style={{ color:C.mute, marginLeft:4 }}>
+            <span className="fp-loading-dot">.</span><span className="fp-loading-dot">.</span><span className="fp-loading-dot">.</span>
+          </span>
+        </div>
+        <div className="t-mono" style={{ marginTop:12, fontSize:10, color:C.mute, letterSpacing:"0.18em" }}>
+          FORM &amp; PACE
+        </div>
       </div>
     </div>
   );
