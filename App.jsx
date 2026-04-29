@@ -13,8 +13,8 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance } from "./lib/load.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar } from "./components.jsx";
+import { effectiveCompliance, dailyRtssFromActivities } from "./lib/load.js";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -1807,6 +1807,21 @@ export default function App() {
               </div>
             ))}
           </div>
+
+          {/* Performance Management Chart — 90-day fitness/fatigue/form */}
+          {(() => {
+            const daActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
+            const dailyRtss = dailyRtssFromActivities(daActs, da);
+            const today = new Date();
+            const from = new Date(today); from.setDate(today.getDate() - 89);
+            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+            return (
+              <div style={{ ...S.card, marginBottom:20 }}>
+                <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
+                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(today)} height={220}/>
+              </div>
+            );
+          })()}
 
           <button onClick={() => setCoachScreen("profile")}
             style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"10px", fontSize:13, fontWeight:600 }}>

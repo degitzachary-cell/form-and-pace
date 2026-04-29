@@ -4,7 +4,7 @@ import { fmtPace, fmtTime } from "./lib/helpers.js";
 import {
   computeRtss, getThresholdPace, rtssColor,
   timeInZone, ZONE_LABELS, ZONE_COLORS, ZONE_NAMES,
-  paceStrToSecsPerKm,
+  paceStrToSecsPerKm, computePMC, densifyDailyRtss,
 } from "./lib/load.js";
 
 // ─── TRAINING-LOAD PILLS ─────────────────────────────────────────────────────
@@ -40,6 +40,120 @@ export function RtssPillFor({ durationMin, distanceKm, profile, size = 11 }) {
     thresholdSecsPerKm: thr,
   });
   return <RtssPill rtss={rtss} size={size}/>;
+}
+
+// ─── PMC CHART (CTL / ATL / TSB) ─────────────────────────────────────────────
+//
+// Minimal hand-rolled SVG line chart — keeps the bundle lean (no recharts).
+// Three lines: CTL (fitness, dusty olive, thick), ATL (fatigue, terracotta,
+// thinner), TSB (form, shown as filled bars beneath the zero line so
+// over-/under-training is visually obvious). Daily rTSS shown as faint
+// vertical bars in the background.
+//
+// `dailyRtss` is an array of { date: 'YYYY-MM-DD', rtss }. The chart
+// densifies to daily, computes PMC, and renders.
+export function PMCChart({ dailyRtss, fromDate, toDate, height = 200 }) {
+  const dense = densifyDailyRtss(dailyRtss || [], fromDate, toDate);
+  const pmc = computePMC(dense);
+  if (pmc.length < 2) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "var(--c-mute)", fontFamily: "var(--f-display)", fontStyle: "italic", fontSize: 14 }}>
+        Not enough data yet — log a few weeks of runs and CTL/ATL will start to draw.
+      </div>
+    );
+  }
+  const VB_W = 600, VB_H = height;
+  const PAD_L = 40, PAD_R = 12, PAD_T = 14, PAD_B = 22;
+  const innerW = VB_W - PAD_L - PAD_R;
+  const innerH = VB_H - PAD_T - PAD_B;
+
+  const N = pmc.length;
+  const maxLoad = Math.max(40, ...pmc.map(p => p.ctl), ...pmc.map(p => p.atl));
+  const yLoad = (v) => PAD_T + (1 - v / maxLoad) * innerH;
+  const x = (i) => PAD_L + (i * innerW) / Math.max(1, N - 1);
+
+  const ctlPath = pmc.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yLoad(p.ctl).toFixed(1)}`).join(" ");
+  const atlPath = pmc.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yLoad(p.atl).toFixed(1)}`).join(" ");
+
+  // TSB drawn against zero-axis at the bottom band (below load lines).
+  // We map TSB to the bottom 30% of the chart, with zero in the middle of
+  // that band so positive (fresh) goes up and negative (fatigued) goes down.
+  const tsbBandTop = PAD_T + innerH * 0.7;
+  const tsbBandH = innerH * 0.28;
+  const tsbZeroY = tsbBandTop + tsbBandH / 2;
+  const maxTsb = Math.max(10, ...pmc.map(p => Math.abs(p.tsb)));
+  const yTsb = (v) => tsbZeroY - (v / maxTsb) * (tsbBandH / 2);
+
+  const last = pmc[pmc.length - 1];
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 18, marginBottom: 8, flexWrap: "wrap" }}>
+        <div>
+          <div className="t-eyebrow">Fitness · CTL</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: "var(--c-accent)", fontWeight: 600 }}>{last.ctl.toFixed(1)}</div>
+        </div>
+        <div>
+          <div className="t-eyebrow">Fatigue · ATL</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: "var(--c-hot)", fontWeight: 600 }}>{last.atl.toFixed(1)}</div>
+        </div>
+        <div>
+          <div className="t-eyebrow">Form · TSB</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: last.tsb >= 0 ? "var(--c-cool)" : "var(--c-warn)", fontWeight: 600 }}>
+            {last.tsb >= 0 ? "+" : ""}{last.tsb.toFixed(1)}
+          </div>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} preserveAspectRatio="none" style={{ width: "100%", height: "auto", display: "block" }}>
+        {/* axis lines */}
+        <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={VB_H - PAD_B} stroke="var(--c-rule)" strokeWidth="0.5"/>
+        <line x1={PAD_L} y1={VB_H - PAD_B} x2={VB_W - PAD_R} y2={VB_H - PAD_B} stroke="var(--c-rule)" strokeWidth="0.5"/>
+        {/* y-axis ticks */}
+        {[0, 0.5, 1].map(t => {
+          const v = Math.round(maxLoad * t);
+          return (
+            <g key={t}>
+              <line x1={PAD_L} y1={yLoad(v)} x2={VB_W - PAD_R} y2={yLoad(v)} stroke="var(--c-ruleSoft)" strokeWidth="0.4" strokeDasharray="2 3"/>
+              <text x={PAD_L - 6} y={yLoad(v) + 3} textAnchor="end" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">{v}</text>
+            </g>
+          );
+        })}
+        {/* daily rTSS as faint background bars */}
+        {pmc.map((p, i) => p.rtss > 0 && (
+          <rect key={i}
+            x={x(i) - 0.8} y={yLoad(p.rtss)}
+            width="1.6" height={Math.max(0.5, (VB_H - PAD_B) - yLoad(p.rtss))}
+            fill="var(--c-ruleSoft)"/>
+        ))}
+        {/* TSB filled area */}
+        <line x1={PAD_L} y1={tsbZeroY} x2={VB_W - PAD_R} y2={tsbZeroY} stroke="var(--c-rule)" strokeWidth="0.4"/>
+        {pmc.map((p, i) => {
+          const yp = yTsb(p.tsb);
+          const h = Math.abs(yp - tsbZeroY);
+          const top = Math.min(yp, tsbZeroY);
+          const fill = p.tsb >= 0 ? "var(--c-cool)" : "var(--c-warn)";
+          return (
+            <rect key={i} x={x(i) - 1} y={top} width="2" height={Math.max(0.5, h)} fill={fill} fillOpacity="0.45"/>
+          );
+        })}
+        {/* CTL line */}
+        <path d={ctlPath} fill="none" stroke="var(--c-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        {/* ATL line */}
+        <path d={atlPath} fill="none" stroke="var(--c-hot)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        {/* date ticks: first / midpoint / last */}
+        {[0, Math.floor(N/2), N - 1].map(i => (
+          <text key={i} x={x(i)} y={VB_H - 6} textAnchor="middle" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">
+            {pmc[i].date.slice(5)}
+          </text>
+        ))}
+      </svg>
+      <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 10, color: "var(--c-mute)", fontFamily: "var(--f-mono)" }}>
+        <span><span style={{ display: "inline-block", width: 10, height: 2, background: "var(--c-accent)", verticalAlign: "middle", marginRight: 5 }}/>CTL fitness</span>
+        <span><span style={{ display: "inline-block", width: 10, height: 2, background: "var(--c-hot)", verticalAlign: "middle", marginRight: 5 }}/>ATL fatigue</span>
+        <span><span style={{ display: "inline-block", width: 6, height: 8, background: "var(--c-cool)", opacity: 0.45, verticalAlign: "middle", marginRight: 5 }}/>TSB form</span>
+      </div>
+    </div>
+  );
 }
 
 // ─── TIME-IN-ZONE BAR ────────────────────────────────────────────────────────
