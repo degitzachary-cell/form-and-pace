@@ -3,7 +3,7 @@ import CoachPlanBuilder from "./CoachPlanBuilder";
 import { supabase, STRAVA_CLIENT_ID, exchangeStravaCode, stravaCall } from "./lib/supabase.js";
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr,
-  extractStravaData, getStats, prettyEmailName,
+  extractStravaData, getStats, prettyEmailName, todayStr,
 } from "./lib/helpers.js";
 import { C, S, TAG_STYLE, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker } from "./components.jsx";
