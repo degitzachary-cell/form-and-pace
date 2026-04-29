@@ -2908,14 +2908,17 @@ export default function App() {
         />
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 0 80px" }}>
 
-          <div onClick={() => setScreen("profile")}
-            style={{ margin:"20px 16px", background:C.white, border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, borderRadius:2, padding:"14px 18px", cursor:"pointer" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>Season Goal</div>
-              <div style={{ fontSize:11, color:C.mid }}>Edit ›</div>
+          <div onClick={() => setScreen("profile")} style={{ margin:"22px 22px 16px", cursor:"pointer" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:6 }}>
+              <Eyebrow style={{ color:"var(--c-hot)" }}>Season goal</Eyebrow>
+              <span className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.1em" }}>EDIT →</span>
             </div>
-            <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>{fmtPbGoal(profile?.goals) || athleteData.goal || "Set your goal"}</div>
-            <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>Current PB: {fmtPbGoal(profile?.pbs) || athleteData.current || "—"}</div>
+            <div className="t-display" style={{ fontSize:28, fontWeight:400, color:"var(--c-ink)", lineHeight:1.05 }}>
+              {fmtPbGoal(profile?.goals) || athleteData.goal || "Set your goal"}
+            </div>
+            <div className="t-display-italic" style={{ fontSize:14, color:"var(--c-mute)", marginTop:6 }}>
+              current PB · {fmtPbGoal(profile?.pbs) || athleteData.current || "—"}
+            </div>
           </div>
 
           {/* 8-Week Rolling Volume — line graph, Strava-first */}
@@ -2959,18 +2962,18 @@ export default function App() {
             const areaPath = `${linePath} L ${xFor(W - 1).toFixed(1)} ${VB_H - PAD_B} L ${xFor(0).toFixed(1)} ${VB_H - PAD_B} Z`;
 
             return (
-              <div style={{ margin:"0 16px 16px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 18px" }}>
+              <div style={{ margin:"0 22px 22px", paddingTop:14, paddingBottom:14, borderTop:"1px solid var(--c-rule)", borderBottom:"1px solid var(--c-rule)" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
                   <div>
-                    <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>{hovered ? hovered.label : "This Week"}</div>
-                    <div style={{ fontSize:26, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>
-                      {(hovered ? hovered.km : thisWk).toFixed(1)}
-                      <span style={{ fontSize:14, color:C.mid, fontWeight:400 }}> km</span>
+                    <Eyebrow>{hovered ? hovered.label : "Volume this week"}</Eyebrow>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:10, marginTop:4 }}>
+                      <BigNum size={48}>{(hovered ? hovered.km : thisWk).toFixed(1)}</BigNum>
+                      <span className="t-mono" style={{ fontSize:13, color:"var(--c-mute)" }}>km</span>
                     </div>
                   </div>
-                  <div style={{ fontSize:9, letterSpacing:2, color:C.mid, textTransform:"uppercase" }}>
-                    {stravaConnected ? "via Strava" : "manual"}
-                  </div>
+                  <span className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.12em" }}>
+                    {stravaConnected ? "VIA STRAVA" : "MANUAL"}
+                  </span>
                 </div>
                 <svg viewBox={`0 0 ${VB_W} ${VB_H}`} style={{ width:"100%", height:"auto", display:"block" }} onMouseLeave={() => setHoveredWeekIdx(null)}>
                   {/* Faint baseline */}
@@ -3423,34 +3426,82 @@ export default function App() {
     return (
       <div style={S.page}>
         <div style={S.grain}/>
-        <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>setScreen("home")}/>
-        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
-          <div style={{ textAlign:"center", fontSize:64, margin:"20px 0 8px" }}>{an?.emoji || "✓"}</div>
-          <div style={{ textAlign:"center", fontSize:14, color:C.green, fontWeight:700, marginBottom:20, letterSpacing:1 }}>SESSION LOGGED</div>
-          <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-            {an?.distance_km && <StatPill label="Distance" val={`${an.distance_km}km`} color="#4ade80"/>}
-            {an?.duration_min && <StatPill label="Duration" val={`${an.duration_min}min`}/>}
+        <Header title={activeSession.type} subtitle={`Logged · ${activeSession.day}`} onBack={()=>setScreen("home")} right={<Tick size={16}/>}/>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 22px 80px" }}>
+
+          {/* Editorial header */}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+            <span className="fp-dot" style={{ background: typeMeta(activeSession.type).dot }}/>
+            <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.16em", color:"var(--c-mute)" }}>
+              {(activeSession.type || "RUN").toUpperCase()} · COMPLETE
+            </span>
           </div>
-          {log?.strava_data && <StravaCard data={log.strava_data}/>}
+          <h1 className="t-display" style={{ fontSize:38, fontWeight:400, lineHeight:1, margin:"0 0 6px" }}>
+            {activeSession.type}
+          </h1>
+          {an?.distance_km && (
+            <div className="t-display-italic" style={{ fontSize:15, color:"var(--c-mute)", marginBottom:18 }}>
+              {an.distance_km} km{an.duration_min ? ` · ${an.duration_min} min` : ""}{an.actual_date ? ` · ${an.actual_date}` : ""}
+            </div>
+          )}
+
+          {/* Pace strip */}
+          <div className="fp-pace-strip" style={{ marginBottom:24 }}>
+            <div>
+              <Eyebrow style={{ marginBottom:6 }}>Distance</Eyebrow>
+              <Num size={17}>{an?.distance_km ?? "—"}</Num>
+              {an?.distance_km && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> km</span>}
+            </div>
+            <div>
+              <Eyebrow style={{ marginBottom:6 }}>Time</Eyebrow>
+              <Num size={17}>{an?.duration_min ?? "—"}</Num>
+              {an?.duration_min && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> min</span>}
+            </div>
+            <div>
+              <Eyebrow style={{ marginBottom:6 }}>Pace</Eyebrow>
+              <Num size={17}>{an?.distance_km && an?.duration_min ? (() => {
+                const sec = (an.duration_min * 60) / an.distance_km;
+                return `${Math.floor(sec/60)}:${String(Math.round(sec%60)).padStart(2,"0")}`;
+              })() : "—"}</Num>
+            </div>
+            <div>
+              <Eyebrow style={{ marginBottom:6 }}>Avg HR</Eyebrow>
+              <Num size={17}>{log?.strava_data?.avg_heartrate || "—"}</Num>
+            </div>
+          </div>
+
+          {log?.strava_data && <div style={{ marginBottom:18 }}><StravaCard data={log.strava_data}/></div>}
+
           {an?.wellness && Object.keys(an.wellness).length > 0 && (
-            <SectionCard label="Wellness">
-              <div style={{ display:"flex", gap:14, flexWrap:"wrap", fontSize:13, color:C.navy }}>
-                {an.wellness.rpe        != null && <div><b>RPE</b> {an.wellness.rpe}/10</div>}
-                {an.wellness.sleep_hours != null && <div><b>Sleep</b> {an.wellness.sleep_hours}h</div>}
-                {an.wellness.soreness   != null && <div><b>Soreness</b> {an.wellness.soreness}/5</div>}
-                {an.wellness.mood       != null && <div><b>Mood</b> {["😞","😕","😐","🙂","😄"][an.wellness.mood-1]} {an.wellness.mood}/5</div>}
-              </div>
-            </SectionCard>
+            <div style={{ marginBottom:24 }}>
+              <SectionHead label="How it felt"/>
+              <p style={{ fontFamily:"var(--f-display)", fontSize:19, lineHeight:1.55, margin:"16px 0 0", color:"var(--c-ink)" }}>
+                {an.wellness.rpe != null && <>Felt like a <em style={{ color:"var(--c-hot)", fontStyle:"italic" }}>{an.wellness.rpe}/10</em>. </>}
+                {an.wellness.sleep_hours != null && <>Slept <em style={{ color:"var(--c-accent)", fontStyle:"italic" }}>{an.wellness.sleep_hours}h</em>, </>}
+                {an.wellness.soreness != null && <>legs <em style={{ color:"var(--c-cool)", fontStyle:"italic" }}>{["nothing","barely","bit sore","tight","wrecked"][an.wellness.soreness-1] || `${an.wellness.soreness}/5`}</em>, </>}
+                {an.wellness.mood != null && <>mood <em style={{ color:"var(--c-warn)", fontStyle:"italic" }}>{["awful","rough","ok","good","flying"][an.wellness.mood-1] || `${an.wellness.mood}/5`}</em>.</>}
+              </p>
+            </div>
           )}
+
           {(log?.feedback || feedbackText) && (
-            <SectionCard label="Your Notes">
-              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{log?.feedback || feedbackText}"</div>
-            </SectionCard>
+            <div style={{ marginBottom:24 }}>
+              <SectionHead label="Your note"/>
+              <p style={{ fontFamily:"var(--f-display)", fontStyle:"italic", fontSize:17, lineHeight:1.55, color:"var(--c-inkSoft)", margin:"14px 0 0" }}>
+                {log?.feedback || feedbackText}
+              </p>
+            </div>
           )}
+
           {(log?.coach_reply || resultLinkedAct?.coach_reply) && (
-            <SectionCard label="💬 Message from Coach" accent="#3b82f6">
-              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8 }}>{log?.coach_reply || resultLinkedAct?.coach_reply}</div>
-            </SectionCard>
+            <div style={{ marginBottom:24 }}>
+              <SectionHead label="From your coach"/>
+              <div style={{ marginTop:18, padding:"22px 22px", background:"var(--c-paper)", border:"1px solid var(--c-rule)" }}>
+                <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.55, margin:0, color:"var(--c-ink)" }}>
+                  {log?.coach_reply || resultLinkedAct?.coach_reply}
+                </p>
+              </div>
+            </div>
           )}
           <button onClick={() => {
             const an = log?.analysis;
