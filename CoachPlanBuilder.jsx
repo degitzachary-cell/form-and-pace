@@ -85,7 +85,8 @@ function parseExcelToWeeks(file) {
 
           days.forEach((day, i) => {
             const colIdx = i + 1;
-            const desc = runRow ? (runRow[colIdx] || '') : '';
+            const rawDesc = runRow ? (runRow[colIdx] || '') : '';
+            const desc = rawDesc instanceof Date ? '' : rawDesc;
             const terrain = terrainRow ? (terrainRow[colIdx] || '') : '';
             const pace = paceRow ? (paceRow[colIdx] || '') : '';
             const dateVal = dateRow ? dateRow[colIdx] : null;
