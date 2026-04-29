@@ -310,6 +310,17 @@ export default function App() {
   const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
 
+  // Desktop layout: two-column coach view at >= 960px.
+  const [windowWidth, setWindowWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1024
+  );
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const isDesktop = windowWidth >= 960;
+
   // Load saved plans from Supabase. Athletes only see their own plan;
   // coaches see every plan.
   useEffect(() => {
@@ -484,9 +495,11 @@ export default function App() {
   }, [user, role]);
 
   // Default the coach calendar to today's Monday whenever they open an athlete
-  // (or clear it when they leave that screen).
+  // (desktop: also runs when an athlete is selected on the dashboard panel).
   useEffect(() => {
-    if (role !== "coach" || coachScreen !== "athlete" || !dashAthlete) {
+    const isAthleteContext = role === "coach" && dashAthlete &&
+      (coachScreen === "athlete" || (isDesktop && coachScreen === "dashboard"));
+    if (!isAthleteContext) {
       if (coachActiveMonday !== null) setCoachActiveMonday(null);
       return;
     }
@@ -499,7 +512,7 @@ export default function App() {
     const m = String(t.getMonth() + 1).padStart(2, "0");
     const d = String(t.getDate()).padStart(2, "0");
     setCoachActiveMonday(`${y}-${m}-${d}`);
-  }, [role, coachScreen, dashAthlete, coachActiveMonday]);
+  }, [role, coachScreen, dashAthlete, coachActiveMonday, isDesktop]);
 
   // ── Live sync: subscribe to session_logs + activities changes ──
   // Both roles benefit: athlete sees coach replies live; coach sees athlete
@@ -1294,105 +1307,277 @@ export default function App() {
     const logsToday = Object.values(logs).filter(l => l.updated_at?.startsWith(today)).length
                     + activities.filter(a => a.activity_date === today).length;
 
+    // ── Desktop right-panel: pre-compute athlete week data ──────────────────
+    const dpAthlete   = isDesktop && dashAthlete ? (athletePrograms[dashAthlete] || { weeks:[] }) : null;
+    const dpStats     = isDesktop && dashAthlete ? statsFor(dashAthlete) : null;
+    const dpWeekKm    = isDesktop && dashAthlete ? weekKm(activities, dashAthlete, 0) : 0;
+    const dpName      = dpAthlete ? (dpAthlete.name  || prettyEmailName(dashAthlete)) : null;
+    const dpGoal      = dpAthlete ? (dpAthlete.goal  || "—") : null;
+    const dpActs      = isDesktop && dashAthlete ? (activitiesByEmail.get(dashAthlete.toLowerCase()) || []) : [];
+    const dpActByDate = {};
+    for (const a of dpActs) if (a.source === "session") dpActByDate[a.activity_date] = a;
+    const dpWk = dpAthlete && coachActiveMonday
+      ? (dpAthlete.weeks.find(w => w.weekStart === coachActiveMonday) || { weekStart: coachActiveMonday, sessions:[] })
+      : null;
+    const dpWkEnd  = dpWk ? weekEndStr(dpWk.weekStart) : null;
+    const dpExtras = dpWk ? dpActs.filter(a => a.source !== "session" && a.activity_date >= dpWk.weekStart && a.activity_date <= dpWkEnd) : [];
+    const dpSnapMonday = (dateStr) => {
+      if (!dateStr) return;
+      const d = new Date(dateStr + "T00:00:00");
+      if (isNaN(d)) return;
+      const dow = d.getDay();
+      d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+      setCoachActiveMonday(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);
+    };
+
+    // Shared roster content — rendered in the left sidebar (desktop) or full page (mobile)
+    const rosterContent = (
+      <>
+        {/* Summary strip */}
+        <div style={{ display:"flex", gap:10, marginBottom:20 }}>
+          <div style={S.statBox}>
+            <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{athletes.length}</div>
+            <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Athletes</div>
+          </div>
+          <div style={S.statBox}>
+            <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{logsToday}</div>
+            <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Today's Logs</div>
+          </div>
+          <div style={S.statBox}>
+            <div style={{ fontSize:22, fontWeight:900, color: totalReplies > 0 ? C.crimson : C.navy }}>{totalReplies}</div>
+            <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Replies Due</div>
+          </div>
+        </div>
+
+        {/* Tools */}
+        <div style={{ display:"flex", gap:8, marginBottom:18 }}>
+          <button onClick={() => setCoachScreen("inbox")}
+            style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", position:"relative" }}>
+            REPLY INBOX
+            {totalReplies > 0 && <span style={{ position:"absolute", top:-6, right:-6, background:C.crimson, color:C.white, borderRadius:"50%", minWidth:18, height:18, fontSize:10, display:"inline-flex", alignItems:"center", justifyContent:"center", padding:"0 5px", fontWeight:700 }}>{totalReplies}</span>}
+          </button>
+          <button onClick={() => setCoachScreen("templates")}
+            style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>
+            TEMPLATES
+          </button>
+          <button onClick={() => setCoachScreen("plan-builder")}
+            style={{ flex:1, background:"#1a2744", border:"1px solid #2a3a5c", borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:"#e8dcc8", fontWeight:700, cursor:"pointer" }}>
+            PLAN BUILDER
+          </button>
+        </div>
+
+        {/* Filter chips */}
+        <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
+          {[
+            { k:"all",     label:`All · ${athletes.length}` },
+            { k:"active",  label:`Active today · ${athleteRows.filter(r=>r.activeToday).length}` },
+            { k:"behind",  label:`Behind · ${athleteRows.filter(r=>r.behind).length}` },
+            { k:"replies", label:`Replies · ${totalReplies}` },
+          ].map(f => (
+            <button key={f.k} onClick={()=>setCoachFilter(f.k)}
+              style={{
+                background: coachFilter === f.k ? C.navy : "transparent",
+                color: coachFilter === f.k ? C.cream : C.mid,
+                border:`1px solid ${coachFilter === f.k ? C.navy : C.rule}`,
+                borderRadius:99, padding:"6px 12px", fontSize:10, letterSpacing:1.5, fontWeight:700, cursor:"pointer", textTransform:"uppercase"
+              }}>{f.label}</button>
+          ))}
+        </div>
+
+        {/* Athlete rows */}
+        {filteredRows.length === 0 ? (
+          <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"24px", textAlign:"center", fontSize:12, color:C.mid }}>
+            No athletes match this filter.
+          </div>
+        ) : filteredRows.map(({ email, data, days, repliesNeeded }) => {
+          const displayName = data.name || prettyEmailName(email);
+          const avatar = data.avatar || displayName.slice(0, 2).toUpperCase();
+          const goalText = fmtPbGoal(data.goals) || data.goal || "—";
+          const isSelected = isDesktop && dashAthlete === email;
+          return (
+            <div key={email} onClick={() => {
+              setDashAthlete(email);
+              if (!isDesktop) setCoachScreen("athlete");
+            }}
+              style={{ ...S.card, marginBottom:10, cursor:"pointer", padding:"14px 16px",
+                ...(isSelected ? { borderColor:C.navy, boxShadow:`0 0 0 1.5px ${C.navy}` } : {}) }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <div style={{ width:38, height:38, borderRadius:"50%", background:C.navy, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:12, flexShrink:0, color:C.cream }}>
+                  {avatar}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{displayName}</div>
+                    {repliesNeeded > 0 && <span style={{ background:C.crimson, color:C.white, borderRadius:99, padding:"1px 7px", fontSize:9, fontWeight:700, letterSpacing:0.5 }}>{repliesNeeded}</span>}
+                  </div>
+                  <div style={{ fontSize:11, color:C.mid, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{goalText}</div>
+                </div>
+                {!isDesktop && <div style={{ color:C.mid, fontSize:18, flexShrink:0 }}>›</div>}
+              </div>
+              <div style={{ display:"flex", gap:5, marginTop:12, paddingLeft:50 }}>
+                {days.map((d, i) => (
+                  <div key={i} title={d.dStr} style={{
+                    flex:1, height:8, borderRadius:2, background: d.pattern || d.color,
+                    border: d.isToday ? `2px solid ${C.navy}` : "none",
+                    boxSizing: d.isToday ? "border-box" : "content-box"
+                  }}/>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </>
+    );
+
     return (
-      <div style={S.page}>
+      <div style={{ ...S.page, ...(isDesktop ? { display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden" } : {}) }}>
         <div style={S.grain}/>
         <Header
           title="Athletes"
           subtitle={user.user_metadata?.full_name || user.email}
           right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}
         />
-        <div style={{ maxWidth:520, margin:"0 auto", padding:"24px 16px 80px" }}>
 
-          {/* Summary strip */}
-          <div style={{ display:"flex", gap:10, marginBottom:20 }}>
-            <div style={S.statBox}>
-              <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{athletes.length}</div>
-              <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Athletes</div>
-            </div>
-            <div style={S.statBox}>
-              <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{logsToday}</div>
-              <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Today's Logs</div>
-            </div>
-            <div style={S.statBox}>
-              <div style={{ fontSize:22, fontWeight:900, color: totalReplies > 0 ? C.crimson : C.navy }}>{totalReplies}</div>
-              <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Replies Due</div>
-            </div>
-          </div>
+        {isDesktop ? (
+          /* ── DESKTOP: sidebar + right panel ── */
+          <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
 
-          {/* Tools */}
-          <div style={{ display:"flex", gap:8, marginBottom:18 }}>
-            <button onClick={() => setCoachScreen("inbox")}
-              style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", position:"relative" }}>
-              REPLY INBOX
-              {totalReplies > 0 && <span style={{ position:"absolute", top:-6, right:-6, background:C.crimson, color:C.white, borderRadius:"50%", minWidth:18, height:18, fontSize:10, display:"inline-flex", alignItems:"center", justifyContent:"center", padding:"0 5px", fontWeight:700 }}>{totalReplies}</span>}
-            </button>
-            <button onClick={() => setCoachScreen("templates")}
-              style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>
-              TEMPLATES
-            </button>
-            <button onClick={() => setCoachScreen("plan-builder")}
-              style={{ flex:1, background:"#1a2744", border:"1px solid #2a3a5c", borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:"#e8dcc8", fontWeight:700, cursor:"pointer" }}>
-              PLAN BUILDER
-            </button>
-          </div>
-
-          {/* Filter chips */}
-          <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
-            {[
-              { k:"all", label:`All · ${athletes.length}` },
-              { k:"active", label:`Active today · ${athleteRows.filter(r=>r.activeToday).length}` },
-              { k:"behind", label:`Behind · ${athleteRows.filter(r=>r.behind).length}` },
-              { k:"replies", label:`Replies · ${totalReplies}` },
-            ].map(f => (
-              <button key={f.k} onClick={()=>setCoachFilter(f.k)}
-                style={{
-                  background: coachFilter === f.k ? C.navy : "transparent",
-                  color: coachFilter === f.k ? C.cream : C.mid,
-                  border:`1px solid ${coachFilter === f.k ? C.navy : C.rule}`,
-                  borderRadius:99, padding:"6px 12px", fontSize:10, letterSpacing:1.5, fontWeight:700, cursor:"pointer", textTransform:"uppercase"
-                }}>{f.label}</button>
-            ))}
-          </div>
-
-          {/* Athlete rows */}
-          {filteredRows.length === 0 ? (
-            <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"24px", textAlign:"center", fontSize:12, color:C.mid }}>
-              No athletes match this filter.
+            {/* Left sidebar — roster */}
+            <div style={{ width:308, flexShrink:0, borderRight:`1px solid ${C.rule}`, overflowY:"auto", padding:"20px 16px 80px", background:C.white }}>
+              {rosterContent}
             </div>
-          ) : filteredRows.map(({ email, data, days, repliesNeeded }) => {
-            const displayName = data.name || prettyEmailName(email);
-            const avatar = data.avatar || displayName.slice(0, 2).toUpperCase();
-            const goalText = fmtPbGoal(data.goals) || data.goal || "—";
-            return (
-              <div key={email} onClick={()=>{ setDashAthlete(email); setCoachScreen("athlete"); }}
-                style={{ ...S.card, marginBottom:10, cursor:"pointer", padding:"14px 16px" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                  <div style={{ width:38, height:38, borderRadius:"50%", background:C.navy, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:12, flexShrink:0, color:C.cream }}>
-                    {avatar}
-                  </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{displayName}</div>
-                      {repliesNeeded > 0 && <span style={{ background:C.crimson, color:C.white, borderRadius:99, padding:"1px 7px", fontSize:9, fontWeight:700, letterSpacing:0.5 }}>{repliesNeeded}</span>}
+
+            {/* Right panel — athlete week detail */}
+            <div style={{ flex:1, overflowY:"auto", background:C.cream, padding:"28px 36px 80px" }}>
+              {!dpAthlete ? (
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60%", flexDirection:"column", gap:16, color:C.mid }}>
+                  <div style={{ fontSize:48, opacity:0.2, fontFamily:S.displayFont }}>←</div>
+                  <div style={{ fontSize:16, fontFamily:S.displayFont, color:C.navy }}>Select an athlete</div>
+                  <div style={{ fontSize:13 }}>Their training week will appear here</div>
+                </div>
+              ) : (
+                <>
+                  {/* Athlete header */}
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:22 }}>
+                    <div>
+                      <div style={{ fontSize:28, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:3 }}>{dpName}</div>
+                      <div style={{ fontSize:13, color:C.mid }}>{dpGoal}</div>
                     </div>
-                    <div style={{ fontSize:11, color:C.mid, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{goalText}</div>
+                    <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+                      <button onClick={() => setCoachScreen("profile")} style={S.signOutBtn}>Edit profile</button>
+                      <button onClick={() => setCoachScreen("athlete")} style={{ ...S.signOutBtn, color:C.navy, borderColor:C.navy, fontWeight:700 }}>Full view ›</button>
+                    </div>
                   </div>
-                  <div style={{ color:C.mid, fontSize:18, flexShrink:0 }}>›</div>
-                </div>
-                <div style={{ display:"flex", gap:5, marginTop:12, paddingLeft:50 }}>
-                  {days.map((d, i) => (
-                    <div key={i} title={d.dStr} style={{
-                      flex:1, height:8, borderRadius:2, background: d.pattern || d.color,
-                      border: d.isToday ? `2px solid ${C.navy}` : "none",
-                      boxSizing: d.isToday ? "border-box" : "content-box"
-                    }}/>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+
+                  {/* Stats row */}
+                  <div style={{ display:"flex", gap:10, marginBottom:22 }}>
+                    {[
+                      { label:"Compliance", val:`${dpStats.rate}%`, color: dpStats.rate>75?C.green:dpStats.rate>40?C.amber:C.crimson },
+                      { label:"Completed",  val: dpStats.done,      color:C.green },
+                      { label:"Missed",     val: dpStats.missed,    color: dpStats.missed>0?C.crimson:C.mid },
+                      { label:"Km This Wk", val:`${dpWeekKm.toFixed(1)}`, color:C.navy },
+                    ].map((s,i) => (
+                      <div key={i} style={S.statBox}>
+                        <div style={{ fontSize:22, fontWeight:900, color:s.color||C.navy }}>{s.val}</div>
+                        <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Week picker */}
+                  {coachActiveMonday && (() => {
+                    const monD = new Date(coachActiveMonday + "T00:00:00");
+                    const sunD = new Date(monD); sunD.setDate(monD.getDate() + 6); sunD.setHours(23,59,59,999);
+                    const isCurr = new Date() >= monD && new Date() <= sunD;
+                    return (
+                      <div style={{ marginBottom:22 }}>
+                        <input type="date" value={coachActiveMonday}
+                          onChange={e => dpSnapMonday(e.target.value)}
+                          style={{ ...S.input, background:isCurr?C.crimson:C.white, color:isCurr?"#fffdf8":C.navy, border:`1px solid ${isCurr?"#E06666":C.rule}`, fontWeight:700, letterSpacing:0.5, fontFamily:S.bodyFont, cursor:"pointer", colorScheme:isCurr?"dark":"light", maxWidth:280 }}/>
+                        <div style={{ fontSize:10, color:C.mid, marginTop:6, paddingLeft:2, letterSpacing:1 }}>
+                          {isCurr ? "THIS WEEK" : new Date() > sunD ? "PAST" : "UPCOMING"}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 2-column session grid */}
+                  {dpWk && (
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                      {DAY_LABELS.map(dayLabel => {
+                        const dayDate = sessionDateStr(dpWk.weekStart, dayLabel);
+                        const isToday = dayDate === todayStr();
+                        const sessionsHere = (dpWk.sessions || []).filter(s => {
+                          const override = logs[s.id]?.analysis?.actual_date;
+                          if (override && dayDate) return override === dayDate;
+                          return s.day?.slice(0,3) === dayLabel;
+                        });
+                        const extrasHere = dayDate ? dpExtras.filter(a => a.activity_date === dayDate) : [];
+                        const datePart = dayDate ? dayDate.slice(5).replace("-","/") : "";
+                        return (
+                          <div key={dayLabel} style={{ background:C.white, border:`1px solid ${isToday ? C.crimson : C.rule}`, borderRadius:2, padding:"12px 14px" }}>
+                            <div style={{ fontSize:10, letterSpacing:2, color:isToday?C.crimson:C.mid, fontWeight:isToday?700:500, marginBottom:8 }}>
+                              {dayLabel.toUpperCase()}{datePart ? ` · ${datePart}` : ""}{isToday ? " · TODAY" : ""}
+                            </div>
+                            {sessionsHere.length === 0 && extrasHere.length === 0 ? (
+                              <div style={{ fontSize:11, color:C.mid, fontStyle:"italic" }}>Rest</div>
+                            ) : (
+                              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                                {sessionsHere.map(s => {
+                                  const log = logs[s.id];
+                                  const sDate = log?.analysis?.actual_date || sessionDateStr(dpWk.weekStart, s.day);
+                                  const linkedAct = dpActByDate[sDate];
+                                  const isPastDate = sDate && sDate < todayStr();
+                                  const comply = log?.analysis?.compliance || (linkedAct ? "completed" : isPastDate && (s.type||"").toUpperCase() !== "REST" ? "missed" : "pending");
+                                  const cts = typeStyle(s.type);
+                                  return (
+                                    <div key={s.id}
+                                      onClick={() => { setActiveSession({...s, weekStart:dpWk.weekStart, athleteEmail:dashAthlete}); setCoachScreen("session"); }}
+                                      style={{ background:cts.bg, border:`1px solid ${cts.border}`, borderLeft:`3px solid ${cts.accent}`, borderRadius:2, padding:"8px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+                                      <div style={{ width:22, height:22, borderRadius:"50%", background:cts.pattern||cts.bg, border:`1.5px solid ${cts.accent}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, color:cts.accent, fontWeight:700, flexShrink:0 }}>
+                                        {cts.pattern ? "" : (s.type||"").slice(0,1).toUpperCase()}
+                                      </div>
+                                      <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                                          <div style={{ fontWeight:700, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.type}</div>
+                                          <div style={{ fontSize:9, color:COMPLY_COLOR[comply], fontWeight:700 }}>
+                                            {comply==="completed"?"✓":comply==="missed"?"✗":comply==="partial"?"~":""}
+                                          </div>
+                                        </div>
+                                        {s.pace && <div style={{ fontSize:10, color:cts.accent, fontFamily:"monospace" }}>{s.pace}</div>}
+                                        {log?.analysis?.distance_km && <div style={{ fontSize:10, color:C.mid }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {extrasHere.map(act => (
+                                  <div key={act.id}
+                                    onClick={() => { setActiveExtraActivity(act); setCoachScreen("extra-activity"); }}
+                                    style={{ background:"#fdf0f0", border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, borderRadius:2, padding:"8px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+                                    <div style={{ fontSize:12 }}>➕</div>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                      <div style={{ fontWeight:700, fontSize:12, color:C.navy }}>{act.activity_type || "Run"}</div>
+                                      <div style={{ fontSize:10, color:C.mid }}>{act.distance_km}km</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* ── MOBILE: single column ── */
+          <div style={{ maxWidth: isDesktop ? 800 : 520, margin:"0 auto", padding:"24px 16px 80px" }}>
+            {rosterContent}
+          </div>
+        )}
       </div>
     );
   }
@@ -1526,7 +1711,7 @@ export default function App() {
       <div style={S.page}>
         <div style={S.grain}/>
         <Header title="Reply Inbox" subtitle={`${items.length} awaiting reply`} onBack={() => setCoachScreen("dashboard")} />
-        <div style={{ maxWidth:520, margin:"0 auto", padding:"24px 16px 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 800 : 520, margin:"0 auto", padding:"24px 16px 80px" }}>
           {items.length > 0 && (
             <button onClick={async () => {
               if (!confirm(`Mark all ${items.length} comment${items.length === 1 ? "" : "s"} as read?`)) return;
@@ -1625,7 +1810,7 @@ export default function App() {
       <div style={S.page}>
         <div style={S.grain}/>
         <Header title="Workout Templates" subtitle={`${workoutTemplates.length} saved`} onBack={() => setCoachScreen("dashboard")} />
-        <div style={{ maxWidth:520, margin:"0 auto", padding:"24px 16px 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 800 : 520, margin:"0 auto", padding:"24px 16px 80px" }}>
           {workoutTemplates.length === 0 ? (
             <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"32px", textAlign:"center" }}>
               <div style={{ fontSize:16, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:6 }}>No templates yet.</div>
@@ -1716,7 +1901,7 @@ export default function App() {
         <div style={S.grain}/>
         <Header title={daName} subtitle={`Goal: ${daGoal}`} onBack={()=>setCoachScreen("dashboard")}
           right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}/>
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"24px 16px 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
 
           <div style={{ display:"flex", gap:10, marginBottom:24 }}>
             {[
@@ -1903,7 +2088,7 @@ export default function App() {
       <div style={S.page}>
         <div style={S.grain}/>
         <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>setCoachScreen("athlete")}/>
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"24px 16px 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
 
           <SectionCard label="Prescribed Session">
             {activeSession.desc.split("\n").map((l,i)=>(
@@ -2124,7 +2309,7 @@ export default function App() {
       <div style={S.page}>
         <div style={S.grain}/>
         <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }}/>
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ fontSize:13, color:C.mid, marginBottom:16 }}>{da?.name}</div>
           <div style={{ textAlign:"center", fontSize:48, margin:"20px 0 8px" }}>➕</div>
           <div style={{ textAlign:"center", fontSize:14, color:C.crimson, fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
@@ -2234,7 +2419,7 @@ export default function App() {
       <div style={S.page}>
         <div style={S.grain}/>
         <Header title={isNew ? "Add Workout" : "Edit Workout"} subtitle={`${ew.athleteEmail} · ${dayDisplay}`} onBack={()=>{ setEditingWorkout(null); setCoachScreen("athlete"); }}/>
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"24px 16px 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
           {workoutTemplates.length > 0 && (
             <div style={{ marginBottom:14 }}>
               <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Apply Template</div>
@@ -2409,7 +2594,156 @@ export default function App() {
           subtitle={dateNice}
           right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}
         />
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"0 0 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 0 80px" }}>
+          {isDesktop && (
+            <div style={{ display:"flex", gap:0, alignItems:"flex-start" }}>
+              {/* ── DESKTOP LEFT: today hero + strava ── */}
+              <div style={{ flex:"0 0 360px", borderRight:`1px solid ${C.rule}`, paddingRight:0 }}>
+
+                {/* Today's planned hero */}
+                <div style={{ margin:"20px 16px" }}>
+                  <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase", marginBottom:8, fontFamily:S.bodyFont, fontWeight:700 }}>
+                    TODAY · {dayLabel.toUpperCase()}
+                  </div>
+                  {todaysSession ? (
+                    <div onClick={() => {
+                        const s = todaysSession.s;
+                        setActiveSession({ ...s, weekStart: monStr });
+                        setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                        setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
+                        const isLogged = !!todaysSession.log || !!todaysActivity;
+                        setScreen(isLogged ? "result" : "session");
+                      }}
+                      style={{ background:C.white, border:`1px solid ${C.rule}`, borderLeft:`4px solid ${typeStyle(todaysSession.s.type).accent}`, borderRadius:2, padding:"18px 20px", cursor:"pointer", position:"relative" }}>
+                      {typeStyle(todaysSession.s.type).pattern && (
+                        <div style={{ position:"absolute", top:0, right:0, width:42, height:42, background:typeStyle(todaysSession.s.type).pattern, borderTopRightRadius:2 }}/>
+                      )}
+                      <div style={{ fontSize:11, letterSpacing:2, color:typeStyle(todaysSession.s.type).accent, marginBottom:6, fontWeight:700 }}>
+                        {(todaysSession.s.type || "RUN").toUpperCase()}
+                      </div>
+                      <div style={{ fontSize:22, fontWeight:900, color:C.navy, fontFamily:S.displayFont, lineHeight:1.15, marginBottom:6 }}>
+                        {todaysSession.s.type}
+                      </div>
+                      {todaysSession.s.pace && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{todaysSession.s.pace}</div>}
+                      {(todaysSession.s.desc || todaysSession.s.description) && (
+                        <div style={{ fontSize:13, color:C.mid, marginTop:8, lineHeight:1.5, whiteSpace:"pre-wrap" }}>
+                          {todaysSession.s.desc || todaysSession.s.description}
+                        </div>
+                      )}
+                      {todaysSession.s.terrain && <div style={{ fontSize:11, color:C.mid, marginTop:6, letterSpacing:1 }}>{todaysSession.s.terrain}</div>}
+                      {(todaysSession.log || todaysActivity) && (
+                        <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${C.rule}`, fontSize:11, color:C.green, letterSpacing:1, fontWeight:700 }}>
+                          ✓ LOGGED · {todaysActivity?.distance_km ?? todaysSession.log?.analysis?.distance_km}KM
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"24px", textAlign:"center" }}>
+                      <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:4 }}>Rest day</div>
+                      <div style={{ fontSize:12, color:C.mid }}>No workout scheduled.</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Strava slot */}
+                {todaysStravaUnimported && (
+                  <div style={{ margin:"0 16px 16px", background:"#fff5e6", border:`1px solid #ffd699`, borderLeft:`3px solid #fc4c02`, borderRadius:2, padding:"12px 16px" }}>
+                    <div style={{ fontSize:10, letterSpacing:2, color:"#fc4c02", fontWeight:700, marginBottom:4 }}>FROM STRAVA · UNIMPORTED</div>
+                    <div style={{ fontSize:14, fontWeight:700, color:C.navy, marginBottom:2 }}>{todaysStrava.name}</div>
+                    <div style={{ fontSize:12, color:C.mid }}>{(todaysStrava.distance/1000).toFixed(1)}km · {Math.round(todaysStrava.moving_time/60)}min</div>
+                    <button
+                      onClick={() => {
+                        if (todaysSession) {
+                          const s = todaysSession.s;
+                          setActiveSession({ ...s, weekStart: monStr });
+                          setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                          setSessionDateOverride(today);
+                          setSelectedStravaId(todaysStrava.id);
+                          setScreen("session");
+                        } else {
+                          setLogForm({ date: today, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
+                          setEditingActivityId(null);
+                          setSelectedStravaId(todaysStrava.id);
+                          setScreen("log-activity");
+                        }
+                      }}
+                      style={{ marginTop:8, background:"#fc4c02", color:C.white, border:0, borderRadius:2, padding:"6px 14px", fontSize:11, letterSpacing:1, fontWeight:700, cursor:"pointer" }}>
+                      IMPORT &amp; LOG →
+                    </button>
+                  </div>
+                )}
+
+                {/* Quick links (desktop: vertical nav) */}
+                <div style={{ margin:"16px 16px 0", display:"flex", flexDirection:"column", gap:8 }}>
+                  <button onClick={() => setScreen("home")} style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 16px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", textAlign:"left" }}>FULL WEEK VIEW →</button>
+                  <button onClick={() => setScreen("history")} style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 16px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", textAlign:"left" }}>HISTORY →</button>
+                  <button onClick={() => setScreen("profile")} style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 16px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", textAlign:"left" }}>PROFILE →</button>
+                </div>
+              </div>
+
+              {/* ── DESKTOP RIGHT: week overview ── */}
+              <div style={{ flex:1, padding:"20px 20px 0" }}>
+                <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:14, fontWeight:700 }}>THIS WEEK</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {weekStrip.map(d => {
+                    const sessHere = allWithMoves.find(x => x.onDate === d.dDate);
+                    const actHere = myActs.find(a => a.activity_date === d.dDate);
+                    const s = sessHere?.s;
+                    const ts = s ? typeStyle(s.type) : null;
+                    const isRest = (s?.type || "").toUpperCase() === "REST";
+                    const isLogged = d.isLogged;
+                    const datePart = d.dDate ? d.dDate.slice(5).replace("-","/") : "";
+                    return (
+                      <div key={d.d}
+                        onClick={() => {
+                          if (sessHere && !isRest) {
+                            setActiveSession({...sessHere.s, weekStart:monStr});
+                            setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                            setSessionDateOverride(sessHere.log?.analysis?.actual_date || actHere?.activity_date || d.dDate);
+                            setScreen(isLogged ? "result" : "session");
+                          }
+                        }}
+                        style={{
+                          background: isLogged && ts ? ts.bg : C.white,
+                          border: `1px solid ${isLogged && ts ? ts.border : C.rule}`,
+                          borderLeft: `3px solid ${d.dotColor}`,
+                          borderRadius: 2,
+                          padding: "10px 12px",
+                          cursor: sessHere && !isRest ? "pointer" : "default",
+                          opacity: isRest ? 0.5 : 1,
+                        }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                          <div style={{ fontSize:10, letterSpacing:1.5, color:d.isToday?C.crimson:C.mid, fontWeight:d.isToday?700:400 }}>
+                            {d.d.toUpperCase()} · {datePart}{d.isToday ? " · TODAY" : ""}
+                          </div>
+                          {isLogged && <div style={{ fontSize:10, color:C.green, fontWeight:700 }}>✓</div>}
+                          {!isLogged && s && d.dDate < today && !isRest && <div style={{ fontSize:9, color:C.crimson, fontWeight:700, letterSpacing:1 }}>MISSED</div>}
+                        </div>
+                        {s && !isRest ? (
+                          <div style={{ marginTop:4 }}>
+                            <div style={{ fontWeight:700, fontSize:13, color:C.navy }}>{s.type}</div>
+                            {s.pace && <div style={{ fontSize:11, color:ts.accent, fontFamily:"monospace" }}>{s.pace}</div>}
+                            {(actHere?.distance_km || sessHere?.log?.analysis?.distance_km) && (
+                              <div style={{ fontSize:11, color:C.mid }}>{actHere?.distance_km || sessHere?.log?.analysis?.distance_km}km</div>
+                            )}
+                          </div>
+                        ) : !s && actHere ? (
+                          <div style={{ marginTop:4 }}>
+                            <div style={{ fontWeight:700, fontSize:13, color:C.navy }}>{actHere.activity_type || "Run"}</div>
+                            <div style={{ fontSize:11, color:C.mid }}>{actHere.distance_km}km</div>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize:11, color:C.mid, marginTop:4, fontStyle:"italic" }}>Rest</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!isDesktop && <>
 
           {/* Today's planned hero */}
           <div style={{ margin:"20px 16px" }}>
@@ -2507,6 +2841,7 @@ export default function App() {
             <button onClick={() => setScreen("profile")} style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>PROFILE</button>
           </div>
 
+          </>}
         </div>
       </div>
     );
@@ -2532,7 +2867,7 @@ export default function App() {
           onBack={() => setScreen("today")}
           right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}
         />
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"0 0 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 0 80px" }}>
 
           <div onClick={() => setScreen("profile")}
             style={{ margin:"20px 16px", background:C.white, border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, borderRadius:2, padding:"14px 18px", cursor:"pointer" }}>
@@ -2824,7 +3159,7 @@ export default function App() {
         <Header title={editingActivityId ? "Edit Run" : "Log Activity"} subtitle={editingActivityId ? "Update entry" : "Manual Entry"} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setEditingActivityId(null); setScreen("home"); }}/>
         <form
           onSubmit={(e) => { e.preventDefault(); if (canSubmit && !logSaving) saveActivity(logForm, stravaDetail); }}
-          style={{ maxWidth:500, margin:"0 auto", padding:"20px 16px 80px" }}
+          style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"20px 16px 80px" }}
         >
           {stravaConnected && (
             <StravaActivityPicker
@@ -2925,7 +3260,7 @@ export default function App() {
       <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setScreen("home"); }}/>
       <form
         onSubmit={(e) => { e.preventDefault(); if (sessionDistKm && !isSaving) handleSubmitFeedback(); }}
-        style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}
+        style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}
       >
         <SectionCard label="Today's Session">
           {activeSession.desc.split("\n").filter(l => !/^\w{3} \w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2}/.test(l.trim())).map((l,i)=>(
@@ -3004,7 +3339,7 @@ export default function App() {
       <div style={S.page}>
         <div style={S.grain}/>
         <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>setScreen("home")}/>
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ textAlign:"center", fontSize:64, margin:"20px 0 8px" }}>{an?.emoji || "✓"}</div>
           <div style={{ textAlign:"center", fontSize:14, color:C.green, fontWeight:700, marginBottom:20, letterSpacing:1 }}>SESSION LOGGED</div>
           <div style={{ display:"flex", gap:10, marginBottom:16 }}>
@@ -3053,7 +3388,7 @@ export default function App() {
       <div style={S.page}>
         <div style={S.grain}/>
         <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setScreen("home"); }}/>
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ textAlign:"center", fontSize:48, margin:"20px 0 8px" }}>➕</div>
           <div style={{ textAlign:"center", fontSize:14, color:C.crimson, fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
           <div style={{ display:"flex", gap:10, marginBottom:16 }}>
@@ -3106,7 +3441,7 @@ export default function App() {
       <div style={S.page}>
         <div style={S.grain}/>
         <Header title="My Progress" subtitle="Block 4" onBack={()=>setScreen("home")}/>
-        <div style={{ maxWidth:500, margin:"0 auto", padding:"24px 16px 80px" }}>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
           <div style={{ display:"flex", gap:10, marginBottom:24 }}>
             {[
               { label:"Compliance", val:`${compliance}%`, color: compliance>75?"#4ade80":"#fbbf24" },
