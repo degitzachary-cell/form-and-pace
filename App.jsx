@@ -2777,6 +2777,52 @@ export default function App() {
       </div>
     );
 
+    // Settings list — Strava, Notifications, Units, Help, then a hot-tinted
+    // sign-out and a mono version footer. Tap rows that have a screen route
+    // somewhere; placeholders flash a transient notice for now.
+    const SettingsRow = ({ label, value, onClick, danger }) => (
+      <button onClick={onClick}
+        style={{
+          width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
+          background:"transparent", border:"none",
+          borderBottom:`1px solid ${C.ruleSoft}`,
+          padding:"14px 0", cursor:"pointer", textAlign:"left",
+          fontFamily:S.bodyFont,
+        }}>
+        <span style={{ fontFamily:S.displayFont, fontSize:17, color: danger ? C.hot : C.ink }}>{label}</span>
+        <span style={{ display:"flex", alignItems:"center", gap:10 }}>
+          {value && <span className="t-mono" style={{ fontSize:11, color:C.mute, letterSpacing:"0.06em" }}>{value}</span>}
+          <span style={{ color: danger ? C.hot : C.mute, fontFamily:S.displayFont, fontSize:18 }}>→</span>
+        </span>
+      </button>
+    );
+
+    const flashSoon = (what) => setProfileStatus({ kind:"info", message: `${what} settings — coming soon.` });
+
+    const SettingsBlock = (
+      <div style={{ marginTop:36 }}>
+        <div className="t-eyebrow" style={{ marginBottom:8, color:C.ink }}>Account</div>
+        <div style={{ borderTop:`1px solid ${C.rule}` }}>
+          <SettingsRow
+            label="Strava"
+            value={stravaConnected ? "Connected" : "Not connected"}
+            onClick={() => stravaConnected ? flashSoon("Disconnect Strava") : connectStrava()}
+          />
+          <SettingsRow label="Notifications" onClick={() => flashSoon("Notifications")} />
+          <SettingsRow label="Units" value="Kilometres" onClick={() => flashSoon("Units")} />
+          <SettingsRow label="Help"  onClick={() => { window.location.href = "mailto:hello@formandpace.app?subject=Form%20%26%20Pace%20support"; }} />
+        </div>
+        <button onClick={signOut}
+          className="fp-btn fp-btn--ghost"
+          style={{ marginTop:20, width:"100%", padding:"12px", color:C.hot, borderColor:C.hot }}>
+          Sign out
+        </button>
+        <div className="t-mono" style={{ marginTop:18, textAlign:"center", fontSize:10, color:C.mute, letterSpacing:"0.14em" }}>
+          FORM &amp; PACE · v0.1
+        </div>
+      </div>
+    );
+
     return renderProfileScreen({
       title: "My Profile",
       subtitle: "Edit your details",
@@ -2784,6 +2830,7 @@ export default function App() {
       onBack: () => setScreen("today"),
       headerRight: <button onClick={signOut} style={S.signOutBtn}>Sign out</button>,
       statsBlock: StatTrio,
+      settingsBlock: SettingsBlock,
       tabBar: <MobileTabBar current="profile" isDesktop={isDesktop} onTab={(s) => setScreen(s)} onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}/>,
     });
   }
