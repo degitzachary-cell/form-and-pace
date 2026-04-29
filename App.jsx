@@ -152,13 +152,13 @@ function ExtraActivityCard({ act, onClick }) {
   );
 }
 
-function DayRow({ dateStr, dayLabel, isToday, children, hasItems }) {
+function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr || dayLabel}` });
   const datePart = dateStr ? dateStr.slice(5).replace("-", "/") : "";
   const dayHeader = datePart ? `${dayLabel.toUpperCase()} · ${datePart}` : dayLabel.toUpperCase();
   return (
     <div ref={setNodeRef} style={{
-      marginBottom: 8,
+      marginBottom: 12,
       border: `1px dashed ${isOver ? C.crimson : "transparent"}`,
       borderRadius: 4,
       padding: isOver ? 4 : 0,
@@ -175,6 +175,13 @@ function DayRow({ dateStr, dayLabel, isToday, children, hasItems }) {
           background: C.white, border: `1px dashed ${C.rule}`, borderRadius: 2,
           padding: "12px", fontSize: 11, color: C.mid, textAlign: "center", letterSpacing: 1,
         }}>NO WORKOUT</div>
+      )}
+      {onAddRun && (
+        <button onClick={onAddRun} style={{
+          marginTop: 6, width: "100%", background: "transparent",
+          border: `1px dashed ${C.rule}`, borderRadius: 2, padding: "6px 10px",
+          color: C.mid, fontSize: 10, letterSpacing: 2, cursor: "pointer",
+        }}>+ ADD RUN</button>
       )}
     </div>
   );
@@ -242,7 +249,7 @@ export default function App() {
   const [screen,        setScreen]        = useState("home");
   const [activeSession, setActiveSession] = useState(null);
   const [activeExtraActivity, setActiveExtraActivity] = useState(null);
-  const [activeWeekIdx, setActiveWeekIdx] = useState(null);
+  const [activeMonday, setActiveMonday] = useState(null);
   const [coachWeekIdx, setCoachWeekIdx] = useState(null);
   const [feedbackText,  setFeedbackText]  = useState("");
   const [sessionDistKm, setSessionDistKm] = useState("");
@@ -368,6 +375,7 @@ export default function App() {
   // Activities (manual logging + future Strava sync)
   const [activities,  setActivities]  = useState([]);
   const [logForm,     setLogForm]     = useState({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
+  const [editingActivityId, setEditingActivityId] = useState(null);
   const [logSaving,   setLogSaving]   = useState(false);
   const [logError,    setLogError]    = useState(null);
 
@@ -510,21 +518,28 @@ export default function App() {
   const saveActivity = async (form, stravaDetailData = null) => {
     setLogSaving(true);
     setLogError(null);
-    const payload = {
-      athlete_email: user.email?.toLowerCase(),
-      athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
+    const basePayload = {
       activity_date: form.date,
       distance_km: parseFloat(form.distanceKm),
       duration_seconds: form.durationMin ? Math.round(parseFloat(form.durationMin) * 60) : null,
       activity_type: form.type,
       notes: form.notes || null,
-      source: stravaDetailData ? "strava" : "manual",
-      ...(stravaDetailData ? { strava_data: stravaDetailData } : {}),
+      ...(stravaDetailData ? { source: "strava", strava_data: stravaDetailData } : {}),
     };
-    const { data, error } = await supabase.from("activities").insert(payload).select().single();
+    let data, error;
+    if (editingActivityId) {
+      ({ data, error } = await supabase.from("activities").update(basePayload).eq("id", editingActivityId).select().single());
+    } else {
+      ({ data, error } = await supabase.from("activities").insert({
+        ...basePayload,
+        athlete_email: user.email?.toLowerCase(),
+        athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
+        source: stravaDetailData ? "strava" : "manual",
+      }).select().single());
+    }
     if (error) { console.error("saveActivity error:", error); setLogError(error.message); }
     if (!error && data) {
-      setActivities(prev => [data, ...prev]);
+      setActivities(prev => editingActivityId ? prev.map(a => a.id === data.id ? data : a) : [data, ...prev]);
       // Auto-link to matching scheduled session for this date
       if (programEntry) {
         const allSessionsWithDate = programEntry.weeks.flatMap(w =>
@@ -548,12 +563,31 @@ export default function App() {
         }
       }
       setLogForm({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
+      setEditingActivityId(null);
       clearStravaSelection();
       setStravaActivities([]);
       setScreen("home");
     }
     setLogSaving(false);
     return !error;
+  };
+
+  // Delete an activity row (extras and session-linked imports both live here).
+  const deleteActivity = async (activityId) => {
+    if (!activityId) return false;
+    const { error } = await supabase.from("activities").delete().eq("id", activityId);
+    if (error) { console.error("deleteActivity error:", error); return false; }
+    setActivities(prev => prev.filter(a => a.id !== activityId));
+    return true;
+  };
+
+  // Wipe a session log + any activity that was created when it was submitted.
+  const deleteSessionLog = async (sessionId, linkedActivityId) => {
+    if (linkedActivityId) await deleteActivity(linkedActivityId);
+    const { error } = await supabase.from("session_logs").delete().eq("session_id", sessionId);
+    if (error) { console.error("deleteSessionLog error:", error); return false; }
+    setLogs(prev => { const next = { ...prev }; delete next[sessionId]; return next; });
+    return true;
   };
 
   const saveLog = async (sessionId, updates) => {
@@ -715,21 +749,18 @@ export default function App() {
     catch (e) { console.error("drag-move saveLog error:", e); }
   };
 
-  // Default the athlete week dropdown to the current week (or last if all in past).
+  // Default the athlete week to the current week (Monday of today) on first mount.
   useEffect(() => {
-    if (role !== "athlete" || activeWeekIdx !== null || weeks.length === 0) return;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    let idx = weeks.findIndex(w => {
-      const mon = new Date(w.weekStart + "T00:00:00");
-      const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
-      return today >= mon && today <= sun;
-    });
-    if (idx < 0) {
-      idx = weeks.findIndex(w => new Date(w.weekStart + "T00:00:00") > today);
-      if (idx < 0) idx = weeks.length - 1;
-    }
-    setActiveWeekIdx(idx);
-  }, [role, weeks, activeWeekIdx]);
+    if (role !== "athlete" || activeMonday !== null) return;
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const dow = t.getDay();              // 0 = Sun, 1 = Mon, ... 6 = Sat
+    const offset = dow === 0 ? -6 : 1 - dow;
+    t.setDate(t.getDate() + offset);
+    const y = t.getFullYear();
+    const m = String(t.getMonth() + 1).padStart(2, "0");
+    const d = String(t.getDate()).padStart(2, "0");
+    setActiveMonday(`${y}-${m}-${d}`);
+  }, [role, activeMonday]);
 
   // Index activities by athlete + date for O(1) lookups in render loops.
   const actByEmailDate = useMemo(() => {
@@ -1620,10 +1651,6 @@ export default function App() {
                   )}
                 </div>
               </div>
-              <button onClick={()=>{ setLogForm({ date: new Date().toISOString().split("T")[0], distanceKm:"", durationMin:"", type:"Run", notes:"" }); setScreen("log-activity"); }}
-                style={{ background:C.crimson, border:"none", borderRadius:2, padding:"8px 14px", color:"#fffdf8", fontSize:12, fontWeight:700, cursor:"pointer", letterSpacing:1, fontFamily:S.bodyFont }}>
-                + LOG RUN
-              </button>
             </div>
             <div style={{ display:"flex", gap:3, alignItems:"flex-end" }}>
               {weekBars.map((b, i) => {
@@ -1683,21 +1710,22 @@ export default function App() {
             )}
           </div>
 
-          {/* Week selector dropdown — defaults to current week */}
-          {weeks.length > 0 && activeWeekIdx !== null && (() => {
+          {/* Week picker — date input snaps to the Monday of any chosen day */}
+          {activeMonday && (() => {
             const today = new Date(); today.setHours(0,0,0,0);
-            const weekStatus = (w) => {
-              const mon = new Date(w.weekStart + "T00:00:00");
-              const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
-              if (today > sun) return "past";
-              if (today >= mon) return "current";
-              return "future";
+            const monDate = new Date(activeMonday + "T00:00:00");
+            const sunDate = new Date(monDate); sunDate.setDate(monDate.getDate() + 6); sunDate.setHours(23,59,59,999);
+            const isCurrent = today >= monDate && today <= sunDate;
+            const isPast = today > sunDate;
+            const planned = weeks.find(w => w.weekStart === activeMonday);
+            const fmtRange = () => {
+              const m = monDate.toLocaleString("en-AU", { month: "short" });
+              const m2 = sunDate.toLocaleString("en-AU", { month: "short" });
+              return m === m2
+                ? `${monDate.getDate()}–${sunDate.getDate()} ${m}`
+                : `${monDate.getDate()} ${m} – ${sunDate.getDate()} ${m2}`;
             };
-            const idx = Math.min(activeWeekIdx, weeks.length - 1);
-            const w = weeks[idx];
-            const status = weekStatus(w);
-            const isCurrent = status === "current";
-            const isPast = status === "past";
+            const w = planned || { weekStart: activeMonday, weekLabel: fmtRange(), sessions: [] };
             const wkEnd = weekEndStr(w.weekStart);
             const extraActs = myActs.filter(a =>
               a.source !== "session" &&
@@ -1706,42 +1734,45 @@ export default function App() {
             );
             const sessionsDone = w.sessions.filter(s => logs[s.id] || actByDate[sessionDateStr(w.weekStart, s.day)]).length;
 
+            const snapToMonday = (dateStr) => {
+              if (!dateStr) return;
+              const d = new Date(dateStr + "T00:00:00");
+              if (isNaN(d)) return;
+              const dow = d.getDay();
+              const off = dow === 0 ? -6 : 1 - dow;
+              d.setDate(d.getDate() + off);
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, "0");
+              const dy = String(d.getDate()).padStart(2, "0");
+              setActiveMonday(`${y}-${m}-${dy}`);
+            };
+
             return (
               <div style={{ padding:"0 16px" }}>
                 <div style={{ marginBottom:10 }}>
-                  <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:6, fontFamily:S.bodyFont }}>Week</div>
-                  <div style={{ position:"relative" }}>
-                    <select
-                      value={idx}
-                      onChange={(e) => setActiveWeekIdx(Number(e.target.value))}
-                      style={{
-                        width:"100%",
-                        appearance:"none",
-                        WebkitAppearance:"none",
-                        background: isCurrent ? C.crimson : C.white,
-                        color: isCurrent ? "#fffdf8" : C.navy,
-                        border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
-                        borderRadius:2,
-                        padding:"12px 36px 12px 14px",
-                        fontSize:13,
-                        fontWeight:700,
-                        letterSpacing:0.5,
-                        fontFamily:S.bodyFont,
-                        cursor:"pointer",
-                      }}>
-                      {weeks.map((wk, i) => {
-                        const s = weekStatus(wk);
-                        const tag = s === "current" ? " · THIS WEEK" : s === "past" ? " · PAST" : "";
-                        return <option key={i} value={i}>{wk.weekLabel}{tag}</option>;
-                      })}
-                    </select>
-                    <div style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color: isCurrent ? "rgba(255,255,255,0.75)" : C.mid, fontSize:14 }}>▾</div>
+                  <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:6, fontFamily:S.bodyFont }}>Week of</div>
+                  <input
+                    type="date"
+                    value={activeMonday}
+                    onChange={(e) => snapToMonday(e.target.value)}
+                    style={{
+                      width:"100%",
+                      background: isCurrent ? C.crimson : C.white,
+                      color: isCurrent ? "#fffdf8" : C.navy,
+                      border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
+                      borderRadius:2,
+                      padding:"12px 14px",
+                      fontSize:13,
+                      fontWeight:700,
+                      letterSpacing:0.5,
+                      fontFamily:S.bodyFont,
+                      cursor:"pointer",
+                      colorScheme: isCurrent ? "dark" : "light",
+                    }}/>
+                  <div style={{ fontSize:10, color:C.mid, marginTop:6, paddingLeft:2, letterSpacing:1 }}>
+                    {w.weekLabel}{isCurrent ? " · THIS WEEK" : isPast ? " · PAST" : " · UPCOMING"}
+                    {isPast && sessionsDone > 0 ? ` · ${sessionsDone}/${w.sessions.length} logged` : ""}
                   </div>
-                  {isPast && sessionsDone > 0 && (
-                    <div style={{ fontSize:10, color:C.mid, marginTop:6, paddingLeft:2 }}>
-                      {sessionsDone}/{w.sessions.length} sessions logged
-                    </div>
-                  )}
                 </div>
 
                 <div style={{ marginBottom:14 }}>
@@ -1768,7 +1799,19 @@ export default function App() {
                       const extrasHere = dayDate ? extraActs.filter(a => a.activity_date === dayDate) : [];
                       const hasItems = sessionsHere.length + extrasHere.length > 0;
                       return (
-                        <DayRow key={dayLabel} dateStr={dayDate} dayLabel={dayLabel} isToday={isToday} hasItems={hasItems}>
+                        <DayRow
+                          key={dayLabel}
+                          dateStr={dayDate}
+                          dayLabel={dayLabel}
+                          isToday={isToday}
+                          hasItems={hasItems}
+                          onAddRun={dayDate ? () => {
+                            setLogForm({ date: dayDate, distanceKm: "", durationMin: "", type: "Run", notes: "" });
+                            setEditingActivityId(null);
+                            clearStravaSelection();
+                            setScreen("log-activity");
+                          } : null}
+                        >
                           {sessionsHere.map(({ s, log }) => {
                             const sDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
                             const linkedAct = actByDate[sDate];
@@ -1824,7 +1867,7 @@ export default function App() {
     return (
       <div style={S.page}>
         <div style={S.grain}/>
-        <Header title="Log Activity" subtitle="Manual Entry" onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setScreen("home"); }}/>
+        <Header title={editingActivityId ? "Edit Run" : "Log Activity"} subtitle={editingActivityId ? "Update entry" : "Manual Entry"} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setEditingActivityId(null); setScreen("home"); }}/>
         <form
           onSubmit={(e) => { e.preventDefault(); if (canSubmit && !logSaving) saveActivity(logForm, stravaDetail); }}
           style={{ maxWidth:500, margin:"0 auto", padding:"20px 16px 80px" }}
@@ -2034,6 +2077,11 @@ export default function App() {
             if (log?.strava_data) setStravaDetail(log.strava_data);
             setScreen("session");
           }} style={{ ...S.ghostBtn, marginBottom: 8 }}>Edit session →</button>
+          <button onClick={async () => {
+            if (!confirm("Delete this session log? Any activity created from it will also be removed.")) return;
+            const ok = await deleteSessionLog(activeSession.id, resultLinkedAct?.id);
+            if (ok) { setActiveSession(null); setScreen("home"); }
+          }} style={{ ...S.ghostBtn, marginBottom: 8, color: C.crimson, borderColor: C.crimson }}>Delete session</button>
           <button onClick={()=>setScreen("home")} style={S.ghostBtn}>← Back to week</button>
         </div>
       </div>
@@ -2069,6 +2117,24 @@ export default function App() {
               <div style={{ fontSize:14, color:C.navy, lineHeight:1.8 }}>{act.coach_reply}</div>
             </SectionCard>
           )}
+          <button onClick={() => {
+            setLogForm({
+              date: act.activity_date,
+              distanceKm: act.distance_km?.toString() || "",
+              durationMin: act.duration_seconds ? Math.round(act.duration_seconds / 60).toString() : "",
+              type: act.activity_type || "Run",
+              notes: act.notes || "",
+            });
+            if (act.strava_data) setStravaDetail(act.strava_data);
+            setEditingActivityId(act.id);
+            setActiveExtraActivity(null);
+            setScreen("log-activity");
+          }} style={{ ...S.ghostBtn, marginBottom: 8 }}>Edit run →</button>
+          <button onClick={async () => {
+            if (!confirm("Delete this run?")) return;
+            const ok = await deleteActivity(act.id);
+            if (ok) { setActiveExtraActivity(null); setScreen("home"); }
+          }} style={{ ...S.ghostBtn, marginBottom: 8, color: C.crimson, borderColor: C.crimson }}>Delete run</button>
           <button onClick={()=>{ setActiveExtraActivity(null); setScreen("home"); }} style={S.ghostBtn}>← Back to week</button>
         </div>
       </div>
