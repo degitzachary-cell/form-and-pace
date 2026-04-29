@@ -1716,6 +1716,16 @@ export default function App() {
 
                   {/* 2-column session grid */}
                   {dpWk && (
+                    <DndContext
+                      sensors={dndSensors}
+                      onDragEnd={({ active, over }) => {
+                        if (!over) return;
+                        const [aKind, aId] = String(active.id).split(":");
+                        const [oKind, oDate] = String(over.id).split(":");
+                        if (aKind !== "session" || oKind !== "day" || !oDate) return;
+                        handleSessionDrop(aId, oDate, dpWk.weekStart, dashAthlete);
+                      }}
+                    >
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
                       {DAY_LABELS.map(dayLabel => {
                         const dayDate = sessionDateStr(dpWk.weekStart, dayLabel);
@@ -1728,7 +1738,8 @@ export default function App() {
                         const extrasHere = dayDate ? dpExtras.filter(a => a.activity_date === dayDate) : [];
                         const datePart = dayDate ? dayDate.slice(5).replace("-","/") : "";
                         return (
-                          <div key={dayLabel} style={{ background:C.white, border:`1px solid ${isToday ? C.crimson : C.rule}`, borderRadius:2, padding:"12px 14px" }}>
+                          <CoachDroppableDay key={dayLabel} dateStr={dayDate}>
+                          <div style={{ background:C.white, border:`1px solid ${isToday ? C.crimson : C.rule}`, borderRadius:2, padding:"12px 14px" }}>
                             <div style={{ fontSize:10, letterSpacing:2, color:isToday?C.crimson:C.mid, fontWeight:isToday?700:500, marginBottom:8 }}>
                               {dayLabel.toUpperCase()}{datePart ? ` · ${datePart}` : ""}{isToday ? " · TODAY" : ""}
                             </div>
@@ -1744,7 +1755,8 @@ export default function App() {
                                   const comply = effectiveCompliance({ session: s, log, linkedAct, isPastDate, profile: dpAthlete });
                                   const cts = typeStyle(s.type);
                                   return (
-                                    <div key={s.id}
+                                    <CoachDraggableSession key={s.id} session={s}>
+                                    <div
                                       onClick={() => { setActiveSession({...s, weekStart:dpWk.weekStart, athleteEmail:dashAthlete}); setCoachScreen("session"); }}
                                       style={{ background:cts.bg, border:`1px solid ${cts.border}`, borderLeft:`3px solid ${cts.accent}`, borderRadius:2, padding:"8px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
                                       <div style={{ width:22, height:22, borderRadius:"50%", background:cts.pattern||cts.bg, border:`1.5px solid ${cts.accent}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, color:cts.accent, fontWeight:700, flexShrink:0 }}>
@@ -1761,6 +1773,7 @@ export default function App() {
                                         {log?.analysis?.distance_km && <div style={{ fontSize:10, color:C.mid }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
                                       </div>
                                     </div>
+                                    </CoachDraggableSession>
                                   );
                                 })}
                                 {extrasHere.map(act => (
@@ -1777,9 +1790,11 @@ export default function App() {
                               </div>
                             )}
                           </div>
+                          </CoachDroppableDay>
                         );
                       })}
                     </div>
+                    </DndContext>
                   )}
                 </>
               )}
