@@ -233,6 +233,11 @@ export default function App() {
   const [sessionDistKm, setSessionDistKm] = useState("");
   const [sessionDurMin, setSessionDurMin] = useState("");
   const [sessionDateOverride, setSessionDateOverride] = useState(null);
+  // Wellness — manually entered each session log. Stored in analysis.wellness.
+  const [sessionRpe,       setSessionRpe]       = useState(null);  // 1–10
+  const [sessionSleepHrs,  setSessionSleepHrs]  = useState("");    // free number
+  const [sessionSoreness,  setSessionSoreness]  = useState(null);  // 1–5
+  const [sessionMood,      setSessionMood]      = useState(null);  // 1–5
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
 
@@ -642,6 +647,7 @@ export default function App() {
     setActiveMonday(null); setCoachActiveMonday(null); setHoveredWeekIdx(null);
     setCoachReply(""); setFeedbackText("");
     setSessionDistKm(""); setSessionDurMin(""); setSessionDateOverride(null);
+    setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
     setScreen("today"); setCoachScreen("dashboard");
     setDashAthlete(null);
   };
@@ -789,12 +795,19 @@ export default function App() {
       const stravaDate = stravaDetail?.start_date_local?.slice(0,10) || stravaDetail?.start_date?.slice(0,10);
       const sessionDate = stravaDate || sessionDateOverride || scheduledDate
         || (() => { const d = new Date(); const y = d.getFullYear(); const mo = String(d.getMonth()+1).padStart(2,"0"); const dy = String(d.getDate()).padStart(2,"0"); return `${y}-${mo}-${dy}`; })();
+      const wellness = {
+        ...(sessionRpe       != null ? { rpe:         sessionRpe       } : {}),
+        ...(sessionSleepHrs  !== ""  ? { sleep_hours: parseFloat(sessionSleepHrs) } : {}),
+        ...(sessionSoreness  != null ? { soreness:    sessionSoreness  } : {}),
+        ...(sessionMood      != null ? { mood:        sessionMood      } : {}),
+      };
       const analysis = {
         compliance: "completed",
         emoji: TAG_EMOJI[s.tag] || "🏃",
         distance_km: parseFloat(sessionDistKm),
         duration_min: sessionDurMin ? parseFloat(sessionDurMin) : null,
         ...(sessionDate !== scheduledDate ? { actual_date: sessionDate } : {}),
+        ...(Object.keys(wellness).length ? { wellness } : {}),
       };
       await saveLog(s.id, { feedback: feedbackText, analysis, ...(stravaDetail ? { strava_data: stravaDetail } : {}) });
 
@@ -1934,6 +1947,16 @@ export default function App() {
                     {durMin  && <StatPill label="Duration" val={`${durMin}min`}/>}
                   </div>
                   {(log?.strava_data || linkedAthAct?.strava_data) && <StravaCard data={log?.strava_data || linkedAthAct?.strava_data}/>}
+                  {an?.wellness && Object.keys(an.wellness).length > 0 && (
+                    <SectionCard label="Wellness">
+                      <div style={{ display:"flex", gap:14, flexWrap:"wrap", fontSize:13, color:C.navy }}>
+                        {an.wellness.rpe        != null && <div><b>RPE</b> {an.wellness.rpe}/10</div>}
+                        {an.wellness.sleep_hours != null && <div><b>Sleep</b> {an.wellness.sleep_hours}h</div>}
+                        {an.wellness.soreness   != null && <div><b>Soreness</b> {an.wellness.soreness}/5</div>}
+                        {an.wellness.mood       != null && <div><b>Mood</b> {["😞","😕","😐","🙂","😄"][an.wellness.mood-1]} {an.wellness.mood}/5</div>}
+                      </div>
+                    </SectionCard>
+                  )}
                   {notes ? (
                     <SectionCard label="Athlete's Notes">
                       <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{notes}"</div>
@@ -2428,7 +2451,7 @@ export default function App() {
                     <div onClick={() => {
                         const s = todaysSession.s;
                         setActiveSession({ ...s, weekStart: monStr });
-                        setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                        setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
                         setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
                         const isLogged = !!todaysSession.log || !!todaysActivity;
                         setScreen(isLogged ? "result" : "session");
@@ -2475,7 +2498,7 @@ export default function App() {
                         if (todaysSession) {
                           const s = todaysSession.s;
                           setActiveSession({ ...s, weekStart: monStr });
-                          setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                          setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
                           setSessionDateOverride(today);
                           setSelectedStravaId(todaysStrava.id);
                           setScreen("session");
@@ -2517,7 +2540,7 @@ export default function App() {
                         onClick={() => {
                           if (sessHere && !isRest) {
                             setActiveSession({...sessHere.s, weekStart:monStr});
-                            setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                            setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
                             setSessionDateOverride(sessHere.log?.analysis?.actual_date || actHere?.activity_date || d.dDate);
                             setScreen(isLogged ? "result" : "session");
                           }
@@ -2573,7 +2596,7 @@ export default function App() {
               <div onClick={() => {
                   const s = todaysSession.s;
                   setActiveSession({ ...s, weekStart: monStr });
-                  setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                  setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
                   setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
                   const isLogged = !!todaysSession.log || !!todaysActivity;
                   setScreen(isLogged ? "result" : "session");
@@ -2620,7 +2643,7 @@ export default function App() {
                   if (todaysSession) {
                     const s = todaysSession.s;
                     setActiveSession({ ...s, weekStart: monStr });
-                    setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                    setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
                     setSessionDateOverride(today);
                     setSelectedStravaId(todaysStrava.id);
                     setScreen("session");
@@ -3124,6 +3147,60 @@ export default function App() {
             </div>
           </div>
         )}
+        <SectionCard label="Wellness">
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>RPE — Effort 1–10</div>
+            <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+              {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                <button key={n} type="button" onClick={() => setSessionRpe(sessionRpe === n ? null : n)}
+                  style={{
+                    flex:"1 0 38px", minWidth:38, padding:"8px 0",
+                    background: sessionRpe===n ? C.crimson : C.white,
+                    color:      sessionRpe===n ? "#fffdf8" : C.navy,
+                    border:`1px solid ${sessionRpe===n ? C.crimson : C.rule}`,
+                    borderRadius:2, fontSize:12, fontWeight:700, cursor:"pointer",
+                  }}>{n}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Sleep last night (hours)</div>
+            <input type="number" step="0.5" min="0" max="14" placeholder="e.g. 7.5"
+              value={sessionSleepHrs} onChange={e=>setSessionSleepHrs(e.target.value)}
+              style={{ ...S.input, width:120 }}/>
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Soreness — 1 none · 5 severe</div>
+            <div style={{ display:"flex", gap:4 }}>
+              {[1,2,3,4,5].map(n => (
+                <button key={n} type="button" onClick={() => setSessionSoreness(sessionSoreness === n ? null : n)}
+                  style={{
+                    flex:1, padding:"8px 0",
+                    background: sessionSoreness===n ? C.crimson : C.white,
+                    color:      sessionSoreness===n ? "#fffdf8" : C.navy,
+                    border:`1px solid ${sessionSoreness===n ? C.crimson : C.rule}`,
+                    borderRadius:2, fontSize:12, fontWeight:700, cursor:"pointer",
+                  }}>{n}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Mood — 1 bad · 5 great</div>
+            <div style={{ display:"flex", gap:4 }}>
+              {[1,2,3,4,5].map(n => (
+                <button key={n} type="button" onClick={() => setSessionMood(sessionMood === n ? null : n)}
+                  style={{
+                    flex:1, padding:"8px 0",
+                    background: sessionMood===n ? C.crimson : C.white,
+                    color:      sessionMood===n ? "#fffdf8" : C.navy,
+                    border:`1px solid ${sessionMood===n ? C.crimson : C.rule}`,
+                    borderRadius:2, fontSize:12, fontWeight:700, cursor:"pointer",
+                  }}>{["😞","😕","😐","🙂","😄"][n-1]} {n}</button>
+              ))}
+            </div>
+          </div>
+        </SectionCard>
+
         <div style={{ fontSize:11, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:10 }}>How did it go?</div>
         <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)}
           placeholder="Tell me about the session... how did it feel? Did you hit the paces? Any soreness or highlights?"
@@ -3158,6 +3235,16 @@ export default function App() {
             {an?.duration_min && <StatPill label="Duration" val={`${an.duration_min}min`}/>}
           </div>
           {log?.strava_data && <StravaCard data={log.strava_data}/>}
+          {an?.wellness && Object.keys(an.wellness).length > 0 && (
+            <SectionCard label="Wellness">
+              <div style={{ display:"flex", gap:14, flexWrap:"wrap", fontSize:13, color:C.navy }}>
+                {an.wellness.rpe        != null && <div><b>RPE</b> {an.wellness.rpe}/10</div>}
+                {an.wellness.sleep_hours != null && <div><b>Sleep</b> {an.wellness.sleep_hours}h</div>}
+                {an.wellness.soreness   != null && <div><b>Soreness</b> {an.wellness.soreness}/5</div>}
+                {an.wellness.mood       != null && <div><b>Mood</b> {["😞","😕","😐","🙂","😄"][an.wellness.mood-1]} {an.wellness.mood}/5</div>}
+              </div>
+            </SectionCard>
+          )}
           {(log?.feedback || feedbackText) && (
             <SectionCard label="Your Notes">
               <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{log?.feedback || feedbackText}"</div>
@@ -3170,10 +3257,15 @@ export default function App() {
           )}
           <button onClick={() => {
             const an = log?.analysis;
+            const w = an?.wellness || {};
             setFeedbackText(log?.feedback || "");
             setSessionDistKm(an?.distance_km?.toString() || "");
             setSessionDurMin(an?.duration_min?.toString() || "");
             setSessionDateOverride(an?.actual_date || resultLinkedAct?.activity_date || sessionDateStr(activeSession.weekStart, activeSession.day));
+            setSessionRpe(w.rpe ?? null);
+            setSessionSleepHrs(w.sleep_hours != null ? String(w.sleep_hours) : "");
+            setSessionSoreness(w.soreness ?? null);
+            setSessionMood(w.mood ?? null);
             if (log?.strava_data) setStravaDetail(log.strava_data);
             setScreen("session");
           }} style={{ ...S.ghostBtn, marginBottom: 8 }}>Edit session →</button>
