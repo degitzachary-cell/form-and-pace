@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel } from "./components.jsx";
@@ -3489,7 +3489,23 @@ export default function App() {
                   const d = await loadStravaDetail(id);
                   if (d) {
                     const actDate = stravaActivities.find(a=>a.id===id)?.start_date_local?.split("T")[0] || logForm.date;
-                    setLogForm(f=>({ ...f, date: actDate, distanceKm: (d.distance_m/1000).toFixed(2), durationMin: Math.round(d.moving_time_s/60).toString() }));
+                    // Auto-classify the run type from splits + threshold pace.
+                    // Map the lib/load.js label to the activityTypes list the
+                    // form picker uses ("Easy Run" etc).
+                    const labelMap = { LONG: "Long Run", SPEED: "Speed", TEMPO: "Tempo", RECOVERY: "Easy Run", EASY: "Easy Run" };
+                    const cls = autoClassifyRunType({
+                      distanceKm: d.distance_m / 1000,
+                      durationSec: d.moving_time_s,
+                      splits: d.splits,
+                      thresholdSecsPerKm: getThresholdPace(profile),
+                    });
+                    setLogForm(f=>({
+                      ...f,
+                      date: actDate,
+                      distanceKm: (d.distance_m/1000).toFixed(2),
+                      durationMin: Math.round(d.moving_time_s/60).toString(),
+                      type: labelMap[cls] || f.type,
+                    }));
                   }
                 } else clearStravaSelection();
               }}
