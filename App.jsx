@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { useWindowWidth } from "./lib/hooks.js";
 import CoachPlanBuilder from "./CoachPlanBuilder";
-import { supabase, STRAVA_CLIENT_ID, exchangeStravaCode, stravaCall } from "./lib/supabase.js";
+import { supabase, exchangeStravaCode } from "./lib/supabase.js";
+import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail } from "./lib/strava.js";
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr,
-  extractStravaData, getStats, prettyEmailName, todayStr, newId,
+  getStats, prettyEmailName, todayStr, newId,
   snapToMonday, thisMonday,
 } from "./lib/helpers.js";
 import { C, S, TAG_STYLE, TYPE_STYLE, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
@@ -422,7 +423,7 @@ export default function App() {
         if (d?.success) setStravaConnected(true);
       }).catch(e => console.error("Strava exchange error", e));
     } else {
-      checkStravaConnection();
+      refreshStravaConnection();
     }
   }, [user, role]);
 
@@ -701,29 +702,20 @@ export default function App() {
     setDashAthlete(null);
   };
 
-  const checkStravaConnection = async () => {
-    try {
-      const d = await stravaCall("check");
-      setStravaConnected(d.connected === true);
-    } catch { setStravaConnected(false); }
+  const refreshStravaConnection = async () => {
+    setStravaConnected(await checkStravaConnection());
   };
 
   // Auto-fetch recent Strava activities for the rolling volume graph.
   // Refreshes whenever the tab regains focus so athletes don't manually re-sync.
   useEffect(() => {
     if (!stravaConnected) return;
-    fetchStravaActivities();
-    const onVis = () => { if (document.visibilityState === "visible") fetchStravaActivities(); };
+    loadStravaActivities();
+    const onVis = () => { if (document.visibilityState === "visible") loadStravaActivities(); };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [stravaConnected]);
 
-  const connectStrava = () => {
-    const redirectUri = encodeURIComponent(window.location.origin);
-    const scope = "read,activity:read";
-    sessionStorage.setItem("strava_oauth_in_flight", "1");
-    window.location.href = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&approval_prompt=auto&scope=${scope}`;
-  };
 
   // Dismiss the bar-chart hover/tap tooltip when the user taps anywhere
   // outside a bar (otherwise the tooltip "sticks" on touch devices).
@@ -741,28 +733,22 @@ export default function App() {
     };
   }, [hoveredWeekIdx]);
 
-  const fetchStravaActivities = async () => {
+  const loadStravaActivities = async () => {
     if (stravaActivitiesLoading) return;
     setStravaActivitiesLoading(true);
     try {
-      // Pull last ~10 weeks of activity (UNIX seconds) so the 8-week chart
-      // always has enough data even for high-volume athletes.
-      const after = Math.floor(Date.now() / 1000) - 10 * 7 * 24 * 60 * 60;
-      const data = await stravaCall("list", { per_page: 200, after });
-      if (Array.isArray(data)) {
-        setStravaActivities(data.filter(a => a.sport_type === "Run" || a.type === "Run"));
-      }
+      const data = await fetchStravaActivities();
+      setStravaActivities(data);
     } catch(e) { console.error("strava list error", e); }
     setStravaActivitiesLoading(false);
   };
 
-  const fetchStravaDetail = async (id) => {
+  const loadStravaDetail = async (id) => {
     setStravaDetailLoading(true);
     setStravaDetail(null);
     try {
-      const data = await stravaCall("get", { activity_id: id });
-      if (data?.id) {
-        const extracted = extractStravaData(data);
+      const extracted = await fetchStravaDetail(id);
+      if (extracted) {
         setStravaDetail(extracted);
         setStravaDetailLoading(false);
         return extracted;
@@ -3071,11 +3057,11 @@ export default function App() {
               selectedId={selectedStravaId}
               detail={stravaDetail}
               detailLoading={stravaDetailLoading}
-              onOpen={() => { fetchStravaActivities(); }}
+              onOpen={() => { loadStravaActivities(); }}
               onSelect={async (id) => {
                 setSelectedStravaId(id);
                 if (id) {
-                  const d = await fetchStravaDetail(id);
+                  const d = await loadStravaDetail(id);
                   if (d) {
                     const actDate = stravaActivities.find(a=>a.id===id)?.start_date_local?.split("T")[0] || logForm.date;
                     setLogForm(f=>({ ...f, date: actDate, distanceKm: (d.distance_m/1000).toFixed(2), durationMin: Math.round(d.moving_time_s/60).toString() }));
@@ -3181,11 +3167,11 @@ export default function App() {
             selectedId={selectedStravaId}
             detail={stravaDetail}
             detailLoading={stravaDetailLoading}
-            onOpen={() => { fetchStravaActivities(); }}
+            onOpen={() => { loadStravaActivities(); }}
             onSelect={async (id) => {
               setSelectedStravaId(id);
               if (id) {
-                const d = await fetchStravaDetail(id);
+                const d = await loadStravaDetail(id);
                 if (d) {
                   setSessionDistKm((d.distance_m / 1000).toFixed(2));
                   setSessionDurMin(Math.round(d.moving_time_s / 60).toString());
