@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Form & Pace — Week View v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #fbfaf7;
+    --ink: #1c1d22;
+    --muted: #8a8a8f;
+    --rule: #e7e4dc;
+    --accent: #b85a3c;       /* warm terracotta — only used for today */
+    --accent-soft: #f1d9cf;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ece9e2; font-family: 'Inter', system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  body { padding: 48px 24px 80px; }
+  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+  h1.lab { font-family: 'Fraunces', serif; font-weight: 400; font-size: 22px; letter-spacing: -0.01em; margin: 0; color: var(--ink); }
+  h1.lab span { color: var(--muted); font-size: 13px; margin-left: 10px; letter-spacing: 0.04em; text-transform: uppercase; font-family: 'Inter', sans-serif; }
+
+  /* Phone frame */
+  .phone {
+    width: 380px;
+    background: var(--paper);
+    border-radius: 36px;
+    box-shadow: 0 30px 60px -30px rgba(20,20,30,0.25), 0 1px 0 rgba(255,255,255,0.6) inset;
+    overflow: hidden;
+    margin: 0 auto;
+  }
+  .phone-inner { padding: 28px 26px 36px; }
+
+  /* Header */
+  .hdr { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 28px; }
+  .hdr .month {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+  .hdr .week-meta {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Week-of selector — minimal */
+  .weekbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0 22px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 6px;
+  }
+  .weekbar .arrow {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center;
+    color: var(--muted); cursor: pointer;
+    font-size: 14px;
+  }
+  .weekbar .range {
+    font-family: 'Fraunces', serif;
+    font-size: 15px;
+    letter-spacing: -0.005em;
+  }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 64px; }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 56px; top: 6px; bottom: 6px;
+    width: 1px;
+    background: var(--rule);
+  }
+  .day {
+    position: relative;
+    padding: 22px 0 22px 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .day:last-child { border-bottom: 0; }
+
+  /* Left column — numerals */
+  .day .stamp {
+    position: absolute;
+    left: -64px; top: 22px;
+    width: 56px;
+    text-align: right;
+    padding-right: 18px;
+  }
+  .day .num {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 32px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .day .dow {
+    margin-top: 4px;
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Rail dot */
+  .day::after {
+    content: "";
+    position: absolute;
+    left: -8px; top: 32px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--paper);
+    box-shadow: 0 0 0 1px var(--rule);
+  }
+  .day.today::after {
+    background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+  .day.today .num { color: var(--accent); }
+  .day.today .dow { color: var(--accent); }
+
+  /* Workout content */
+  .workout-type {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .workout-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 18px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+  }
+  .workout-meta {
+    font-size: 12.5px;
+    color: var(--muted);
+    letter-spacing: 0.005em;
+  }
+  .workout-meta b { color: var(--ink); font-weight: 500; }
+
+  .rest .workout-title { color: var(--muted); font-style: italic; font-weight: 300; }
+
+  .empty {
+    font-size: 12px;
+    color: #c4c0b8;
+    letter-spacing: 0.02em;
+  }
+  .add {
+    margin-top: 10px;
+    display: inline-block;
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: none; background: transparent;
+    padding: 0; cursor: pointer;
+  }
+  .add:hover { color: var(--ink); }
+
+  /* Logged badge */
+  .logged {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 8px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6f8a6c;
+  }
+  .logged::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%;
+    background: #8aa388;
+  }
+
+  /* Notes */
+  .notes {
+    max-width: 760px; margin: 0 auto;
+    font-size: 13px; line-height: 1.6; color: #4a4a52;
+  }
+  .notes h3 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 18px; margin: 0 0 10px; }
+  .notes ul { padding-left: 18px; margin: 0; }
+  .notes li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1 class="lab">Compact Timeline · v2 <span>elegant pass</span></h1>
+
+  <div class="phone">
+    <div class="phone-inner">
+
+      <div class="hdr">
+        <div class="month">April</div>
+        <div class="week-meta">Week 4 · Build</div>
+      </div>
+
+      <div class="weekbar">
+        <div class="arrow">‹</div>
+        <div class="range">28 Apr — 4 May</div>
+        <div class="arrow">›</div>
+      </div>
+
+      <div class="timeline">
+
+        <div class="day">
+          <div class="stamp">
+            <div class="num">28</div>
+            <div class="dow">Mon</div>
+          </div>
+          <div class="workout-type">Easy</div>
+          <h2 class="workout-title">Aerobic shakeout</h2>
+          <div class="workout-meta"><b>6 km</b> · 5:30/km · flat</div>
+          <div class="logged">Logged · 6.1 km @ 5:24</div>
+        </div>
+
+        <div class="day today">
+          <div class="stamp">
+            <div class="num">29</div>
+            <div class="dow">Tue</div>
+          </div>
+          <div class="workout-type">Tempo</div>
+          <h2 class="workout-title">3 × 2 km @ threshold</h2>
+          <div class="workout-meta"><b>10 km</b> total · 4:15/km · 90s float</div>
+        </div>
+
+        <div class="day">
+          <div class="stamp">
+            <div class="num">30</div>
+            <div class="dow">Wed</div>
+          </div>
+          <div class="workout-type">Recovery</div>
+          <h2 class="workout-title">Easy 45'</h2>
+          <div class="workout-meta">conversational · zone 2</div>
+        </div>
+
+        <div class="day rest">
+          <div class="stamp">
+            <div class="num">01</div>
+            <div class="dow">Thu</div>
+          </div>
+          <h2 class="workout-title">Rest</h2>
+          <button class="add">+ add run</button>
+        </div>
+
+        <div class="day">
+          <div class="stamp">
+            <div class="num">02</div>
+            <div class="dow">Fri</div>
+          </div>
+          <div class="workout-type">Speed</div>
+          <h2 class="workout-title">8 × 400m</h2>
+          <div class="workout-meta">@ 5K pace · 200m jog · track</div>
+        </div>
+
+        <div class="day">
+          <div class="stamp">
+            <div class="num">03</div>
+            <div class="dow">Sat</div>
+          </div>
+          <div class="workout-type">Long</div>
+          <h2 class="workout-title">Long run with surges</h2>
+          <div class="workout-meta"><b>22 km</b> · last 6 km @ MP · trails</div>
+        </div>
+
+        <div class="day rest">
+          <div class="stamp">
+            <div class="num">04</div>
+            <div class="dow">Sun</div>
+          </div>
+          <h2 class="workout-title">Rest</h2>
+          <button class="add">+ add run</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>What's different from v1</h3>
+    <ul>
+      <li>Single hairline rail. Coloured spine gone.</li>
+      <li>Day numerals in Fraunces (light, serif) anchor the left column. Weekday in 10px caps underneath.</li>
+      <li>Workout type is small tracked uppercase, not a tag. Title in serif. Meta line muted with bold accents on the numbers.</li>
+      <li>Today is marked only by an accent dot on the rail and the numerals turning terracotta. No stripes, no fills.</li>
+      <li>One accent colour total (terracotta). Off-white paper, no cream wash.</li>
+      <li>Hairline between days; nothing else dividing the screen.</li>
+      <li>Rest days lose all chrome — just an italic "Rest" + a quiet add-run affordance.</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>
