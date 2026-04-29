@@ -327,6 +327,9 @@ export default function App() {
 
   // Coach state
   const [coachScreen,   setCoachScreen]   = useState("dashboard");
+  // Sub-tab inside the coach athlete detail screen: plan / logs / messages.
+  // Profile tab routes to coachScreen "profile" instead.
+  const [coachAthleteTab, setCoachAthleteTab] = useState("plan");
   const [dashAthlete,   setDashAthlete]   = useState(null);
   const [coachReply,    setCoachReply]    = useState("");
   const [coachFilter,   setCoachFilter]   = useState("all");
@@ -2130,8 +2133,36 @@ export default function App() {
             ))}
           </div>
 
+          {/* Tab strip — Plan / Logs / Messages / Profile */}
+          <div style={{ display:"flex", gap:24, padding:"6px 0 0", marginBottom:20, borderBottom:`1px solid ${C.rule}` }}>
+            {[
+              { key:"plan",     label:"Plan" },
+              { key:"logs",     label:"Logs" },
+              { key:"messages", label:"Messages" },
+              { key:"profile",  label:"Profile" },
+            ].map(t => {
+              const active = (t.key === "profile") ? false : coachAthleteTab === t.key;
+              return (
+                <button key={t.key}
+                  onClick={() => {
+                    if (t.key === "profile") setCoachScreen("profile");
+                    else setCoachAthleteTab(t.key);
+                  }}
+                  style={{
+                    background:"transparent", border:0, cursor:"pointer",
+                    padding:"10px 0",
+                    fontFamily:S.bodyFont, fontSize:12, letterSpacing:"0.14em", textTransform:"uppercase",
+                    color: active ? C.ink : C.mute,
+                    fontWeight: active ? 700 : 500,
+                    borderBottom: active ? `2px solid ${C.ink}` : "2px solid transparent",
+                    marginBottom:-1,
+                  }}>{t.label}</button>
+              );
+            })}
+          </div>
+
           {/* Performance Management Chart — 90-day fitness/fatigue/form */}
-          {(() => {
+          {coachAthleteTab === "plan" && (() => {
             const daActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
             const dailyRtss = dailyRtssFromActivities(daActs, da);
             const today = new Date();
@@ -2146,7 +2177,7 @@ export default function App() {
           })()}
 
           {/* Calendar markers — race / sick / taper / travel */}
-          {(() => {
+          {coachAthleteTab === "plan" && (() => {
             const list = markersByEmail[dashAthlete?.toLowerCase()] || [];
             const upcoming = list.filter(m => (m.end_date || m.marker_date) >= todayStr()).slice(0, 5);
             const addMarker = async () => {
@@ -2200,12 +2231,116 @@ export default function App() {
             );
           })()}
 
-          <button onClick={() => setCoachScreen("profile")}
-            style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"10px", fontSize:13, fontWeight:600 }}>
-            Edit Profile (name, goal, PB)
-          </button>
+          {coachAthleteTab === "plan" && (
+            <button onClick={() => setCoachScreen("profile")}
+              style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"10px", fontSize:13, fontWeight:600 }}>
+              Edit Profile (name, goal, PB)
+            </button>
+          )}
 
-          {coachActiveMonday && (() => {
+          {/* ─── LOGS tab ──────────────────────────────────────────── */}
+          {coachAthleteTab === "logs" && (() => {
+            const athActs = (activitiesByEmail.get(dashAthlete?.toLowerCase()) || [])
+              .slice()
+              .sort((a, b) => (b.activity_date || "").localeCompare(a.activity_date || ""))
+              .slice(0, 30);
+            if (athActs.length === 0) {
+              return (
+                <div style={{ padding:"40px 0", textAlign:"center", color:C.mute, fontFamily:S.displayFont, fontStyle:"italic" }}>
+                  Nothing logged yet.
+                </div>
+              );
+            }
+            return (
+              <div>
+                {athActs.map(a => {
+                  const r = a.rtss != null ? Number(a.rtss) : null;
+                  return (
+                    <div key={a.id} onClick={() => { setActiveExtraActivity(a); setCoachScreen("extra-activity"); }}
+                      style={{ padding:"16px 0", borderBottom:`1px solid ${C.ruleSoft}`, cursor:"pointer", display:"flex", alignItems:"baseline", justifyContent:"space-between", gap:12 }}>
+                      <div style={{ minWidth:0 }}>
+                        <div className="t-mono" style={{ fontSize:11, color:C.mute, letterSpacing:"0.08em" }}>{a.activity_date}</div>
+                        <div style={{ fontFamily:S.displayFont, fontSize:18, color:C.ink, marginTop:2 }}>{a.activity_type || "Run"}</div>
+                        {a.notes && <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:13, color:C.mute, margin:"3px 0 0", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>"{a.notes}"</p>}
+                      </div>
+                      <div style={{ textAlign:"right", flexShrink:0 }}>
+                        <Num size={16}>{a.distance_km ? Number(a.distance_km).toFixed(1) : "—"}</Num>
+                        <span className="t-mono" style={{ fontSize:11, color:C.mute, marginLeft:3 }}>km</span>
+                        {r != null && <div className="t-mono" style={{ fontSize:11, color:C.mute, marginTop:2 }}>rTSS {r}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* ─── MESSAGES tab ──────────────────────────────────────── */}
+          {coachAthleteTab === "messages" && (() => {
+            const athActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
+            // Pull every log + activity that has any thread content (legacy
+            // coach_reply or messages array). Sort newest first.
+            const threads = [];
+            for (const w of (da.weeks || [])) {
+              for (const s of (w.sessions || [])) {
+                const log = logs[s.id];
+                if (!log) continue;
+                const hasThread = log.coach_reply || (Array.isArray(log.messages) && log.messages.length);
+                if (!hasThread) continue;
+                threads.push({ kind:"log", id:log.id, source:log, sess:s, weekStart:w.weekStart, ts: log.updated_at || log.created_at });
+              }
+            }
+            for (const a of athActs) {
+              if (a.source === "session") continue;
+              const hasThread = a.coach_reply || (Array.isArray(a.messages) && a.messages.length);
+              if (!hasThread) continue;
+              threads.push({ kind:"act", id:a.id, source:a, act:a, ts: a.updated_at || a.created_at });
+            }
+            threads.sort((x, y) => (y.ts || "").localeCompare(x.ts || ""));
+            if (threads.length === 0) {
+              return (
+                <div style={{ padding:"40px 0", textAlign:"center", color:C.mute, fontFamily:S.displayFont, fontStyle:"italic" }}>
+                  No messages yet.
+                </div>
+              );
+            }
+            return (
+              <div>
+                {threads.slice(0, 20).map(t => {
+                  const thread = getThread(t.source);
+                  const last = thread[thread.length - 1];
+                  if (!last) return null;
+                  const dateStr = (t.kind === "log")
+                    ? (t.source.analysis?.actual_date || sessionDateStr(t.weekStart, t.sess.day))
+                    : t.act.activity_date;
+                  return (
+                    <div key={t.id} onClick={() => {
+                        if (t.kind === "log") {
+                          setActiveSession({ ...t.sess, weekStart: t.weekStart, athleteEmail: dashAthlete });
+                          setCoachScreen("session");
+                        } else {
+                          setActiveExtraActivity(t.act);
+                          setCoachScreen("extra-activity");
+                        }
+                      }}
+                      style={{ padding:"16px 0", borderBottom:`1px solid ${C.ruleSoft}`, cursor:"pointer" }}>
+                      <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", gap:10 }}>
+                        <span className="t-mono" style={{ fontSize:11, color:C.mute, letterSpacing:"0.08em" }}>{dateStr}</span>
+                        <span className="t-mono" style={{ fontSize:9, color:last.author === "coach" ? C.accent : C.mute, letterSpacing:"0.14em" }}>
+                          {last.author === "coach" ? "YOU →" : "← THEM"}
+                        </span>
+                      </div>
+                      <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:15, color:C.ink, lineHeight:1.5, margin:"4px 0 0", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                        "{last.body}"
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {coachAthleteTab === "plan" && coachActiveMonday && (() => {
             const athActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
             const today = new Date(); today.setHours(0,0,0,0);
             const monDate = new Date(coachActiveMonday + "T00:00:00");
