@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta } from "./components.jsx";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -3461,6 +3461,22 @@ export default function App() {
           {an?.distance_km && (
             <div className="t-display-italic" style={{ fontSize:15, color:"var(--c-mute)", marginBottom:18 }}>
               {an.distance_km} km{an.duration_min ? ` · ${an.duration_min} min` : ""}{an.actual_date ? ` · ${an.actual_date}` : ""}
+            </div>
+          )}
+
+          {/* Training-load row — rTSS pill + Z1–Z5 stacked bar */}
+          {an?.distance_km && an?.duration_min && (
+            <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:18, flexWrap:"wrap" }}>
+              <RtssPillFor durationMin={an.duration_min} distanceKm={an.distance_km} profile={profile}/>
+              <div style={{ flex:"1 1 200px", minWidth:160 }}>
+                <ZoneBar
+                  splits={log?.strava_data?.splits}
+                  durationMin={an.duration_min}
+                  distanceKm={an.distance_km}
+                  profile={profile}
+                  showLabels
+                />
+              </div>
             </div>
           )}
 

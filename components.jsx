@@ -1,6 +1,91 @@
 import { useState } from "react";
 import { C, S } from "./styles.js";
 import { fmtPace, fmtTime } from "./lib/helpers.js";
+import {
+  computeRtss, getThresholdPace, rtssColor,
+  timeInZone, ZONE_LABELS, ZONE_COLORS, ZONE_NAMES,
+  paceStrToSecsPerKm,
+} from "./lib/load.js";
+
+// ─── TRAINING-LOAD PILLS ─────────────────────────────────────────────────────
+
+// Renders a small "rTSS 64" pill colored by load band. Pure presentational —
+// callers pass a precomputed rtss number, or use <RtssPillFor /> below to
+// derive it from a run + profile.
+export function RtssPill({ rtss, size = 11 }) {
+  if (rtss == null) return null;
+  return (
+    <span style={{
+      display:"inline-flex", alignItems:"center", gap:6,
+      padding:"3px 9px", borderRadius:999,
+      border:`1px solid ${rtssColor(rtss)}`,
+      color: rtssColor(rtss),
+      fontFamily:"var(--f-mono)", fontSize:size, letterSpacing:"0.04em",
+      fontVariantNumeric:"tabular-nums",
+    }}>
+      <span style={{ opacity:0.7 }}>rTSS</span>
+      <span style={{ fontWeight:600 }}>{rtss}</span>
+    </span>
+  );
+}
+
+// Convenience: derive rTSS from a run + the athlete's profile (for the
+// threshold pace) and render the pill. Returns null if not enough data.
+export function RtssPillFor({ durationMin, distanceKm, profile, size = 11 }) {
+  const thr = getThresholdPace(profile);
+  if (!thr || !durationMin || !distanceKm) return null;
+  const rtss = computeRtss({
+    durationSec: durationMin * 60,
+    distanceKm,
+    thresholdSecsPerKm: thr,
+  });
+  return <RtssPill rtss={rtss} size={size}/>;
+}
+
+// ─── TIME-IN-ZONE BAR ────────────────────────────────────────────────────────
+// A short stacked bar showing how the run was spent across Z1–Z5. Shows up
+// best on activities with split data — for manual logs without splits, falls
+// back to "all time in the zone the average pace lands in," which is
+// approximate but useful at a glance.
+export function ZoneBar({ splits, durationMin, distanceKm, profile, height = 6, showLabels = false }) {
+  const thr = getThresholdPace(profile);
+  if (!thr || !durationMin) return null;
+  const tiz = timeInZone({
+    splits,
+    durationSec: durationMin * 60,
+    distanceKm,
+    thresholdSecsPerKm: thr,
+  });
+  if (!tiz.total) return null;
+  return (
+    <div>
+      <div style={{ display:"flex", height, width:"100%", overflow:"hidden", borderRadius:1 }}>
+        {ZONE_LABELS.map(z => {
+          const pct = (tiz[z] / tiz.total) * 100;
+          if (pct < 0.5) return null;
+          return (
+            <div key={z}
+              title={`${ZONE_NAMES[z]} · ${Math.round(tiz[z]/60)}min (${Math.round(pct)}%)`}
+              style={{ width:`${pct}%`, background: ZONE_COLORS[z] }}/>
+          );
+        })}
+      </div>
+      {showLabels && (
+        <div style={{ display:"flex", marginTop:4, gap:8, flexWrap:"wrap" }}>
+          {ZONE_LABELS.filter(z => tiz[z] > 0).map(z => {
+            const pct = Math.round((tiz[z] / tiz.total) * 100);
+            return (
+              <span key={z} className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.06em" }}>
+                <span style={{ display:"inline-block", width:6, height:6, borderRadius:999, background:ZONE_COLORS[z], marginRight:5, verticalAlign:"middle" }}/>
+                {z} {pct}%
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── EDITORIAL ATOMS (Form & Pace redesign) ──────────────────────────────────
 // Shared low-level building blocks used by every redesigned screen. Pure
