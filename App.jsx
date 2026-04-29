@@ -132,6 +132,47 @@ function ExtraActivityCard({ act, onClick }) {
   );
 }
 
+// ─── Coach drag-and-drop wrappers ───────────────────────────────────────────
+// Lightweight Droppable + Draggable wrappers used by the coach's week view.
+// They differ from the athlete versions (DayRow / DraggableSession) only in
+// styling — the coach's day cells already include extra chrome (markers
+// ribbon, "+ ADD WORKOUT" button) so we wrap the existing markup rather than
+// re-skin a copy.
+function CoachDroppableDay({ dateStr, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr || "none"}` });
+  return (
+    <div ref={setNodeRef} style={{
+      borderRadius: 4,
+      border: `1px dashed ${isOver ? C.crimson : "transparent"}`,
+      padding: isOver ? 4 : 0,
+      transition: "border-color 120ms ease, padding 120ms ease",
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function CoachDraggableSession({ session, children }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `session:${session.id}`,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={{
+        cursor: "grab",
+        touchAction: "none",
+        opacity: isDragging ? 0.4 : 1,
+        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+        transition: isDragging ? "none" : "transform 120ms ease",
+      }}>
+      {children}
+    </div>
+  );
+}
+
 function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun, markers }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr || dayLabel}` });
   const datePart = dateStr ? dateStr.slice(5).replace("-", "/") : "";
@@ -813,9 +854,16 @@ export default function App() {
   );
 
   // Persist a session's actual_date when dragged to a new day in the same week.
-  const handleSessionDrop = async (sessionId, newDate, weekStart) => {
+  // `athleteEmail` overrides the default (the signed-in user) — the coach uses
+  // this to move sessions for athletes they manage; athletes pass it implicitly.
+  const handleSessionDrop = async (sessionId, newDate, weekStart, athleteEmail = null) => {
     if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return;
-    const session = (weeks.find(w => w.weekStart === weekStart)?.sessions || []).find(s => s.id === sessionId);
+    const targetEmail = (athleteEmail || user.email || "").toLowerCase();
+    // Source weeks: athlete's own programEntry for self-moves, athletePrograms[email] for coach.
+    const sourceWeeks = athleteEmail
+      ? (athletePrograms[targetEmail]?.weeks || [])
+      : weeks;
+    const session = (sourceWeeks.find(w => w.weekStart === weekStart)?.sessions || []).find(s => s.id === sessionId);
     if (!session) return;
     const scheduledDate = sessionDateStr(weekStart, session.day);
     const existing = logs[sessionId];
@@ -824,14 +872,36 @@ export default function App() {
     const nextAnalysis = { ...existingAnalysis };
     if (newDate === scheduledDate) delete nextAnalysis.actual_date;
     else nextAnalysis.actual_date = newDate;
-    try { await saveLog(sessionId, { analysis: nextAnalysis }); }
-    catch (e) { console.error("drag-move saveLog error:", e); }
+    try {
+      // saveLog uses the signed-in user as athlete_email when inserting a new
+      // row. For coach-side moves on a session that has no log yet we need to
+      // write directly with the right athlete_email, otherwise the row would
+      // be attributed to the coach.
+      if (athleteEmail && !existing?.id) {
+        const ap = athletePrograms[targetEmail] || {};
+        const { data, error } = await supabase
+          .from("session_logs")
+          .upsert({
+            session_id: sessionId,
+            athlete_email: targetEmail,
+            athlete_name: ap.name || prettyEmailName(targetEmail),
+            analysis: nextAnalysis,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "session_id" })
+          .select()
+          .single();
+        if (error) throw error;
+        if (data) setLogs(prev => ({ ...prev, [sessionId]: data }));
+      } else {
+        await saveLog(sessionId, { analysis: nextAnalysis });
+      }
+    } catch (e) { console.error("drag-move saveLog error:", e); }
 
     // Keep the linked activity's date in sync so coach views, weekly km totals,
     // and actByDate lookups land on the new day too. Only updates if a
     // matching activity exists at the previous date.
     if (prevDate && prevDate !== newDate) {
-      const linked = findAthAct(user.email, prevDate);
+      const linked = findAthAct(targetEmail, prevDate);
       if (linked) {
         const { data: updAct, error } = await supabase
           .from("activities")
@@ -1969,6 +2039,16 @@ export default function App() {
                   </div>
                 </div>
 
+                <DndContext
+                  sensors={dndSensors}
+                  onDragEnd={({ active, over }) => {
+                    if (!over) return;
+                    const [aKind, aId] = String(active.id).split(":");
+                    const [oKind, oDate] = String(over.id).split(":");
+                    if (aKind !== "session" || oKind !== "day" || !oDate) return;
+                    handleSessionDrop(aId, oDate, wk.weekStart, dashAthlete);
+                  }}
+                >
                 <div style={{ marginBottom:20 }}>
                   {DAY_LABELS.map(dayLabel => {
                     const dayDate = sessionDateStr(wk.weekStart, dayLabel);
@@ -1980,8 +2060,27 @@ export default function App() {
                     });
                     const extrasHere = dayDate ? extraActs.filter(a => a.activity_date === dayDate) : [];
                     const datePart = dayDate ? dayDate.slice(5).replace("-", "/") : "";
+                    const dayMarkersCoach = dayDate ? markersOnDate(markersByEmail[dashAthlete?.toLowerCase()] || [], dayDate) : [];
                     return (
-                      <div key={dayLabel} style={{ marginBottom: 12 }}>
+                      <CoachDroppableDay key={dayLabel} dateStr={dayDate}>
+                      <div style={{ marginBottom: 12 }}>
+                        {dayMarkersCoach.length > 0 && (
+                          <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:6, paddingLeft:2 }}>
+                            {dayMarkersCoach.map(m => {
+                              const ms = MARKER_STYLE[m.kind] || MARKER_STYLE.other;
+                              return (
+                                <span key={m.id} title={m.label || ms.label} style={{
+                                  display:"inline-flex", alignItems:"center", gap:5,
+                                  padding:"2px 8px", background:ms.ribbon, color:ms.ink,
+                                  fontSize:9, letterSpacing:1.5, fontWeight:700, textTransform:"uppercase", borderRadius:1,
+                                }}>
+                                  <span>{ms.label}</span>
+                                  {m.label && <span style={{ fontWeight:400, opacity:0.85 }}>· {m.label}</span>}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                         <div style={{ fontSize:10, letterSpacing:2, color: isToday ? C.crimson : C.mid, fontWeight: isToday ? 700 : 500, marginBottom:4, paddingLeft:2 }}>
                           {dayLabel.toUpperCase()}{datePart ? ` · ${datePart}` : ""}{isToday ? " · TODAY" : ""}
                         </div>
@@ -1997,7 +2096,8 @@ export default function App() {
                               const comply = effectiveCompliance({ session: s, log, linkedAct, isPastDate, profile: da });
                               const cts = typeStyle(s.type);
                               return (
-                                <div key={s.id}
+                                <CoachDraggableSession key={s.id} session={s}>
+                                <div
                                   onClick={()=>{ const sess = {...s, weekStart: wk.weekStart, athleteEmail: dashAthlete}; setActiveSession(sess); setCoachScreen("session"); }}
                                   style={{ ...S.card, padding:"10px 12px", cursor:"pointer", display:"flex", alignItems:"center", gap:10, borderLeft:`4px solid ${cts.accent}` }}>
                                   <div style={{
@@ -2021,6 +2121,7 @@ export default function App() {
                                     {log?.coach_reply && <div style={{ fontSize:10, color:"#14365f", marginTop:2 }}>💬 You replied</div>}
                                   </div>
                                 </div>
+                                </CoachDraggableSession>
                               );
                             })}
                             {extrasHere.map(act => (
@@ -2047,9 +2148,11 @@ export default function App() {
                           </button>
                         )}
                       </div>
+                      </CoachDroppableDay>
                     );
                   })}
                 </div>
+                </DndContext>
               </>
             );
           })()}
