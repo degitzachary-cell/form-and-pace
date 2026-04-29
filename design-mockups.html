@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>form-and-pace · design directions</title>
+<style>
+  :root {
+    --cream:    #f4ebd9;
+    --paper:    #fffefa;
+    --ink:      #1a2942;
+    --ink-2:    #4a5870;
+    --rule:     #e3d6bd;
+    --mid:      #8a7a5d;
+    --crimson:  #b13e3a;
+    --sage:     #8aa388;
+    --amber:    #c79541;
+    --coral:    #d76b5d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #2a2418; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); }
+  .stage { max-width: 1500px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { color: #f4ebd9; font-family: "Cooper Black", Georgia, serif; font-size: 32px; margin: 0 0 8px; letter-spacing: -0.5px; }
+  .lede { color: #b8a988; max-width: 720px; margin: 0 0 36px; font-size: 14px; line-height: 1.6; }
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; align-items: start; }
+  .col h2 { color: #f4ebd9; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; margin: 0 0 4px; font-weight: 700; }
+  .col p { color: #908269; font-size: 12px; margin: 0 0 16px; line-height: 1.5; }
+  .phone { background: var(--cream); width: 100%; min-height: 720px; border-radius: 28px; padding: 22px 18px 28px; box-shadow: 0 24px 48px rgba(0,0,0,0.35); }
+
+  /* ─── shared atoms ───────────────────────────────────── */
+  .h-name { font-family: "Cooper Black", Georgia, serif; font-size: 22px; color: var(--ink); margin: 0; }
+  .h-sub  { font-size: 11px; letter-spacing: 2px; color: var(--mid); text-transform: uppercase; margin: 2px 0 0; }
+  .small  { font-size: 10px; letter-spacing: 2px; color: var(--mid); text-transform: uppercase; }
+  .muted  { color: var(--mid); }
+
+  /* ═══════════════════════════════════════════════════════
+     DESIGN A — EDITORIAL
+     Magazine/agenda feel. Hairline rules, tiny date column,
+     workout as headline + meta line. Almost no chrome.
+     ═══════════════════════════════════════════════════════ */
+  .ed-head { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 16px; border-bottom: 1px solid var(--rule); }
+  .ed-week-pick { margin-top: 22px; display: flex; align-items: baseline; justify-content: space-between; }
+  .ed-week-pick .lbl { font-size: 10px; letter-spacing: 3px; color: var(--mid); }
+  .ed-week-pick .month { font-family: "Cooper Black", Georgia, serif; font-size: 26px; color: var(--ink); }
+  .ed-week-pick .arrows { display: flex; gap: 14px; color: var(--mid); font-size: 18px; }
+  .ed-day-row { display: grid; grid-template-columns: 44px 1fr; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+  .ed-day-row .date { text-align: right; }
+  .ed-day-row .date .num { font-family: "Cooper Black", Georgia, serif; font-size: 22px; color: var(--ink); line-height: 1; }
+  .ed-day-row .date .dow { font-size: 9px; letter-spacing: 2px; color: var(--mid); margin-top: 4px; }
+  .ed-day-row.today .date .num { color: var(--crimson); }
+  .ed-card { padding: 0; }
+  .ed-card .tag { display: inline-block; font-size: 9px; letter-spacing: 2px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-2); margin-bottom: 6px; }
+  .ed-card .tag.done { background: var(--sage); color: #fff; border-color: var(--sage); }
+  .ed-card .tag.tempo { border-color: var(--amber); color: var(--amber); }
+  .ed-card .tag.speed { border-color: var(--crimson); color: var(--crimson); }
+  .ed-card .title { font-family: "Cooper Black", Georgia, serif; font-size: 17px; line-height: 1.2; color: var(--ink); margin: 0 0 4px; }
+  .ed-card .meta { font-size: 12px; color: var(--mid); }
+  .ed-card .meta span + span::before { content: " · "; }
+  .ed-empty { font-size: 11px; color: var(--mid); letter-spacing: 1px; padding-top: 8px; }
+  .ed-add { font-size: 10px; letter-spacing: 2px; color: var(--ink-2); border: none; background: transparent; padding: 6px 0 0; cursor: pointer; }
+  .ed-add::before { content: "+ "; }
+
+  /* ═══════════════════════════════════════════════════════
+     DESIGN B — SOFT CARD
+     Rounded 14px cards on cream background. Subtle shadow.
+     Today gets a vertical accent stripe. Glyph column instead
+     of emoji.
+     ═══════════════════════════════════════════════════════ */
+  .sc-week-pick { background: var(--paper); border-radius: 14px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 0 rgba(20,30,60,0.04); margin-bottom: 18px; }
+  .sc-week-pick .month { font-family: "Cooper Black", Georgia, serif; font-size: 18px; color: var(--ink); }
+  .sc-week-pick .badge { font-size: 9px; letter-spacing: 2px; color: #fff; background: var(--crimson); padding: 4px 9px; border-radius: 999px; }
+  .sc-day { margin-bottom: 12px; }
+  .sc-day .head { display: flex; align-items: baseline; gap: 10px; padding: 0 4px 6px; }
+  .sc-day .head .dow { font-size: 10px; letter-spacing: 2px; color: var(--mid); font-weight: 700; }
+  .sc-day .head .num { font-size: 11px; color: var(--mid); }
+  .sc-day.today .head .dow { color: var(--crimson); }
+  .sc-card { background: var(--paper); border-radius: 14px; padding: 12px 14px; display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; box-shadow: 0 1px 0 rgba(20,30,60,0.05); margin-bottom: 6px; position: relative; overflow: hidden; }
+  .sc-card.done { background: #eef3ec; }
+  .sc-card.today::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--crimson); }
+  .sc-glyph { width: 28px; height: 28px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--mid); background: rgba(20,30,60,0.05); }
+  .sc-glyph.speed { background: rgba(177,62,58,0.12); color: var(--crimson); }
+  .sc-glyph.tempo { background: rgba(199,149,65,0.18); color: var(--amber); }
+  .sc-glyph.long  { background: rgba(138,163,136,0.22); color: var(--sage); }
+  .sc-card .name { font-weight: 700; font-size: 14px; color: var(--ink); }
+  .sc-card .meta { font-size: 11px; color: var(--mid); margin-top: 2px; }
+  .sc-card .check { font-size: 11px; color: var(--sage); letter-spacing: 1px; }
+  .sc-empty { background: transparent; border: 1px dashed rgba(20,30,60,0.15); border-radius: 14px; text-align: center; font-size: 10px; letter-spacing: 2px; color: var(--mid); padding: 14px; }
+  .sc-add { background: transparent; border: 0; color: var(--ink-2); font-size: 10px; letter-spacing: 2px; padding: 6px 0 0; width: 100%; text-align: center; cursor: pointer; opacity: 0.6; }
+  .sc-add:hover { opacity: 1; }
+
+  /* ═══════════════════════════════════════════════════════
+     DESIGN C — COMPACT TIMELINE
+     Vertical timeline with a left rail. Day labels float on
+     the rail, workouts collapse into one-liners. Dense.
+     ═══════════════════════════════════════════════════════ */
+  .ct-week-pick { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 0 4px; }
+  .ct-week-pick .arrow { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--rule); background: transparent; color: var(--ink); cursor: pointer; }
+  .ct-week-pick .label { flex: 1; text-align: center; font-family: "Cooper Black", Georgia, serif; font-size: 16px; color: var(--ink); }
+  .ct-rail { position: relative; padding-left: 56px; }
+  .ct-rail::before { content: ""; position: absolute; left: 36px; top: 4px; bottom: 4px; width: 1px; background: var(--rule); }
+  .ct-day { position: relative; padding: 10px 0 14px; }
+  .ct-day .stamp { position: absolute; left: -56px; top: 8px; width: 50px; text-align: right; }
+  .ct-day .stamp .num { font-family: "Cooper Black", Georgia, serif; font-size: 18px; color: var(--ink); line-height: 1; }
+  .ct-day .stamp .dow { font-size: 9px; letter-spacing: 2px; color: var(--mid); margin-top: 3px; }
+  .ct-day::before { content: ""; position: absolute; left: -22px; top: 14px; width: 9px; height: 9px; border-radius: 999px; background: var(--cream); border: 1px solid var(--rule); }
+  .ct-day.today::before { background: var(--crimson); border-color: var(--crimson); box-shadow: 0 0 0 4px rgba(177,62,58,0.15); }
+  .ct-day.done::before { background: var(--sage); border-color: var(--sage); }
+  .ct-line { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; background: var(--paper); border-radius: 10px; margin-bottom: 4px; }
+  .ct-line .glyph { width: 6px; height: 18px; border-radius: 2px; background: var(--mid); }
+  .ct-line.easy  .glyph { background: var(--sage); }
+  .ct-line.tempo .glyph { background: var(--amber); }
+  .ct-line.speed .glyph { background: var(--crimson); }
+  .ct-line .name { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .ct-line .name .pace { font-weight: 400; color: var(--mid); margin-left: 8px; font-size: 11px; }
+  .ct-line .stat { font-size: 11px; color: var(--mid); }
+  .ct-empty { font-size: 10px; letter-spacing: 2px; color: var(--mid); padding: 8px 12px; }
+  .ct-add { background: transparent; border: 0; color: var(--ink-2); font-size: 10px; letter-spacing: 2px; padding: 4px 12px 0; cursor: pointer; opacity: 0.55; }
+  .ct-add:hover { opacity: 1; }
+
+</style>
+</head>
+<body>
+<div class="stage">
+  <h1>Three directions for the athlete week view</h1>
+  <p class="lede">All three drop emoji glyphs in favour of typographic + colour cues, lean on rounder edges than the current 2px corners, and tighten the per-day vertical rhythm. Pick whichever feels closest and I'll spec it for the actual app.</p>
+
+  <div class="row">
+
+    <!-- ─────────────── DESIGN A — EDITORIAL ─────────────── -->
+    <div class="col">
+      <h2>A · Editorial</h2>
+      <p>Magazine-style. Tiny date column on the left, workout as headline + meta. Hairline rules between days. Maximum content density, almost no UI chrome.</p>
+      <div class="phone">
+        <div class="ed-head">
+          <div>
+            <p class="h-name">Jeremy</p>
+            <p class="h-sub">Training log</p>
+          </div>
+          <div class="small">Sign out</div>
+        </div>
+
+        <div class="ed-week-pick">
+          <div>
+            <div class="small">Week of</div>
+            <div class="month">27 Apr – 3 May</div>
+          </div>
+          <div class="arrows">‹ ›</div>
+        </div>
+
+        <div class="ed-day-row done">
+          <div class="date"><div class="num">27</div><div class="dow">MON</div></div>
+          <div class="ed-card">
+            <span class="tag done">Logged</span>
+            <p class="title">Recovery 50 min</p>
+            <div class="meta"><span>9.8 km</span><span>5:12 /km</span><span>Strength: weights</span></div>
+          </div>
+        </div>
+
+        <div class="ed-day-row today">
+          <div class="date"><div class="num">28</div><div class="dow">TUE</div></div>
+          <div class="ed-card">
+            <span class="tag speed">Speed</span>
+            <p class="title">7 × 1km @ 3:50</p>
+            <div class="meta"><span>~13 km</span><span>WU 15 / CD 15</span></div>
+          </div>
+        </div>
+
+        <div class="ed-day-row">
+          <div class="date"><div class="num">29</div><div class="dow">WED</div></div>
+          <div class="ed-card">
+            <span class="tag">Recovery</span>
+            <p class="title">4 km easy + extension</p>
+            <div class="meta"><span>~9 km</span><span>5:10–5:20 /km</span></div>
+            <button class="ed-add">Add run</button>
+          </div>
+        </div>
+
+        <div class="ed-day-row">
+          <div class="date"><div class="num">30</div><div class="dow">THU</div></div>
+          <div class="ed-card">
+            <span class="tag tempo">Tempo</span>
+            <p class="title">3 km MP → 6 km HMP → 3 km MP</p>
+            <div class="meta"><span>~20 km</span><span>4:10 / 3:55 /km</span></div>
+          </div>
+        </div>
+
+        <div class="ed-day-row">
+          <div class="date"><div class="num">01</div><div class="dow">FRI</div></div>
+          <div class="ed-card">
+            <p class="ed-empty">No workout</p>
+            <button class="ed-add">Add run</button>
+          </div>
+        </div>
+
+        <div class="ed-day-row">
+          <div class="date"><div class="num">02</div><div class="dow">SAT</div></div>
+          <div class="ed-card">
+            <span class="tag">Easy</span>
+            <p class="title">50 min easy + 6 × strides</p>
+            <div class="meta"><span>~10 km</span></div>
+          </div>
+        </div>
+
+        <div class="ed-day-row">
+          <div class="date"><div class="num">03</div><div class="dow">SUN</div></div>
+          <div class="ed-card">
+            <span class="tag">Long</span>
+            <p class="title">Long run 90 min</p>
+            <div class="meta"><span>~18 km</span><span>4:50–5:05 /km</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────── DESIGN B — SOFT CARD ─────────────── -->
+    <div class="col">
+      <h2>B · Soft Card</h2>
+      <p>14 px rounded cards floating on the cream background. Coloured glyph badge replaces emoji. Today marked with a left accent stripe. Friendliest of the three.</p>
+      <div class="phone">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+          <div>
+            <p class="h-name">Jeremy</p>
+            <p class="h-sub">Training log</p>
+          </div>
+          <div class="small">Sign out</div>
+        </div>
+
+        <div class="sc-week-pick">
+          <div class="month">27 Apr – 3 May</div>
+          <div class="badge">This week</div>
+        </div>
+
+        <div class="sc-day done">
+          <div class="head"><div class="dow">MON</div><div class="num">27 Apr</div></div>
+          <div class="sc-card done">
+            <div class="sc-glyph">E</div>
+            <div>
+              <div class="name">Recovery 50 min</div>
+              <div class="meta">9.8 km · 5:12 /km</div>
+            </div>
+            <div class="check">DONE</div>
+          </div>
+        </div>
+
+        <div class="sc-day today">
+          <div class="head"><div class="dow">TUE · TODAY</div><div class="num">28 Apr</div></div>
+          <div class="sc-card today">
+            <div class="sc-glyph speed">S</div>
+            <div>
+              <div class="name">7 × 1 km @ 3:50</div>
+              <div class="meta">~13 km · WU 15 / CD 15</div>
+            </div>
+            <div class="muted small">›</div>
+          </div>
+        </div>
+
+        <div class="sc-day">
+          <div class="head"><div class="dow">WED</div><div class="num">29 Apr</div></div>
+          <div class="sc-card">
+            <div class="sc-glyph">R</div>
+            <div>
+              <div class="name">Recovery + extension</div>
+              <div class="meta">~9 km · 5:10–5:20 /km</div>
+            </div>
+            <div class="muted small">›</div>
+          </div>
+          <button class="sc-add">+ Add run</button>
+        </div>
+
+        <div class="sc-day">
+          <div class="head"><div class="dow">THU</div><div class="num">30 Apr</div></div>
+          <div class="sc-card">
+            <div class="sc-glyph tempo">T</div>
+            <div>
+              <div class="name">3 / 6 / 3 km tempo</div>
+              <div class="meta">~20 km · 4:10 / 3:55 /km</div>
+            </div>
+            <div class="muted small">›</div>
+          </div>
+        </div>
+
+        <div class="sc-day">
+          <div class="head"><div class="dow">FRI</div><div class="num">01 May</div></div>
+          <div class="sc-empty">No workout · tap below to log a run</div>
+          <button class="sc-add">+ Add run</button>
+        </div>
+
+        <div class="sc-day">
+          <div class="head"><div class="dow">SAT</div><div class="num">02 May</div></div>
+          <div class="sc-card">
+            <div class="sc-glyph">E</div>
+            <div><div class="name">Easy 50 min + strides</div><div class="meta">~10 km</div></div>
+            <div class="muted small">›</div>
+          </div>
+        </div>
+
+        <div class="sc-day">
+          <div class="head"><div class="dow">SUN</div><div class="num">03 May</div></div>
+          <div class="sc-card">
+            <div class="sc-glyph long">L</div>
+            <div><div class="name">Long run 90 min</div><div class="meta">~18 km · 4:50–5:05 /km</div></div>
+            <div class="muted small">›</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────── DESIGN C — COMPACT TIMELINE ─────────────── -->
+    <div class="col">
+      <h2>C · Compact Timeline</h2>
+      <p>Vertical rail with day stamps floating on the left. Workouts collapse to one-liners with a thin coloured spine. Highest density — see the whole week without scrolling.</p>
+      <div class="phone">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+          <div>
+            <p class="h-name">Jeremy</p>
+            <p class="h-sub">Training log</p>
+          </div>
+          <div class="small">Sign out</div>
+        </div>
+
+        <div class="ct-week-pick">
+          <button class="arrow">‹</button>
+          <div class="label">27 Apr – 3 May · This week</div>
+          <button class="arrow">›</button>
+        </div>
+
+        <div class="ct-rail">
+          <div class="ct-day done">
+            <div class="stamp"><div class="num">27</div><div class="dow">MON</div></div>
+            <div class="ct-line easy">
+              <div class="glyph"></div>
+              <div class="name">Recovery 50 min <span class="pace">5:12 /km</span></div>
+              <div class="stat">9.8 km</div>
+            </div>
+          </div>
+
+          <div class="ct-day today">
+            <div class="stamp"><div class="num">28</div><div class="dow">TUE</div></div>
+            <div class="ct-line speed">
+              <div class="glyph"></div>
+              <div class="name">7 × 1 km <span class="pace">3:50 /km</span></div>
+              <div class="stat">~13 km</div>
+            </div>
+          </div>
+
+          <div class="ct-day">
+            <div class="stamp"><div class="num">29</div><div class="dow">WED</div></div>
+            <div class="ct-line easy">
+              <div class="glyph"></div>
+              <div class="name">Recovery + extension <span class="pace">5:10–5:20</span></div>
+              <div class="stat">~9 km</div>
+            </div>
+            <button class="ct-add">+ add run</button>
+          </div>
+
+          <div class="ct-day">
+            <div class="stamp"><div class="num">30</div><div class="dow">THU</div></div>
+            <div class="ct-line tempo">
+              <div class="glyph"></div>
+              <div class="name">Tempo 3 / 6 / 3 km <span class="pace">4:10 / 3:55</span></div>
+              <div class="stat">~20 km</div>
+            </div>
+          </div>
+
+          <div class="ct-day">
+            <div class="stamp"><div class="num">01</div><div class="dow">FRI</div></div>
+            <div class="ct-empty">no workout</div>
+            <button class="ct-add">+ add run</button>
+          </div>
+
+          <div class="ct-day">
+            <div class="stamp"><div class="num">02</div><div class="dow">SAT</div></div>
+            <div class="ct-line easy">
+              <div class="glyph"></div>
+              <div class="name">Easy 50 min + strides</div>
+              <div class="stat">~10 km</div>
+            </div>
+          </div>
+
+          <div class="ct-day">
+            <div class="stamp"><div class="num">03</div><div class="dow">SUN</div></div>
+            <div class="ct-line easy">
+              <div class="glyph"></div>
+              <div class="name">Long run 90 min <span class="pace">4:50–5:05</span></div>
+              <div class="stat">~18 km</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
