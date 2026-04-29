@@ -5,7 +5,7 @@ import { supabase, exchangeStravaCode } from "./lib/supabase.js";
 import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail } from "./lib/strava.js";
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr, getWeekBounds,
-  prettyEmailName, todayStr, newId,
+  prettyEmailName, todayStr, newId, ymd,
   snapToMonday, thisMonday,
 } from "./lib/helpers.js";
 import { C, S, TAG_STYLE, TYPE_STYLE, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
@@ -1962,11 +1962,12 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   //  PROFILE EDITOR — shared renderer for athlete-self and coach-edit-on-behalf
   // ────────────────────────────────────────────────────────────
-  const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight, tabBar = null }) => (
+  const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight, tabBar = null, statsBlock = null, settingsBlock = null }) => (
     <div style={S.page}>
       <div style={S.grain}/>
       <Header title={title} subtitle={subtitle} onBack={onBack} right={headerRight} />
       <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 96px" }}>
+        {statsBlock}
         <ProfileForm form={profileForm} setForm={setProfileForm} email={email} />
         {profileStatus && (
           <div style={{ marginBottom: 12, padding: "10px 12px", fontSize: 13, borderRadius: 2,
@@ -1980,6 +1981,7 @@ export default function App() {
           style={S.primaryBtn(C.crimson, profileSaving)}>
           {profileSaving ? "Saving…" : "Save profile"}
         </button>
+        {settingsBlock}
       </div>
       {tabBar}
     </div>
@@ -2720,12 +2722,68 @@ export default function App() {
   }
 
   if (role === "athlete" && screen === "profile") {
+    // Compute the spec'd stats trio: weekly avg over the last 12 weeks,
+    // current calendar year total, and the longest current activity streak
+    // (consecutive days ending today with at least one logged run).
+    const myActsForStats = activities.filter(a => a.athlete_email === user.email?.toLowerCase());
+    const now = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const yearStartStr = ymd(yearStart);
+    const yearKm = myActsForStats.reduce((acc, a) => {
+      if (a.activity_date >= yearStartStr) return acc + (parseFloat(a.distance_km) || 0);
+      return acc;
+    }, 0);
+
+    // Weekly avg: sum the last 84 days, divide by 12.
+    const cutoff = new Date(now); cutoff.setDate(now.getDate() - 84);
+    const cutoffStr = ymd(cutoff);
+    const last12 = myActsForStats
+      .filter(a => a.activity_date >= cutoffStr)
+      .reduce((acc, a) => acc + (parseFloat(a.distance_km) || 0), 0);
+    const weeklyAvg = last12 / 12;
+
+    // Streak: walk backwards from today, breaking at the first gap.
+    const datesWithRuns = new Set(myActsForStats.map(a => a.activity_date));
+    let streak = 0;
+    for (let i = 0; i < 400; i++) {
+      const d = new Date(now); d.setDate(now.getDate() - i);
+      if (datesWithRuns.has(ymd(d))) streak++;
+      else if (i === 0) continue;  // a rest day TODAY shouldn't break a streak
+      else break;
+    }
+
+    const StatTrio = (
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:0, marginBottom:24, borderTop:`1px solid ${C.rule}`, borderBottom:`1px solid ${C.rule}` }}>
+        <div style={{ padding:"16px 12px", borderRight:`1px solid ${C.rule}` }}>
+          <Eyebrow>Weekly avg</Eyebrow>
+          <div style={{ marginTop:6 }}>
+            <BigNum size={28}>{weeklyAvg.toFixed(1)}</BigNum>
+            <span className="t-mono" style={{ fontSize:11, color:C.mute, marginLeft:4 }}>km</span>
+          </div>
+        </div>
+        <div style={{ padding:"16px 12px", borderRight:`1px solid ${C.rule}` }}>
+          <Eyebrow>{now.getFullYear()} km</Eyebrow>
+          <div style={{ marginTop:6 }}>
+            <BigNum size={28}>{Math.round(yearKm)}</BigNum>
+          </div>
+        </div>
+        <div style={{ padding:"16px 12px" }}>
+          <Eyebrow>Streak</Eyebrow>
+          <div style={{ marginTop:6 }}>
+            <BigNum size={28} color={streak > 0 ? "var(--c-accent)" : undefined}>{streak}</BigNum>
+            <span className="t-mono" style={{ fontSize:11, color:C.mute, marginLeft:4 }}>{streak === 1 ? "day" : "days"}</span>
+          </div>
+        </div>
+      </div>
+    );
+
     return renderProfileScreen({
       title: "My Profile",
       subtitle: "Edit your details",
       email: user.email,
       onBack: () => setScreen("today"),
       headerRight: <button onClick={signOut} style={S.signOutBtn}>Sign out</button>,
+      statsBlock: StatTrio,
       tabBar: <MobileTabBar current="profile" isDesktop={isDesktop} onTab={(s) => setScreen(s)} onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}/>,
     });
   }
