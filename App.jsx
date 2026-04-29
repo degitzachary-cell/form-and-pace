@@ -2391,7 +2391,13 @@ export default function App() {
                     value={coachActiveMonday}
                     onChange={(e) => snapCoachMonday(e.target.value)}
                     style={{
+                      display:"block",
                       width:"100%",
+                      maxWidth:"100%",
+                      minWidth:0,
+                      boxSizing:"border-box",
+                      WebkitAppearance:"none",
+                      appearance:"none",
                       background: isCurrent ? C.crimson : C.white,
                       color: isCurrent ? "#fffdf8" : C.navy,
                       border:`1px solid ${isCurrent ? C.accent : C.rule}`,
@@ -3960,7 +3966,13 @@ export default function App() {
                     value={activeMonday}
                     onChange={(e) => snapAthleteMonday(e.target.value)}
                     style={{
+                      display:"block",
                       width:"100%",
+                      maxWidth:"100%",
+                      minWidth:0,
+                      boxSizing:"border-box",
+                      WebkitAppearance:"none",
+                      appearance:"none",
                       background: isCurrent ? C.crimson : C.white,
                       color: isCurrent ? "#fffdf8" : C.navy,
                       border:`1px solid ${isCurrent ? C.accent : C.rule}`,
