@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { C, S } from './styles.js';
 import { newId, snapToMonday } from './lib/helpers.js';
 import { DAY_LABELS } from './lib/constants.js';
+import { formatStep } from './lib/load.js';
 
 // ─── EXCEL PARSER ────────────────────────────────────────────
 function inferSessionType(desc) {
@@ -197,6 +198,122 @@ function StatusBanner({ status, onDismiss }) {
       <span>{status.message}</span>
       <button onClick={onDismiss} aria-label="Dismiss"
         style={{ background: 'none', border: 'none', color: tone.color, fontSize: 16, cursor: 'pointer', padding: 0 }}>✕</button>
+    </div>
+  );
+}
+
+// Inline structured-step editor. Lives next to the freeform desc on each
+// session card. Coaches can mix-and-match — type a desc, build steps, or
+// both. When steps are present the athlete view will render them as a
+// checkable list.
+function StepsEditor({ session, onChange }) {
+  const steps = Array.isArray(session?.steps) ? session.steps : [];
+  const setStep = (i, patch) => {
+    const next = steps.map((s, idx) => idx === i ? { ...s, ...patch } : s);
+    onChange(next);
+  };
+  const setNested = (i, group, patch) => {
+    const next = steps.map((s, idx) => idx === i ? { ...s, [group]: { ...(s[group] || {}), ...patch } } : s);
+    onChange(next);
+  };
+  const remove = (i) => onChange(steps.filter((_, idx) => idx !== i));
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= steps.length) return;
+    const next = steps.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  const add = (kind) => {
+    const blank = (() => {
+      switch (kind) {
+        case 'warmup':   return { kind: 'warmup',   duration_min: 15, pace: '' };
+        case 'cooldown': return { kind: 'cooldown', duration_min: 10, pace: '' };
+        case 'steady':   return { kind: 'steady',   duration_min: '', distance_km: '', pace: '', note: '' };
+        case 'interval': return { kind: 'interval', reps: 6,
+                                  work:     { distance_m: 800, pace: '' },
+                                  recovery: { duration_s: 90, pace: '' } };
+        default: return null;
+      }
+    })();
+    if (blank) onChange([...steps, blank]);
+  };
+
+  const inp = { background: C.white, border: `1px solid ${C.rule}`, borderRadius: 2, padding: '5px 8px', fontSize: 12, fontFamily: S.bodyFont, color: C.ink };
+  const lbl = { fontSize: 9, letterSpacing: 1.5, color: C.mid, textTransform: 'uppercase', marginRight: 6 };
+  const stepBox = { background: C.white, border: `1px solid ${C.rule}`, borderLeft: `3px solid ${C.accent}`, borderRadius: 2, padding: '8px 10px', marginBottom: 6 };
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 6 }}>Structured steps (optional)</div>
+      {steps.map((step, i) => (
+        <div key={i} style={stepBox}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 10, letterSpacing: 1.5, color: C.accent, fontWeight: 700, textTransform: 'uppercase' }}>{step.kind}</span>
+            <span style={{ fontSize: 12, color: C.mute, fontStyle: 'italic', flex: 1, fontFamily: S.displayFont }}>{formatStep(step)}</span>
+            <button type="button" onClick={() => move(i, -1)} disabled={i === 0} style={{ background: 'transparent', border: 'none', color: i === 0 ? C.rule : C.mute, cursor: i === 0 ? 'default' : 'pointer', fontSize: 14 }}>↑</button>
+            <button type="button" onClick={() => move(i, 1)} disabled={i === steps.length - 1} style={{ background: 'transparent', border: 'none', color: i === steps.length - 1 ? C.rule : C.mute, cursor: i === steps.length - 1 ? 'default' : 'pointer', fontSize: 14 }}>↓</button>
+            <button type="button" onClick={() => remove(i)} style={{ background: 'transparent', border: 'none', color: C.hot, cursor: 'pointer', fontSize: 11 }}>×</button>
+          </div>
+          {step.kind === 'warmup' || step.kind === 'cooldown' ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={lbl}>min</span>
+              <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>pace</span>
+              <input style={{ ...inp, width: 80 }} placeholder="5:30" value={step.pace || ''} onChange={e => setStep(i, { pace: e.target.value })}/>
+            </div>
+          ) : step.kind === 'steady' ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={lbl}>km</span>
+              <input style={{ ...inp, width: 60 }} type="number" step="0.1" value={step.distance_km ?? ''} onChange={e => setStep(i, { distance_km: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>min</span>
+              <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>pace</span>
+              <input style={{ ...inp, width: 80 }} placeholder="4:35" value={step.pace || ''} onChange={e => setStep(i, { pace: e.target.value })}/>
+              <input style={{ ...inp, width: 140 }} placeholder="note (e.g. at MP)" value={step.note || ''} onChange={e => setStep(i, { note: e.target.value })}/>
+            </div>
+          ) : step.kind === 'interval' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={lbl}>reps</span>
+                <input style={{ ...inp, width: 50 }} type="number" min="1" value={step.reps ?? 1} onChange={e => setStep(i, { reps: Math.max(1, Number(e.target.value) || 1) })}/>
+              </div>
+              <div/>
+              <div style={{ background: C.bgDeep, padding: 6, borderRadius: 2 }}>
+                <div style={{ ...lbl, marginBottom: 4 }}>Work</div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input style={{ ...inp, width: 70 }} type="number" placeholder="m" value={step.work?.distance_m ?? ''} onChange={e => setNested(i, 'work', { distance_m: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <span style={{ fontSize: 10, color: C.mid }}>or</span>
+                  <input style={{ ...inp, width: 60 }} type="number" placeholder="s" value={step.work?.duration_s ?? ''} onChange={e => setNested(i, 'work', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <input style={{ ...inp, width: 70 }} placeholder="pace" value={step.work?.pace || ''} onChange={e => setNested(i, 'work', { pace: e.target.value })}/>
+                </div>
+              </div>
+              <div style={{ background: C.bgDeep, padding: 6, borderRadius: 2 }}>
+                <div style={{ ...lbl, marginBottom: 4 }}>Recovery</div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input style={{ ...inp, width: 70 }} type="number" placeholder="m" value={step.recovery?.distance_m ?? ''} onChange={e => setNested(i, 'recovery', { distance_m: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <span style={{ fontSize: 10, color: C.mid }}>or</span>
+                  <input style={{ ...inp, width: 60 }} type="number" placeholder="s" value={step.recovery?.duration_s ?? ''} onChange={e => setNested(i, 'recovery', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <input style={{ ...inp, width: 70 }} placeholder="pace" value={step.recovery?.pace || ''} onChange={e => setNested(i, 'recovery', { pace: e.target.value })}/>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {[
+          { k: 'warmup',   label: '+ Warm-up'  },
+          { k: 'steady',   label: '+ Steady'   },
+          { k: 'interval', label: '+ Interval' },
+          { k: 'cooldown', label: '+ Cool-down' },
+        ].map(({ k, label }) => (
+          <button key={k} type="button" onClick={() => add(k)} style={{
+            background: 'transparent', color: C.accent, border: `1px solid ${C.rule}`,
+            borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600, letterSpacing: 0.5,
+          }}>{label}</button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -588,6 +705,12 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       value={session.desc}
                       onChange={e => handleSessionChange(week.id, session.id, 'desc', e.target.value)}
                     />
+
+                    <StepsEditor
+                      session={session}
+                      onChange={(steps) => handleSessionChange(week.id, session.id, 'steps', steps)}
+                    />
+
                     <button type="button" onClick={() => handleDeleteSession(week.id, session.id)} style={{
                       background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
                       borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',

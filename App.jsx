@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured } from "./lib/load.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
@@ -3405,7 +3405,25 @@ export default function App() {
         style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}
       >
         <SectionCard label="Today's Session">
-          {activeSession.desc.split("\n").filter(l => !/^\w{3} \w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2}/.test(l.trim())).map((l,i)=>(
+          {isStructured(activeSession) && (
+            <ol style={{ listStyle:"none", padding:0, margin:"0 0 12px", borderLeft:`2px solid ${C.rule}` }}>
+              {activeSession.steps.map((step, i) => (
+                <li key={i} style={{ position:"relative", paddingLeft:16, marginLeft:8, marginBottom:10 }}>
+                  <span style={{ position:"absolute", left:-7, top:6, width:10, height:10, borderRadius:999, background:C.accent, border:`2px solid ${C.bg}` }}/>
+                  <div style={{ fontSize:10, letterSpacing:2, color:C.accent, fontWeight:700, textTransform:"uppercase", marginBottom:2 }}>
+                    {step.kind}
+                  </div>
+                  <div style={{ fontFamily:S.displayFont, fontSize:16, color:C.ink, lineHeight:1.35 }}>
+                    {formatStep(step)}
+                  </div>
+                  {step.note && step.kind !== "steady" && (
+                    <div style={{ fontSize:12, color:C.mute, fontStyle:"italic", marginTop:2 }}>{step.note}</div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+          {activeSession.desc && activeSession.desc.split("\n").filter(l => !/^\w{3} \w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2}/.test(l.trim())).map((l,i)=>(
             <div key={i} style={{ fontSize:14, color:i===0?C.navy:C.mid, lineHeight:1.9 }}>{l}</div>
           ))}
           <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
