@@ -187,6 +187,14 @@ function ProfileForm({ form, setForm, email }) {
         <input style={inputStyle} maxLength={3} value={form.avatar} onChange={setField("avatar")} placeholder="e.g. JB" />
       </div>
 
+      <div style={{ marginBottom: 18 }}>
+        <div style={labelStyle}>Threshold pace (optional)</div>
+        <input style={inputStyle} value={form.threshold_pace || ""} onChange={setField("threshold_pace")} placeholder="e.g. 4:35" />
+        <div style={{ fontSize: 11, color: C.mid, marginTop: 6, lineHeight: 1.5 }}>
+          Lactate-threshold pace as min/km. The pace you can hold for ~1 hour all-out — close to half-marathon pace. Used for rTSS load and Z1–Z5 zones. If left blank, we estimate it from your PBs.
+        </div>
+      </div>
+
       <div style={{ fontSize: 10, letterSpacing: 2, color: C.crimson, textTransform: "uppercase", marginBottom: 4 }}>PBs &amp; Goals</div>
       <div style={{ fontSize: 11, color: C.mid, marginBottom: 10, lineHeight: 1.5 }}>
         Leave any field blank if you don't have a PB or goal for that distance.
@@ -243,7 +251,7 @@ export default function App() {
 
   // Profile editor state — used by both athlete (self-edit) and coach
   // (edit-on-behalf). The form is populated when entering either profile screen.
-  const [profileForm, setProfileForm] = useState({ name: "", avatar: "", pbs: { ...EMPTY_PB_GOAL }, goals: { ...EMPTY_PB_GOAL } });
+  const [profileForm, setProfileForm] = useState({ name: "", avatar: "", threshold_pace: "", pbs: { ...EMPTY_PB_GOAL }, goals: { ...EMPTY_PB_GOAL } });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileStatus, setProfileStatus] = useState(null);
 
@@ -302,7 +310,7 @@ export default function App() {
     const loadAthleteProfiles = async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('email, name, goal, current_pb, avatar, role');
+        .select('email, name, goal, current_pb, avatar, role, threshold_pace, pbs, goals');
       if (error) {
         console.error('Failed to load athlete profiles:', error);
         return;
@@ -890,6 +898,7 @@ export default function App() {
       setProfileForm({
         name: profile.name || "",
         avatar: profile.avatar || "",
+        threshold_pace: profile.threshold_pace || "",
         pbs:   { ...EMPTY_PB_GOAL, ...(profile.pbs   || {}) },
         goals: { ...EMPTY_PB_GOAL, ...(profile.goals || {}) },
       });
@@ -903,6 +912,7 @@ export default function App() {
       setProfileForm({
         name: ap.name || "",
         avatar: ap.avatar || "",
+        threshold_pace: ap.threshold_pace || "",
         pbs:   { ...EMPTY_PB_GOAL, ...(ap.pbs   || {}) },
         goals: { ...EMPTY_PB_GOAL, ...(ap.goals || {}) },
       });
@@ -922,6 +932,7 @@ export default function App() {
         email: key,
         name: profileForm.name.trim() || null,
         avatar: profileForm.avatar.trim() || null,
+        threshold_pace: profileForm.threshold_pace?.trim() || null,
         pbs:   cleanedPbs,
         goals: cleanedGoals,
         // Keep legacy text columns in sync for screens that still read them.
