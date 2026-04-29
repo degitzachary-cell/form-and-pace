@@ -108,15 +108,16 @@ function fmtPbGoal(obj) {
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_LONG   = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
 
-function DraggableSession({ session, log, linkedAct, onClick }) {
+function DraggableSession({ session, log, linkedAct, isMissed, onClick }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `session:${session.id}`,
   });
   const ts = TAG_STYLE[session.tag] || TAG_STYLE.easy;
   const isLogged = !!log || !!linkedAct;
+  const showMissed = isMissed && !isLogged;
   const style = {
-    background: isLogged ? "#f0f7ee" : C.white,
-    border: `1px solid ${isLogged ? "#b8d4b4" : C.rule}`,
+    background: isLogged ? "#f0f7ee" : showMissed ? "#fdf0f0" : C.white,
+    border: `1px solid ${isLogged ? "#b8d4b4" : showMissed ? "#e6b8b8" : C.rule}`,
     borderRadius: 2,
     padding: "10px 12px",
     display: "flex",
@@ -136,7 +137,9 @@ function DraggableSession({ session, log, linkedAct, onClick }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.type}</div>
-          {isLogged && <div style={{ fontSize: 10, color: C.green, flexShrink: 0 }}>✓</div>}
+          {isLogged ? <div style={{ fontSize: 10, color: C.green, flexShrink: 0 }}>✓</div>
+            : showMissed ? <div style={{ fontSize: 9, color: C.crimson, flexShrink: 0, letterSpacing: 1, fontWeight: 700 }}>MISSED</div>
+            : null}
         </div>
         <div style={{ fontSize: 11, color: ts.accent, marginTop: 2, fontFamily: "monospace" }}>{session.pace}</div>
         {log?.analysis?.actual_date && session.day && (
@@ -1714,7 +1717,11 @@ export default function App() {
                               const log    = logs[s.id];
                               const sDate  = log?.analysis?.actual_date || sessionDateStr(wk.weekStart, s.day);
                               const linkedAct = actByDate[sDate];
-                              const comply = log?.analysis?.compliance || (linkedAct ? "completed" : "pending");
+                              const isPastDate = sDate && sDate < todayStr();
+                              const comply = log?.analysis?.compliance
+                                || (linkedAct ? "completed"
+                                  : isPastDate && (s.type || "").toUpperCase() !== "REST" ? "missed"
+                                  : "pending");
                               return (
                                 <div key={s.id}
                                   onClick={()=>{ const sess = {...s, weekStart: wk.weekStart, athleteEmail: dashAthlete}; setActiveSession(sess); setCoachScreen("session"); }}
@@ -2477,12 +2484,14 @@ export default function App() {
                             const sDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
                             const linkedAct = actByDate[sDate];
                             const isLogged = !!log || !!linkedAct;
+                            const isMissed = !isLogged && sDate && sDate < todayStr() && (s.type || "").toUpperCase() !== "REST";
                             return (
                               <DraggableSession
                                 key={s.id}
                                 session={s}
                                 log={log}
                                 linkedAct={linkedAct}
+                                isMissed={isMissed}
                                 onClick={() => {
                                   setActiveSession({ ...s, weekStart: w.weekStart });
                                   setFeedbackText("");
