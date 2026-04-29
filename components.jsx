@@ -452,7 +452,7 @@ export function StravaCard({ data, onClear }) {
     <div style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"16px 18px", marginBottom:14 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:16 }}>🟠</span>
+          <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:"var(--c-mute)" }}>STRAVA</span>
           <div>
             <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{data.name}</div>
             <div style={{ fontSize:10, color:C.green, letterSpacing:2, textTransform:"uppercase" }}>{onClear ? "Strava Imported" : "Strava Data"}</div>
@@ -540,7 +540,7 @@ export function StravaActivityPicker({ activities, loading, selectedId, detail, 
     return (
       <div style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 14px", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:16 }}>🟠</span>
+          <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:"var(--c-mute)" }}>STRAVA</span>
           <div>
             <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{detail.name}</div>
             <div style={{ fontSize:11, color:C.green, letterSpacing:1 }}>STRAVA IMPORTED · {(detail.distance_m/1000).toFixed(2)}km</div>
@@ -556,13 +556,13 @@ export function StravaActivityPicker({ activities, loading, selectedId, detail, 
     <div style={{ marginBottom:14 }}>
       {!activities.length && !loading ? (
         <button type="button" onClick={onOpen} style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px", color:C.green, fontSize:13, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-          <span style={{ fontSize:16 }}>🟠</span> Import from Strava
+          Import from Strava
         </button>
       ) : loading ? (
         <div style={{ textAlign:"center", padding:"12px 0", color:C.green, fontSize:13 }}>Loading Strava activities…</div>
       ) : (
         <div>
-          <div style={{ fontSize:10, letterSpacing:2, color:C.green, textTransform:"uppercase", marginBottom:6 }}>🟠 Select Strava Activity</div>
+          <div style={{ fontSize:10, letterSpacing:2, color:C.accent, textTransform:"uppercase", marginBottom:6 }}>Select Strava Activity</div>
           <select
             value={selectedId || ""}
             onChange={e => onSelect(e.target.value ? Number(e.target.value) : null)}

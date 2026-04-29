@@ -118,7 +118,7 @@ function ExtraActivityCard({ act, onClick }) {
       background: "#1a0505", border: "1px solid #7f1d1d", borderRadius: 2,
       padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
     }}>
-      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#3b0a0a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>➕</div>
+      <div className="t-mono" style={{ width: 32, height: 32, borderRadius: "50%", background: C.bgDeep, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight:600, flexShrink: 0 }}>+</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "#fffdf8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.activity_type || "Run"}</div>
@@ -671,11 +671,11 @@ export default function App() {
           s => sessionDateStr(s.weekStart, s.day) === effectiveDate
         );
         if (matchedSession && !logs[matchedSession.id]) {
-          const TAG_EMOJI = { speed:"⚡", tempo:"🎯", easy:"🏃" };
+          const TAG_EMOJI = { speed:"", tempo:"", easy:"" };
           const scheduledDate = sessionDateStr(matchedSession.weekStart, matchedSession.day);
           const autoAnalysis = {
             compliance: "completed",
-            emoji: TAG_EMOJI[matchedSession.tag] || "🏃",
+            emoji: TAG_EMOJI[matchedSession.tag] || "",
             distance_km: parseFloat(form.distanceKm),
             duration_min: form.durationMin ? parseFloat(form.durationMin) : null,
             // Only set actual_date if the run happened on a different day than scheduled.
@@ -937,7 +937,7 @@ export default function App() {
     setIsSaving(true);
     const s = activeSession;
     try {
-      const TAG_EMOJI = { speed:"⚡", tempo:"🎯", easy:"🏃", long:"🏃" };
+      const TAG_EMOJI = { speed:"", tempo:"", easy:"", long:"" };
       const scheduledDate = s.weekStart ? sessionDateStr(s.weekStart, s.day) : null;
       // Strava-first: when a Strava activity is attached, the run's actual date
       // wins over any user-picked override.
@@ -952,7 +952,7 @@ export default function App() {
       };
       const analysis = {
         compliance: "completed",
-        emoji: TAG_EMOJI[s.tag] || "🏃",
+        emoji: TAG_EMOJI[s.tag] || "",
         distance_km: parseFloat(sessionDistKm),
         duration_min: sessionDurMin ? parseFloat(sessionDurMin) : null,
         ...(sessionDate !== scheduledDate ? { actual_date: sessionDate } : {}),
@@ -1158,7 +1158,7 @@ export default function App() {
     <div style={S.page}>
       <div style={S.grain}/>
       <div style={{ maxWidth:400, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
-        <div style={{ fontSize:48, marginBottom:20 }}>👋</div>
+        <div style={{ fontFamily:"var(--f-display)", fontSize:64, color:C.accent, marginBottom:20, fontStyle:"italic", fontWeight:400 }}>✻</div>
         <div style={{ fontSize:20, fontWeight:700, marginBottom:12, fontFamily:S.displayFont, color:C.navy }}>You're not enrolled yet</div>
         <div style={{ fontSize:14, color:C.mid, lineHeight:1.8, marginBottom:32, fontFamily:S.bodyFont }}>
           Your coach needs to add you to the platform.<br/>
@@ -1548,7 +1548,7 @@ export default function App() {
                                   <div key={act.id}
                                     onClick={() => { setActiveExtraActivity(act); setCoachScreen("extra-activity"); }}
                                     style={{ background:"#fdf0f0", border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, borderRadius:2, padding:"8px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
-                                    <div style={{ fontSize:12 }}>➕</div>
+                                    <div className="t-mono" style={{ fontSize:11, color:C.crimson, fontWeight:600, letterSpacing:"0.1em" }}>+</div>
                                     <div style={{ flex:1, minWidth:0 }}>
                                       <div style={{ fontWeight:700, fontSize:12, color:C.navy }}>{act.activity_type || "Run"}</div>
                                       <div style={{ fontSize:10, color:C.mid }}>{act.distance_km}km</div>
@@ -1740,7 +1740,7 @@ export default function App() {
               }
             }}
               style={{ width:"100%", marginBottom:14, background:C.navy, color:C.cream, border:0, borderRadius:2, padding:"12px", fontSize:11, letterSpacing:2, fontWeight:700, cursor:"pointer" }}>
-              ✓ MARK ALL AS READ
+              MARK ALL AS READ
             </button>
           )}
           {items.length === 0 ? (
@@ -1790,7 +1790,7 @@ export default function App() {
                 }}
                 title="Mark as read"
                 style={{ background:"transparent", border:`1px solid ${C.rule}`, borderRadius:2, padding:"4px 8px", color:C.mid, fontSize:10, letterSpacing:1, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
-                ✓ READ
+                READ
               </button>
             </div>
           ))}
@@ -1983,7 +1983,7 @@ export default function App() {
 
           <button onClick={() => setCoachScreen("profile")}
             style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"10px", fontSize:13, fontWeight:600 }}>
-            ✏️ Edit Profile (name, goal, PB)
+            Edit Profile (name, goal, PB)
           </button>
 
           {coachActiveMonday && (() => {
@@ -2118,7 +2118,7 @@ export default function App() {
                                     {log?.analysis?.actual_date && s.day && (
                                       <div style={{ fontSize:9, color:C.crimson, marginTop:2, letterSpacing:1, fontWeight:600 }}>↪ MOVED FROM {s.day.slice(0,3).toUpperCase()}</div>
                                     )}
-                                    {log?.coach_reply && <div style={{ fontSize:10, color:"#14365f", marginTop:2 }}>💬 You replied</div>}
+                                    {log?.coach_reply && <div className="t-mono" style={{ fontSize:9, color:"var(--c-cool)", marginTop:2, letterSpacing:"0.14em", textTransform:"uppercase" }}>· You replied</div>}
                                   </div>
                                 </div>
                                 </CoachDraggableSession>
@@ -2127,7 +2127,7 @@ export default function App() {
                             {extrasHere.map(act => (
                               <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setCoachScreen("extra-activity"); }}
                                 style={{ ...S.card, padding:"10px 12px", display:"flex", alignItems:"center", gap:10, background:"#fdf0f0", borderLeft:`3px solid ${C.crimson}`, cursor:"pointer" }}>
-                                <div style={{ fontSize:18 }}>➕</div>
+                                <div className="t-mono" style={{ fontSize:14, color:C.crimson, fontWeight:600, letterSpacing:"0.1em" }}>+</div>
                                 <div style={{ flex:1, minWidth:0 }}>
                                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
                                     <div style={{ fontWeight:700, fontSize:14, color:C.navy }}>{act.activity_type || "Run"}</div>
@@ -2207,7 +2207,7 @@ export default function App() {
                         {an.wellness.rpe        != null && <div><b>RPE</b> {an.wellness.rpe}/10</div>}
                         {an.wellness.sleep_hours != null && <div><b>Sleep</b> {an.wellness.sleep_hours}h</div>}
                         {an.wellness.soreness   != null && <div><b>Soreness</b> {an.wellness.soreness}/5</div>}
-                        {an.wellness.mood       != null && <div><b>Mood</b> {["😞","😕","😐","🙂","😄"][an.wellness.mood-1]} {an.wellness.mood}/5</div>}
+                        {an.wellness.mood       != null && <div><b>Mood</b> {["awful","rough","ok","good","flying"][an.wellness.mood-1]} {an.wellness.mood}/5</div>}
                       </div>
                     </SectionCard>
                   )}
@@ -2225,9 +2225,9 @@ export default function App() {
               <SectionCard label="Compliance">
                 <div style={{ display:"flex", gap:6 }}>
                   {[
-                    { val:"completed", label:"✓ Done",    color:C.green   },
-                    { val:"partial",   label:"~ Partial", color:C.amber   },
-                    { val:"missed",    label:"✗ Missed",  color:C.crimson },
+                    { val:"completed", label:"Done",      color:C.accent  },
+                    { val:"partial",   label:"Partial",   color:C.warn    },
+                    { val:"missed",    label:"Missed",    color:C.hot     },
                   ].map(opt => {
                     const current = effectiveCompliance({
                       session: activeSession,
@@ -2243,7 +2243,7 @@ export default function App() {
                           const nextAnalysis = {
                             ...(an || {}),
                             compliance: opt.val,
-                            emoji: opt.val === "missed" ? "✗" : (an?.emoji || TAG_EMOJI[activeSession.tag] || "🏃"),
+                            emoji: opt.val === "missed" ? "✗" : (an?.emoji || TAG_EMOJI[activeSession.tag] || ""),
                           };
                           try {
                             await saveLog(activeSession.id, { analysis: nextAnalysis });
@@ -2363,7 +2363,7 @@ export default function App() {
               prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain },
             });
             setCoachScreen("edit-workout");
-          }} style={{ ...S.ghostBtn, marginTop:16 }}>✏️ Edit prescribed workout</button>
+          }} style={{ ...S.ghostBtn, marginTop:16 }}>Edit prescribed workout</button>
         </div>
       </div>
     );
@@ -2383,7 +2383,7 @@ export default function App() {
         <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ fontSize:13, color:C.mid, marginBottom:16 }}>{da?.name}</div>
-          <div style={{ textAlign:"center", fontSize:48, margin:"20px 0 8px" }}>➕</div>
+          <div style={{ textAlign:"center", fontFamily:"var(--f-display)", fontSize:64, fontWeight:400, color:C.accent, margin:"20px 0 8px", lineHeight:1 }}>+</div>
           <div style={{ textAlign:"center", fontSize:14, color:C.crimson, fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
           <div style={{ display:"flex", gap:10, marginBottom:16 }}>
             {act.distance_km && <StatPill label="Distance" val={`${act.distance_km}km`} color={C.green}/>}
@@ -2395,7 +2395,7 @@ export default function App() {
               <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{act.notes}"</div>
             </SectionCard>
           )}
-          <SectionCard label="💬 Your Reply">
+          <SectionCard label="Your Reply">
             {act.coach_reply ? (
               <>
                 <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, marginBottom:12 }}>{act.coach_reply}</div>
@@ -2722,7 +2722,7 @@ export default function App() {
                 alignItems:"center", justifyContent:"space-between", gap:10,
               }}>
               <div style={{ fontSize:13, fontWeight:700, letterSpacing:0.5 }}>
-                💬 {unreadCount} new {unreadCount === 1 ? "reply" : "replies"} from your coach
+                {unreadCount} new {unreadCount === 1 ? "reply" : "replies"} from your coach
               </div>
               <div style={{ fontSize:13, opacity:0.85 }}>›</div>
             </div>
@@ -2765,7 +2765,7 @@ export default function App() {
                       {todaysSession.s.terrain && <div style={{ fontSize:11, color:C.mid, marginTop:6, letterSpacing:1 }}>{todaysSession.s.terrain}</div>}
                       {(todaysSession.log || todaysActivity) && (
                         <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${C.rule}`, fontSize:11, color:C.green, letterSpacing:1, fontWeight:700 }}>
-                          ✓ LOGGED · {todaysActivity?.distance_km ?? todaysSession.log?.analysis?.distance_km}KM
+                          LOGGED · {todaysActivity?.distance_km ?? todaysSession.log?.analysis?.distance_km}KM
                         </div>
                       )}
                     </div>
@@ -3406,7 +3406,7 @@ export default function App() {
           <div style={{ margin:"0 16px 14px" }}>
             {stravaConnected ? (
               <div style={{ display:"flex", alignItems:"center", gap:8, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"10px 14px" }}>
-                <span style={{ fontSize:16 }}>🟠</span>
+                <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:"var(--c-mute)" }}>STRAVA</span>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:12, fontWeight:700, color:C.green }}>Strava Connected</div>
                   <div style={{ fontSize:11, color:C.mid }}>Import runs when logging a session</div>
@@ -3414,7 +3414,7 @@ export default function App() {
               </div>
             ) : (
               <button onClick={connectStrava} style={{ width:"100%", background:"#FC4C02", border:"none", borderRadius:2, padding:"12px 16px", color:"white", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, letterSpacing:0.5 }}>
-                <span style={{ fontSize:18 }}>🟠</span> Connect Strava
+                Connect Strava
               </button>
             )}
           </div>
@@ -3819,7 +3819,7 @@ export default function App() {
                     color:      sessionMood===n ? "#fffdf8" : C.navy,
                     border:`1px solid ${sessionMood===n ? C.crimson : C.rule}`,
                     borderRadius:2, fontSize:12, fontWeight:700, cursor:"pointer",
-                  }}>{["😞","😕","😐","🙂","😄"][n-1]} {n}</button>
+                  }}>{["awful","rough","ok","good","flying"][n-1]} {n}</button>
               ))}
             </div>
           </div>
@@ -3993,7 +3993,7 @@ export default function App() {
         <div style={S.grain}/>
         <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setScreen("home"); }}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
-          <div style={{ textAlign:"center", fontSize:48, margin:"20px 0 8px" }}>➕</div>
+          <div style={{ textAlign:"center", fontFamily:"var(--f-display)", fontSize:64, fontWeight:400, color:C.accent, margin:"20px 0 8px", lineHeight:1 }}>+</div>
           <div style={{ textAlign:"center", fontSize:14, color:C.crimson, fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
           <div style={{ display:"flex", gap:10, marginBottom:16 }}>
             {act.distance_km && <StatPill label="Distance" val={`${act.distance_km}km`} color="#4ade80"/>}
@@ -4006,7 +4006,7 @@ export default function App() {
             </SectionCard>
           )}
           {act.coach_reply && (
-            <SectionCard label="💬 Message from Coach" accent="#3b82f6">
+            <SectionCard label="Message from Coach" accent="var(--c-accent)">
               <div style={{ fontSize:14, color:C.navy, lineHeight:1.8 }}>{act.coach_reply}</div>
             </SectionCard>
           )}

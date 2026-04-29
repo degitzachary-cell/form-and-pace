@@ -88,5 +88,8 @@ export function typeStyle(type) {
 }
 
 export const COMPLY_COLOR = { completed:C.accent, missed:C.hot, partial:C.warn, over:C.cool, pending:C.mute };
-export const COMPLY_LABEL = { completed:"✓ Done", missed:"✗ Missed", partial:"~ Partial", over:"↑ Over", pending:"Pending" };
-export const TAG_EMOJI    = { speed:"⚡", tempo:"🎯", easy:"🏃", long:"🏃" };
+export const COMPLY_LABEL = { completed:"Done", missed:"Missed", partial:"Partial", over:"Over", pending:"Pending" };
+// Sport spec forbids decorative emoji — type identity now lives in the dot
+// color (typeStyle), not a glyph. TAG_EMOJI kept as an empty map for any
+// stragglers still importing it.
+export const TAG_EMOJI = { speed:"", tempo:"", easy:"", long:"" };
