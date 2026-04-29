@@ -626,8 +626,12 @@ export default function App() {
   const saveActivity = async (form, stravaDetailData = null) => {
     setLogSaving(true);
     setLogError(null);
+    // Strava-first: if importing from Strava, the activity's real date wins.
+    const stravaDate = stravaDetailData?.start_date_local?.slice(0, 10)
+                    || stravaDetailData?.start_date?.slice(0, 10);
+    const effectiveDate = stravaDate || form.date;
     const basePayload = {
-      activity_date: form.date,
+      activity_date: effectiveDate,
       distance_km: parseFloat(form.distanceKm),
       duration_seconds: form.durationMin ? Math.round(parseFloat(form.durationMin) * 60) : null,
       activity_type: form.type,
@@ -648,21 +652,24 @@ export default function App() {
     if (error) { console.error("saveActivity error:", error); setLogError(error.message); }
     if (!error && data) {
       setActivities(prev => editingActivityId ? prev.map(a => a.id === data.id ? data : a) : [data, ...prev]);
-      // Auto-link to matching scheduled session for this date
+      // Auto-link to matching scheduled session for the actual date.
       if (programEntry) {
         const allSessionsWithDate = programEntry.weeks.flatMap(w =>
           w.sessions.map(s => ({ ...s, weekStart: w.weekStart }))
         );
         const matchedSession = allSessionsWithDate.find(
-          s => sessionDateStr(s.weekStart, s.day) === form.date
+          s => sessionDateStr(s.weekStart, s.day) === effectiveDate
         );
         if (matchedSession && !logs[matchedSession.id]) {
           const TAG_EMOJI = { speed:"⚡", tempo:"🎯", easy:"🏃" };
+          const scheduledDate = sessionDateStr(matchedSession.weekStart, matchedSession.day);
           const autoAnalysis = {
             compliance: "completed",
             emoji: TAG_EMOJI[matchedSession.tag] || "🏃",
             distance_km: parseFloat(form.distanceKm),
             duration_min: form.durationMin ? parseFloat(form.durationMin) : null,
+            // Only set actual_date if the run happened on a different day than scheduled.
+            ...(effectiveDate !== scheduledDate ? { actual_date: effectiveDate } : {}),
           };
           await saveLog(matchedSession.id, {
             analysis: autoAnalysis,
@@ -911,7 +918,10 @@ export default function App() {
     try {
       const TAG_EMOJI = { speed:"⚡", tempo:"🎯", easy:"🏃", long:"🏃" };
       const scheduledDate = s.weekStart ? sessionDateStr(s.weekStart, s.day) : null;
-      const sessionDate = sessionDateOverride || scheduledDate
+      // Strava-first: when a Strava activity is attached, the run's actual date
+      // wins over any user-picked override.
+      const stravaDate = stravaDetail?.start_date_local?.slice(0,10) || stravaDetail?.start_date?.slice(0,10);
+      const sessionDate = stravaDate || sessionDateOverride || scheduledDate
         || (() => { const d = new Date(); const y = d.getFullYear(); const mo = String(d.getMonth()+1).padStart(2,"0"); const dy = String(d.getDate()).padStart(2,"0"); return `${y}-${mo}-${dy}`; })();
       const analysis = {
         compliance: "completed",
@@ -1199,21 +1209,40 @@ export default function App() {
         }
       }
 
+      // Current week Mon → Sun (not rolling 7 days).
+      const todayD = new Date(); todayD.setHours(0,0,0,0);
+      const dow = todayD.getDay();
+      const monOff = dow === 0 ? -6 : 1 - dow;
+      const monD = new Date(todayD); monD.setDate(todayD.getDate() + monOff);
+      // Index ALL planned sessions (incl REST) by their original scheduled date
+      // so the strip shows what was planned even if the session was moved.
+      const plannedByDate = new Map();
+      for (const w of weeksList) {
+        for (const s of (w.sessions || [])) {
+          if ((s.type || "").toUpperCase() === "REST") continue;
+          const sd = sessionDateStr(w.weekStart, s.day);
+          if (sd && !plannedByDate.has(sd)) plannedByDate.set(sd, s);
+        }
+      }
       const days = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - i);
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monD); d.setDate(monD.getDate() + i);
         const dStr = fmtDate(d);
         const isToday = dStr === today;
-        const planned = sessionsByDate.get(dStr);
+        const plannedSess = plannedByDate.get(dStr);
         const act = actsByDate.get(dStr);
         const orphanLog = orphanLogsByDate.get(dStr);
-        const isLogged = !!act || !!orphanLog || !!planned?.log?.analysis?.distance_km;
+        const isLogged = !!act || !!orphanLog;
         let color = C.lightRule;
-        if (isLogged && planned) color = C.green;
-        else if (isLogged) color = "#7a96b8";
-        else if (planned && dStr < today) color = C.crimson;
-        else if (planned) color = C.mid;
-        days.push({ dStr, isToday, color, hasPlan: !!planned, isLogged });
+        let pattern = null;
+        if (isLogged) color = "#2a6e27"; // green
+        else if (plannedSess && dStr < today) color = "#8b1c1c"; // missed
+        else if (plannedSess) {
+          const ts = typeStyle(plannedSess.type);
+          color = ts.accent;
+          pattern = ts.pattern || null;
+        }
+        days.push({ dStr, isToday, color, pattern, hasPlan: !!plannedSess, isLogged });
       }
 
       // Replies needed: each athlete-day with content needs at most one reply.
@@ -1347,7 +1376,7 @@ export default function App() {
                 <div style={{ display:"flex", gap:5, marginTop:12, paddingLeft:50 }}>
                   {days.map((d, i) => (
                     <div key={i} title={d.dStr} style={{
-                      flex:1, height:8, borderRadius:2, background: d.color,
+                      flex:1, height:8, borderRadius:2, background: d.pattern || d.color,
                       border: d.isToday ? `2px solid ${C.navy}` : "none",
                       boxSizing: d.isToday ? "border-box" : "content-box"
                     }}/>
@@ -2177,15 +2206,20 @@ export default function App() {
 
     const weekStrip = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => {
       const dDate = sessionDateStr(monStr, d);
+      // sessionHere = a planned session whose effective day (after any move) lands here.
       const sessionHere = allWithMoves.find(x => x.onDate === dDate);
+      // sessionPlanned = the session whose ORIGINAL scheduled day was here (regardless of move).
+      const sessionPlanned = (thisWeek?.sessions || []).find(s => sessionDateStr(monStr, s.day) === dDate);
       const actHere = myActs.find(a => a.activity_date === dDate);
       const isLogged = !!actHere || !!sessionHere?.log?.analysis?.distance_km;
       const isToday = dDate === today;
+      const isRest = (sessionPlanned?.type || "").toUpperCase() === "REST";
       let dotColor = C.lightRule;
-      if (isLogged) dotColor = C.green;
-      else if (sessionHere && dDate < today) dotColor = C.crimson;
-      else if (sessionHere) dotColor = C.mid;
-      return { d, dDate, isToday, isLogged, dotColor, hasPlan: !!sessionHere };
+      if (isLogged) dotColor = "#2a6e27"; // green
+      else if (sessionPlanned && dDate < today && !isRest) dotColor = "#8b1c1c"; // missed
+      else if (sessionPlanned && !isRest) dotColor = typeStyle(sessionPlanned.type).accent;
+      const isPattern = sessionPlanned && !isLogged && !isRest && typeStyle(sessionPlanned.type).pattern;
+      return { d, dDate, isToday, isLogged, dotColor, hasPlan: !!sessionPlanned, pattern: isPattern ? typeStyle(sessionPlanned.type).pattern : null };
     });
 
     return (
@@ -2281,7 +2315,7 @@ export default function App() {
               {weekStrip.map(d => (
                 <div key={d.d} onClick={() => setScreen("home")} style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
                   <div style={{ fontSize:9, color: d.isToday ? C.crimson : C.mid, fontWeight: d.isToday ? 700 : 500, letterSpacing:1, marginBottom:6 }}>{d.d.slice(0,1)}</div>
-                  <div style={{ width:10, height:10, borderRadius:"50%", background:d.dotColor, margin:"0 auto", border: d.isToday ? `2px solid ${C.navy}` : "none", boxSizing:"content-box" }}/>
+                  <div style={{ width:10, height:10, borderRadius:"50%", background: d.pattern || d.dotColor, margin:"0 auto", border: d.isToday ? `2px solid ${C.navy}` : "none", boxSizing:"content-box" }}/>
                 </div>
               ))}
             </div>
