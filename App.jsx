@@ -14,14 +14,49 @@ import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPick
 const ATHLETE_PROGRAMS = {};
 
 // Distance categories used in the profile form. "other" is free text;
-// the rest accept time strings (MM:SS or H:MM:SS). All fields are optional.
+// the rest are time-based with H:MM:SS dropdowns. All fields are optional.
 const PROFILE_DISTANCES = [
-  { key: "5k",             label: "5km",           placeholder: "MM:SS"   },
-  { key: "10k",            label: "10km",          placeholder: "MM:SS"   },
-  { key: "half_marathon",  label: "Half Marathon", placeholder: "H:MM:SS" },
-  { key: "full_marathon",  label: "Full Marathon", placeholder: "H:MM:SS" },
+  { key: "5k",             label: "5km",           withHours: false },
+  { key: "10k",            label: "10km",          withHours: false },
+  { key: "half_marathon",  label: "Half Marathon", withHours: true  },
+  { key: "full_marathon",  label: "Full Marathon", withHours: true  },
 ];
 
+// Parse a stored time string like "19:25" or "1:30:14" into its parts.
+function parseTime(value) {
+  const parts = (value || "").split(":").map(p => p.trim());
+  if (parts.length >= 3) return { h: +parts[0] || 0, m: +parts[1] || 0, s: +parts[2] || 0 };
+  if (parts.length === 2) return { h: 0, m: +parts[0] || 0, s: +parts[1] || 0 };
+  return { h: 0, m: 0, s: 0 };
+}
+
+// Three dropdowns (hours optional). Emits a string in MM:SS or H:MM:SS form,
+// or an empty string when all three values are zero.
+function TimeSelect({ value, onChange, withHours }) {
+  const { h, m, s } = parseTime(value);
+  const selectStyle = { ...S.input, padding: "8px 6px", fontSize: 12, flex: 1, minWidth: 0 };
+  const update = (nh, nm, ns) => {
+    if (!nh && !nm && !ns) return onChange("");
+    if (nh > 0 || withHours) onChange(`${nh}:${String(nm).padStart(2, "0")}:${String(ns).padStart(2, "0")}`);
+    else onChange(`${nm}:${String(ns).padStart(2, "0")}`);
+  };
+  const range = (start, end) => Array.from({ length: end - start + 1 }, (_, i) => i + start);
+  return (
+    <div style={{ display: "flex", gap: 3, flex: 1 }}>
+      {withHours && (
+        <select value={h} onChange={e => update(+e.target.value, m, s)} style={selectStyle}>
+          {range(0, 7).map(i => <option key={i} value={i}>{i}h</option>)}
+        </select>
+      )}
+      <select value={m} onChange={e => update(h, +e.target.value, s)} style={selectStyle}>
+        {range(0, withHours ? 59 : 99).map(i => <option key={i} value={i}>{i}m</option>)}
+      </select>
+      <select value={s} onChange={e => update(h, m, +e.target.value)} style={selectStyle}>
+        {range(0, 59).map(i => <option key={i} value={i}>{i}s</option>)}
+      </select>
+    </div>
+  );
+}
 const EMPTY_PB_GOAL = { "5k": "", "10k": "", "half_marathon": "", "full_marathon": "", "other": "" };
 
 const PB_GOAL_LABEL = { "5k": "5K", "10k": "10K", "half_marathon": "HM", "full_marathon": "FM" };
@@ -83,11 +118,11 @@ function ProfileForm({ form, setForm, email }) {
         <div style={{ flex: 1, ...labelStyle, marginBottom: 0 }}>Goal</div>
       </div>
 
-      {PROFILE_DISTANCES.map(({ key, label, placeholder }) => (
+      {PROFILE_DISTANCES.map(({ key, label, withHours }) => (
         <div key={key} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
           <div style={{ flex: "0 0 102px", fontSize: 13, color: C.navy, fontWeight: 600 }}>{label}</div>
-          <input style={{ ...inputStyle, flex: 1 }} value={form.pbs[key]   || ""} onChange={setNested("pbs",   key)} placeholder={placeholder} />
-          <input style={{ ...inputStyle, flex: 1 }} value={form.goals[key] || ""} onChange={setNested("goals", key)} placeholder={placeholder} />
+          <TimeSelect value={form.pbs[key]   || ""} onChange={v => setForm(f => ({ ...f, pbs:   { ...f.pbs,   [key]: v } }))} withHours={withHours} />
+          <TimeSelect value={form.goals[key] || ""} onChange={v => setForm(f => ({ ...f, goals: { ...f.goals, [key]: v } }))} withHours={withHours} />
         </div>
       ))}
 
