@@ -2,14 +2,110 @@ import { useState } from "react";
 import { C, S } from "./styles.js";
 import { fmtPace, fmtTime } from "./lib/helpers.js";
 
+// ─── EDITORIAL ATOMS (Form & Pace redesign) ──────────────────────────────────
+// Shared low-level building blocks used by every redesigned screen. Pure
+// presentational — no app state. Naming follows the design bundle.
+
+export const Seal = ({ size = 18, color = "currentColor" }) => (
+  <span className="fp-seal" style={{ fontSize: size, color }}>✻</span>
+);
+
+export const Eyebrow = ({ children, style, color }) => (
+  <div className="t-eyebrow" style={{ color, ...style }}>{children}</div>
+);
+
+export const Rule = ({ soft, style }) => (
+  <div className={soft ? "fp-rule-soft" : "fp-rule"} style={style} />
+);
+
+// Tabular numeric — used for paces, distances, splits.
+export const Num = ({ children, size = 14, weight = 500, color, style }) => (
+  <span className="t-mono" style={{ fontSize: size, fontWeight: weight, color: color || "var(--c-ink)", ...style }}>{children}</span>
+);
+
+// Big editorial display numeral.
+export const BigNum = ({ children, size = 64, color, style }) => (
+  <span className="t-display" style={{ fontSize: size, color: color || "var(--c-ink)", fontWeight: 400, ...style }}>{children}</span>
+);
+
+// Section header like "01 / 03  ·  THIS WEEK"
+export const SectionHead = ({ index, total, label, action }) => (
+  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 12px", borderBottom: "1px solid var(--c-rule)" }}>
+    <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+      {(index || total) && (
+        <span className="t-mono" style={{ fontSize: 11, color: "var(--c-mute)", letterSpacing: "0.1em" }}>
+          {String(index).padStart(2, "0")} / {String(total).padStart(2, "0")}
+        </span>
+      )}
+      <span className="t-eyebrow" style={{ color: "var(--c-ink)" }}>{label}</span>
+    </div>
+    {action}
+  </div>
+);
+
+// Workout type → editorial dot color + label. Independent of the legacy
+// TYPE_STYLE map (which handles backgrounds for logged cards). Used wherever
+// we want the desaturated dot palette of the redesign.
+export const TYPE_META = {
+  EASY:       { dot: "var(--c-accent)", label: "Easy" },
+  RECOVERY:   { dot: "var(--c-cool)",   label: "Recovery" },
+  LONG:       { dot: "#7B5A8C",         label: "Long" },
+  "LONG RUN": { dot: "#7B5A8C",         label: "Long" },
+  TEMPO:      { dot: "var(--c-warn)",   label: "Tempo" },
+  SPEED:      { dot: "var(--c-hot)",    label: "Speed" },
+  RACE:       { dot: "var(--c-ink)",    label: "Race" },
+  "RACE DAY": { dot: "var(--c-ink)",    label: "Race" },
+  REST:       { dot: "var(--c-mute)",   label: "Rest" },
+  STRENGTH:   { dot: "#5A6B7B",         label: "Strength" },
+  HYROX:      { dot: "#C79541",         label: "Hyrox" },
+};
+export const typeMeta = (type) => {
+  if (!type) return TYPE_META.EASY;
+  const k = String(type).toUpperCase().trim();
+  return TYPE_META[k] || TYPE_META[k.split(" ")[0]] || TYPE_META.EASY;
+};
+
+// Tonal back arrow (display serif).
+export const BackArrow = ({ onClick }) => (
+  <button onClick={onClick} aria-label="Back"
+    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-inkSoft)", fontSize: 22, padding: 0, lineHeight: 1, fontFamily: "var(--f-display)" }}>
+    ←
+  </button>
+);
+
+// Small serif checkmark.
+export const Tick = ({ size = 12, color = "var(--c-accent)" }) => (
+  <svg width={size} height={size} viewBox="0 0 12 12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+    <path d="M2 6.5 L5 9.5 L10 3" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+// Editorial masthead used at the top of each screen — small seal + wordmark
+// on the left, contextual label on the right, then a hairline rule.
+export const Masthead = ({ context, right, hot = true }) => (
+  <>
+    <div style={{ padding: "20px 24px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Seal size={20} color={hot ? "var(--c-hot)" : "var(--c-ink)"} />
+        <span className="t-mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--c-mute)" }}>FORM &amp; PACE</span>
+        {context && <span className="t-mono" style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--c-mute)" }}>· {context}</span>}
+      </div>
+      {right}
+    </div>
+    <Rule />
+  </>
+);
+
 // ─── HEADER ───────────────────────────────────────────────────────────────────
 export function Header({ title, subtitle, right, onBack }) {
   return (
-    <div style={{ background:C.cream, borderBottom:`1px solid ${C.rule}`, padding:"16px 20px", display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:10 }}>
-      {onBack && <button onClick={onBack} aria-label="Back" style={{ background:"none", border:"none", color:C.mid, cursor:"pointer", fontSize:22, padding:"0 6px 0 0", lineHeight:1 }}>‹</button>}
-      <div style={{ flex:1 }}>
-        <div style={{ fontSize:10, color:C.mid, letterSpacing:2, textTransform:"uppercase" }}>{subtitle}</div>
-        <div style={{ fontSize:17, fontWeight:800, fontFamily:S.displayFont, color:C.navy }}>{title}</div>
+    <div style={{ background:"var(--c-bg)", borderBottom:`1px solid var(--c-rule)`, padding:"16px 22px", display:"flex", alignItems:"center", gap:14, position:"sticky", top:0, zIndex:10 }}>
+      {onBack
+        ? <BackArrow onClick={onBack}/>
+        : <Seal size={20} color="var(--c-hot)"/>}
+      <div style={{ flex:1, minWidth:0 }}>
+        <div className="t-eyebrow" style={{ marginBottom:2 }}>{subtitle}</div>
+        <div className="t-display" style={{ fontSize:22, fontWeight:500, color:"var(--c-ink)", lineHeight:1.05, letterSpacing:"-0.01em", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{title}</div>
       </div>
       {right}
     </div>

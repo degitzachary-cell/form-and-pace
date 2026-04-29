@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker } from "./components.jsx";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -992,42 +992,38 @@ export default function App() {
   //  LOGIN SCREEN
   // ────────────────────────────────────────────────────────────
   if (!user) return (
-    <div style={S.page}>
-      <div style={S.grain}/>
-      <div style={{ maxWidth:400, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
-        <div style={{ fontSize:11, letterSpacing:5, color:C.crimson, textTransform:"uppercase", marginBottom:16, fontFamily:S.bodyFont }}>Training Platform</div>
-        <div style={{ borderTop:`1px solid ${C.rule}`, width:48, margin:"0 auto 24px" }}/>
-        <div style={{ fontSize:48, fontWeight:900, fontFamily:S.displayFont, lineHeight:1.0, marginBottom:6, color:C.navy }}>Form</div>
-        <div style={{ fontSize:14, color:C.mid, fontFamily:S.bodyFont, letterSpacing:4, textTransform:"uppercase", marginBottom:6 }}>&amp;</div>
-        <div style={{ fontSize:48, fontWeight:900, fontFamily:S.displayFont, lineHeight:1.0, marginBottom:24, color:C.navy }}>Pace</div>
-        <div style={{ borderBottom:`1px solid ${C.rule}`, width:48, margin:"0 auto 32px" }}/>
-        <div style={{ fontSize:14, color:C.mid, marginBottom:56, lineHeight:1.6, fontFamily:S.bodyFont }}>
-          Expert coaching for<br/>distance runners
-        </div>
-
-        <button onClick={signInWithGoogle} style={{
-          background:C.navy, color:C.cream, border:"none", borderRadius:2,
-          padding:"16px 28px", fontSize:13, fontWeight:600, cursor:"pointer",
-          display:"flex", alignItems:"center", gap:12, margin:"0 auto",
-          letterSpacing:2, textTransform:"uppercase", fontFamily:S.bodyFont,
-        }}>
-          <svg width="20" height="20" viewBox="0 0 48 48">
-            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-          </svg>
-          Continue with Google
-        </button>
-
-        {authError && (
-          <div style={{ marginTop:20, color:C.crimson, fontSize:13 }}>{authError}</div>
-        )}
-
-        <div style={{ marginTop:48, fontSize:12, color:C.mid, lineHeight:1.8, fontFamily:S.bodyFont }}>
-          Athletes are automatically linked to their program.<br/>
-          Coaches see all athletes and session data.
-        </div>
+    <div style={{ ...S.page, display:"flex", flexDirection:"column", padding:"40px 28px", maxWidth:520, margin:"0 auto" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <span className="fp-seal" style={{ fontSize:28, color:C.hot }}>✻</span>
+        <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.mute }}>A TRAINING JOURNAL</span>
+      </div>
+      <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", margin:"60px 0 40px" }}>
+        <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.2em", color:C.hot, marginBottom:24 }}>FOR DISTANCE RUNNERS</span>
+        <h1 className="t-display" style={{ fontSize:88, fontWeight:400, lineHeight:0.92, margin:0, color:C.ink }}>
+          Form
+          <br/>
+          <span className="t-display-italic" style={{ color:C.mute }}>&amp;</span>
+          <br/>
+          Pace.
+        </h1>
+        <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:19, lineHeight:1.5, color:C.inkSoft, marginTop:28, maxWidth:360 }}>
+          For distance runners and the coaches who push them. Write what you ran. Listen to what your body says back.
+        </p>
+      </div>
+      <button onClick={signInWithGoogle} className="fp-btn" style={{ width:"100%", padding:"18px" }}>
+        <svg width="16" height="16" viewBox="0 0 48 48" style={{ display:"inline-block" }}>
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Continue with Google
+      </button>
+      {authError && (
+        <div style={{ marginTop:16, color:C.hot, fontSize:13, fontFamily:S.bodyFont, textAlign:"center" }}>{authError}</div>
+      )}
+      <div className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.1em", textAlign:"center", marginTop:16 }}>
+        ATHLETES ARE LINKED TO THEIR COACH BY EMAIL.
       </div>
     </div>
   );
@@ -1202,19 +1198,19 @@ export default function App() {
     // Shared roster content — rendered in the left sidebar (desktop) or full page (mobile)
     const rosterContent = (
       <>
-        {/* Summary strip */}
-        <div style={{ display:"flex", gap:10, marginBottom:20 }}>
-          <div style={S.statBox}>
-            <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{athletes.length}</div>
-            <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Athletes</div>
+        {/* Editorial summary — three big numerals with eyebrows */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:0, padding:"6px 0 22px", borderBottom:"1px solid var(--c-rule)", marginBottom:20 }}>
+          <div style={{ paddingRight:14 }}>
+            <Eyebrow>Athletes</Eyebrow>
+            <BigNum size={44} style={{ display:"block", marginTop:6 }}>{athletes.length}</BigNum>
           </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{logsToday}</div>
-            <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Today's Logs</div>
+          <div style={{ paddingLeft:14, paddingRight:14, borderLeft:"1px solid var(--c-rule)" }}>
+            <Eyebrow>Logged today</Eyebrow>
+            <BigNum size={44} style={{ display:"block", marginTop:6 }}>{logsToday}</BigNum>
           </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize:22, fontWeight:900, color: totalReplies > 0 ? C.crimson : C.navy }}>{totalReplies}</div>
-            <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Replies Due</div>
+          <div style={{ paddingLeft:14, borderLeft:"1px solid var(--c-rule)" }}>
+            <Eyebrow>Replies due</Eyebrow>
+            <BigNum size={44} color={totalReplies > 0 ? "var(--c-hot)" : "var(--c-ink)"} style={{ display:"block", marginTop:6 }}>{totalReplies}</BigNum>
           </div>
         </div>
 
@@ -1268,27 +1264,33 @@ export default function App() {
               setDashAthlete(email);
               if (!isDesktop) setCoachScreen("athlete");
             }}
-              style={{ ...S.card, marginBottom:10, cursor:"pointer", padding:"14px 16px",
-                ...(isSelected ? { borderColor:C.navy, boxShadow:`0 0 0 1.5px ${C.navy}` } : {}) }}>
-              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                <div style={{ width:38, height:38, borderRadius:"50%", background:C.navy, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:12, flexShrink:0, color:C.cream }}>
+              style={{
+                marginBottom:0, cursor:"pointer", padding:"18px 16px",
+                borderBottom:"1px solid var(--c-ruleSoft)",
+                background: isSelected ? "var(--c-paper)" : "transparent",
+                borderLeft: isSelected ? "3px solid var(--c-hot)" : "3px solid transparent",
+              }}>
+              <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+                <div style={{ width:44, height:44, borderRadius:999, background:"var(--c-bgDeep)", border:"1px solid var(--c-rule)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontFamily:"var(--f-display)", fontSize:16, color:"var(--c-ink)" }}>
                   {avatar}
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{displayName}</div>
-                    {repliesNeeded > 0 && <span style={{ background:C.crimson, color:C.white, borderRadius:99, padding:"1px 7px", fontSize:9, fontWeight:700, letterSpacing:0.5 }}>{repliesNeeded}</span>}
-                  </div>
-                  <div style={{ fontSize:11, color:C.mid, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{goalText}</div>
+                  <div style={{ fontFamily:"var(--f-display)", fontSize:20, fontWeight:400, color:"var(--c-ink)", lineHeight:1.05, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{displayName}</div>
+                  <div className="t-display-italic" style={{ fontSize:13, color:"var(--c-mute)", marginTop:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{goalText}</div>
                 </div>
-                {!isDesktop && <div style={{ color:C.mid, fontSize:18, flexShrink:0 }}>›</div>}
+                {repliesNeeded > 0 && (
+                  <span className="t-mono" style={{ fontSize:10, color:"var(--c-hot)", letterSpacing:"0.14em", fontWeight:600, flexShrink:0 }}>
+                    {repliesNeeded} REPLY
+                  </span>
+                )}
+                {!isDesktop && <div style={{ color:"var(--c-mute)", fontSize:18, flexShrink:0, marginLeft:6 }}>›</div>}
               </div>
-              <div style={{ display:"flex", gap:5, marginTop:12, paddingLeft:50 }}>
+              <div style={{ display:"flex", gap:3, marginTop:12, paddingLeft:58 }}>
                 {days.map((d, i) => (
                   <div key={i} title={d.dStr} style={{
-                    flex:1, height:8, borderRadius:2, background: d.pattern || d.color,
-                    border: d.isToday ? `2px solid ${C.navy}` : "none",
-                    boxSizing: d.isToday ? "border-box" : "content-box"
+                    flex:1, height:14, background: d.pattern || d.color,
+                    outline: d.isToday ? "1.5px solid var(--c-ink)" : "none",
+                    outlineOffset: -1,
                   }}/>
                 ))}
               </div>
@@ -2676,100 +2678,206 @@ export default function App() {
 
           {!isDesktop && <>
 
-          {/* Today's planned hero */}
-          <div style={{ margin:"20px 16px" }}>
-            <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase", marginBottom:8, fontFamily:S.bodyFont, fontWeight:700 }}>
-              TODAY · {dayLabel.toUpperCase()}
-            </div>
-            {todaysSession ? (
-              <div onClick={() => {
-                  const s = todaysSession.s;
-                  setActiveSession({ ...s, weekStart: monStr });
-                  setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
-                  setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
-                  const isLogged = !!todaysSession.log || !!todaysActivity;
-                  setScreen(isLogged ? "result" : "session");
-                }}
-                style={{ background:C.white, border:`1px solid ${C.rule}`, borderLeft:`4px solid ${typeStyle(todaysSession.s.type).accent}`, borderRadius:2, padding:"18px 20px", cursor:"pointer", position:"relative" }}>
-                {typeStyle(todaysSession.s.type).pattern && (
-                  <div style={{ position:"absolute", top:0, right:0, width:42, height:42, background:typeStyle(todaysSession.s.type).pattern, borderTopRightRadius:2 }}/>
-                )}
-                <div style={{ fontSize:11, letterSpacing:2, color:typeStyle(todaysSession.s.type).accent, marginBottom:6, fontWeight:700 }}>
-                  {(todaysSession.s.type || "RUN").toUpperCase()}
+          {/* ─── Editorial hero — today's prescription ────────────── */}
+          {(() => {
+            const s = todaysSession?.s;
+            const tm = s ? typeMeta(s.type) : null;
+            const isLogged = !!todaysSession?.log || !!todaysActivity;
+            const distFromLog = todaysActivity?.distance_km ?? todaysSession?.log?.analysis?.distance_km;
+            const openSession = () => {
+              if (!todaysSession) return;
+              setActiveSession({ ...s, weekStart: monStr });
+              setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+              setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+              setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
+              setScreen(isLogged ? "result" : "session");
+            };
+            return (
+              <div style={{ padding:"32px 24px 24px" }}>
+                <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:24 }}>
+                  <Eyebrow style={{ color:"var(--c-ink)" }}>Today &nbsp;·&nbsp; {dayLabel}</Eyebrow>
+                  <span className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.1em" }}>{dateNice.toUpperCase()}</span>
                 </div>
-                <div style={{ fontSize:22, fontWeight:900, color:C.navy, fontFamily:S.displayFont, lineHeight:1.15, marginBottom:6 }}>
-                  {todaysSession.s.type}
-                </div>
-                {todaysSession.s.pace && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{todaysSession.s.pace}</div>}
-                {(todaysSession.s.desc || todaysSession.s.description) && (
-                  <div style={{ fontSize:13, color:C.mid, marginTop:8, lineHeight:1.5, whiteSpace:"pre-wrap" }}>
-                    {todaysSession.s.desc || todaysSession.s.description}
-                  </div>
-                )}
-                {todaysSession.s.terrain && <div style={{ fontSize:11, color:C.mid, marginTop:6, letterSpacing:1 }}>{todaysSession.s.terrain}</div>}
-                {(todaysSession.log || todaysActivity) && (
-                  <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${C.rule}`, fontSize:11, color:C.green, letterSpacing:1, fontWeight:700 }}>
-                    ✓ LOGGED · {todaysActivity?.distance_km ?? todaysSession.log?.analysis?.distance_km}KM
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"24px", textAlign:"center" }}>
-                <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:4 }}>Rest day</div>
-                <div style={{ fontSize:12, color:C.mid }}>No workout scheduled.</div>
-              </div>
-            )}
-          </div>
 
-          {/* Strava slot */}
-          {todaysStravaUnimported && (
-            <div style={{ margin:"0 16px 16px", background:"#fff5e6", border:`1px solid #ffd699`, borderLeft:`3px solid #fc4c02`, borderRadius:2, padding:"12px 16px" }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:"#fc4c02", fontWeight:700, marginBottom:4 }}>FROM STRAVA · UNIMPORTED</div>
-              <div style={{ fontSize:14, fontWeight:700, color:C.navy, marginBottom:2 }}>{todaysStrava.name}</div>
-              <div style={{ fontSize:12, color:C.mid }}>{(todaysStrava.distance/1000).toFixed(1)}km · {Math.round(todaysStrava.moving_time/60)}min</div>
-              <button
-                onClick={() => {
-                  if (todaysSession) {
-                    const s = todaysSession.s;
-                    setActiveSession({ ...s, weekStart: monStr });
-                    setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
-                    setSessionDateOverride(today);
-                    setSelectedStravaId(todaysStrava.id);
-                    setScreen("session");
-                  } else {
-                    setLogForm({ date: today, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
-                    setEditingActivityId(null);
-                    setSelectedStravaId(todaysStrava.id);
-                    setScreen("log-activity");
-                  }
-                }}
-                style={{ marginTop:8, background:"#fc4c02", color:C.white, border:0, borderRadius:2, padding:"6px 14px", fontSize:11, letterSpacing:1, fontWeight:700, cursor:"pointer" }}>
-                IMPORT &amp; LOG →
+                {s ? (
+                  <div onClick={openSession} style={{ cursor:"pointer" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                      <span className="fp-dot" style={{ background:tm.dot, width:8, height:8 }}/>
+                      <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:"var(--c-ink)" }}>
+                        {(s.type || "RUN").toUpperCase()}
+                      </span>
+                      {isLogged && (
+                        <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.14em", color:"var(--c-accent)", fontWeight:600 }}>
+                          · LOGGED{distFromLog ? ` ${distFromLog} KM` : ""}
+                        </span>
+                      )}
+                    </div>
+                    <h1 className="t-display" style={{ fontSize:52, lineHeight:0.95, margin:"4px 0 0", fontWeight:400, letterSpacing:"-0.02em" }}>
+                      {s.type}
+                      {s.pace && <><br/><span className="t-display-italic" style={{ color:"var(--c-mute)" }}>at {s.pace}</span></>}
+                    </h1>
+                    {(s.desc || s.description) && (
+                      <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.5, color:"var(--c-inkSoft)", margin:"22px 0 0", whiteSpace:"pre-wrap" }}>
+                        {s.desc || s.description}
+                      </p>
+                    )}
+                    {s.terrain && (
+                      <p style={{ fontFamily:"var(--f-display)", fontStyle:"italic", fontSize:15, lineHeight:1.5, color:"var(--c-mute)", margin:"12px 0 0" }}>
+                        — {s.terrain}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                      <span className="fp-dot" style={{ background:"var(--c-mute)", width:8, height:8 }}/>
+                      <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:"var(--c-mute)" }}>REST</span>
+                    </div>
+                    <h1 className="t-display" style={{ fontSize:52, lineHeight:0.95, margin:"4px 0 0", fontWeight:400 }}>
+                      Rest day. <span className="t-display-italic" style={{ color:"var(--c-mute)" }}>Let it land.</span>
+                    </h1>
+                    <p style={{ fontFamily:"var(--f-display)", fontStyle:"italic", fontSize:16, lineHeight:1.5, color:"var(--c-mute)", margin:"18px 0 0" }}>
+                      Nothing on the plan. Walk, stretch, sleep more.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ─── Pace strip — the only data-dense surface ───────────── */}
+          {todaysSession?.s && (
+            <div className="fp-pace-strip">
+              <div>
+                <Eyebrow style={{ marginBottom:6 }}>Pace</Eyebrow>
+                <Num size={17}>{todaysSession.s.pace || "—"}</Num>
+              </div>
+              <div>
+                <Eyebrow style={{ marginBottom:6 }}>Volume</Eyebrow>
+                <Num size={17}>{todaysSession.s.distance_km || todaysSession.s.distance || "—"}</Num>
+                {(todaysSession.s.distance_km || todaysSession.s.distance) && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> km</span>}
+              </div>
+              <div>
+                <Eyebrow style={{ marginBottom:6 }}>Time</Eyebrow>
+                <Num size={17}>{todaysSession.s.duration_min ? `~${todaysSession.s.duration_min}` : "—"}</Num>
+                {todaysSession.s.duration_min && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> min</span>}
+              </div>
+              <div>
+                <Eyebrow style={{ marginBottom:6 }}>RPE</Eyebrow>
+                <Num size={17}>{todaysSession.s.rpe || "—"}</Num>
+                {todaysSession.s.rpe && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> /10</span>}
+              </div>
+            </div>
+          )}
+
+          {/* ─── Primary action ───────────────────────────────────── */}
+          {todaysSession?.s && (
+            <div style={{ padding:"28px 24px 0" }}>
+              <button onClick={() => {
+                const s = todaysSession.s;
+                setActiveSession({ ...s, weekStart: monStr });
+                setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+                setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
+                setScreen((todaysSession.log || todaysActivity) ? "result" : "session");
+              }} className="fp-btn fp-btn--accent" style={{ width:"100%", padding:"18px" }}>
+                {(todaysSession.log || todaysActivity) ? "View this session" : "Log this session"}
               </button>
             </div>
           )}
 
-          {/* Week strip */}
-          <div style={{ margin:"0 16px 16px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 16px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, fontWeight:700 }}>THIS WEEK</div>
-              <button onClick={() => setScreen("home")} style={{ background:"transparent", border:0, color:C.crimson, fontSize:11, letterSpacing:1, fontWeight:700, cursor:"pointer", padding:0 }}>OPEN WEEK ›</button>
+          {/* ─── Strava unimported note ───────────────────────────── */}
+          {todaysStravaUnimported && (
+            <div style={{ margin:"24px 24px 0", padding:"16px 18px", background:"var(--c-paper)", border:"1px solid var(--c-rule)", borderLeft:"3px solid var(--c-hot)" }}>
+              <Eyebrow style={{ color:"var(--c-hot)", marginBottom:6 }}>From Strava · unimported</Eyebrow>
+              <div style={{ fontFamily:"var(--f-display)", fontSize:18, color:"var(--c-ink)", marginBottom:4 }}>{todaysStrava.name}</div>
+              <div className="t-mono" style={{ fontSize:12, color:"var(--c-mute)" }}>
+                {(todaysStrava.distance/1000).toFixed(1)} km · {Math.round(todaysStrava.moving_time/60)} min
+              </div>
+              <button onClick={() => {
+                if (todaysSession) {
+                  setActiveSession({ ...todaysSession.s, weekStart: monStr });
+                  setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+                  setSessionDateOverride(today);
+                  setSelectedStravaId(todaysStrava.id);
+                  setScreen("session");
+                } else {
+                  setLogForm({ date: today, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
+                  setEditingActivityId(null); setSelectedStravaId(todaysStrava.id); setScreen("log-activity");
+                }
+              }} className="fp-btn fp-btn--ghost" style={{ marginTop:12, padding:"10px 14px", fontSize:11 }}>
+                Import &amp; log →
+              </button>
             </div>
-            <div style={{ display:"flex", gap:6 }}>
-              {weekStrip.map(d => (
-                <div key={d.d} onClick={() => setScreen("home")} style={{ flex:1, textAlign:"center", cursor:"pointer" }}>
-                  <div style={{ fontSize:9, color: d.isToday ? C.crimson : C.mid, fontWeight: d.isToday ? 700 : 500, letterSpacing:1, marginBottom:6 }}>{d.d.slice(0,1)}</div>
-                  <div style={{ width:10, height:10, borderRadius:"50%", background: d.pattern || d.dotColor, margin:"0 auto", border: d.isToday ? `2px solid ${C.navy}` : "none", boxSizing:"content-box" }}/>
-                </div>
-              ))}
+          )}
+
+          {/* ─── Coming up — tiny calendar strip ──────────────────── */}
+          <div style={{ padding:"40px 24px 0" }}>
+            <SectionHead label="Coming up" action={
+              <button onClick={() => setScreen("home")} className="t-mono" style={{ background:"none", border:0, fontSize:11, color:"var(--c-inkSoft)", letterSpacing:"0.08em", cursor:"pointer", borderBottom:"1px solid var(--c-rule)", paddingBottom:2 }}>
+                FULL WEEK →
+              </button>
+            }/>
+            <div style={{ marginTop:4 }}>
+              {weekStrip.filter(d => d.dDate >= today).slice(0, 5).map((d, i) => {
+                const sessHere = allWithMoves.find(x => x.onDate === d.dDate);
+                const actHere = myActs.find(a => a.activity_date === d.dDate);
+                const s = sessHere?.s;
+                const tm = s ? typeMeta(s.type) : { dot:"var(--c-mute)", label:"Rest" };
+                const isToday = d.isToday;
+                const datePart = d.dDate ? d.dDate.slice(5).replace("-","/") : "";
+                const isClickable = (s && (s.type || "").toUpperCase() !== "REST") || actHere;
+                return (
+                  <div key={d.d} onClick={() => {
+                    if (sessHere && (s.type || "").toUpperCase() !== "REST") {
+                      setActiveSession({ ...sessHere.s, weekStart: monStr });
+                      setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                      setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+                      setSessionDateOverride(sessHere.log?.analysis?.actual_date || actHere?.activity_date || d.dDate);
+                      setScreen(d.isLogged ? "result" : "session");
+                    }
+                  }} style={{
+                    display:"grid", gridTemplateColumns:"44px 1fr auto", gap:12,
+                    padding:"16px 0", borderBottom:"1px solid var(--c-ruleSoft)",
+                    alignItems:"center", cursor:isClickable ? "pointer" : "default",
+                    opacity:isToday ? 1 : 0.95,
+                  }}>
+                    <div>
+                      <div className="t-mono" style={{ fontSize:10, color: isToday ? "var(--c-hot)" : "var(--c-mute)", letterSpacing:"0.12em", fontWeight:600 }}>{d.d.toUpperCase()}</div>
+                      <div className="t-mono" style={{ fontSize:13, color:"var(--c-ink)", marginTop:2 }}>{datePart}</div>
+                    </div>
+                    <div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                        <span className="fp-dot" style={{ background:tm.dot }}/>
+                        <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.14em", color:"var(--c-mute)" }}>{tm.label.toUpperCase()}</span>
+                        {isToday && <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.14em", color:"var(--c-hot)", fontWeight:600 }}>· TODAY</span>}
+                      </div>
+                      <div style={{ fontFamily:"var(--f-display)", fontSize:18, color:"var(--c-ink)", lineHeight:1.1 }}>
+                        {s ? s.type : (actHere ? (actHere.activity_type || "Run") : "Rest")}
+                      </div>
+                    </div>
+                    <Num size={13} color="var(--c-inkSoft)">
+                      {s?.pace || (actHere?.distance_km ? `${actHere.distance_km}km` : "—")}
+                    </Num>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Quick links */}
-          <div style={{ margin:"0 16px", display:"flex", gap:8 }}>
-            <button onClick={() => setScreen("home")} style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>WEEK</button>
-            <button onClick={() => setScreen("history")} style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>HISTORY</button>
-            <button onClick={() => setScreen("profile")} style={{ flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer" }}>PROFILE</button>
+          {/* ─── Goal footer ───────────────────────────────────────── */}
+          <div style={{ padding:"40px 24px 0" }}>
+            <Rule />
+            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", paddingTop:18 }}>
+              <Eyebrow>Goal</Eyebrow>
+              <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)", letterSpacing:"0.1em" }}>
+                CURRENT PB · {fmtPbGoal(profile?.pbs) || athleteData.current || "—"}
+              </span>
+            </div>
+            <div className="t-display" style={{ fontSize:28, fontWeight:400, marginTop:8, lineHeight:1.1 }}>
+              {fmtPbGoal(profile?.goals) || athleteData.goal || "Set your goal"}
+            </div>
           </div>
 
           </>}
@@ -2800,14 +2908,17 @@ export default function App() {
         />
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 0 80px" }}>
 
-          <div onClick={() => setScreen("profile")}
-            style={{ margin:"20px 16px", background:C.white, border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, borderRadius:2, padding:"14px 18px", cursor:"pointer" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>Season Goal</div>
-              <div style={{ fontSize:11, color:C.mid }}>Edit ›</div>
+          <div onClick={() => setScreen("profile")} style={{ margin:"22px 22px 16px", cursor:"pointer" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:6 }}>
+              <Eyebrow style={{ color:"var(--c-hot)" }}>Season goal</Eyebrow>
+              <span className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.1em" }}>EDIT →</span>
             </div>
-            <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>{fmtPbGoal(profile?.goals) || athleteData.goal || "Set your goal"}</div>
-            <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>Current PB: {fmtPbGoal(profile?.pbs) || athleteData.current || "—"}</div>
+            <div className="t-display" style={{ fontSize:28, fontWeight:400, color:"var(--c-ink)", lineHeight:1.05 }}>
+              {fmtPbGoal(profile?.goals) || athleteData.goal || "Set your goal"}
+            </div>
+            <div className="t-display-italic" style={{ fontSize:14, color:"var(--c-mute)", marginTop:6 }}>
+              current PB · {fmtPbGoal(profile?.pbs) || athleteData.current || "—"}
+            </div>
           </div>
 
           {/* 8-Week Rolling Volume — line graph, Strava-first */}
@@ -2851,18 +2962,18 @@ export default function App() {
             const areaPath = `${linePath} L ${xFor(W - 1).toFixed(1)} ${VB_H - PAD_B} L ${xFor(0).toFixed(1)} ${VB_H - PAD_B} Z`;
 
             return (
-              <div style={{ margin:"0 16px 16px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 18px" }}>
+              <div style={{ margin:"0 22px 22px", paddingTop:14, paddingBottom:14, borderTop:"1px solid var(--c-rule)", borderBottom:"1px solid var(--c-rule)" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
                   <div>
-                    <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>{hovered ? hovered.label : "This Week"}</div>
-                    <div style={{ fontSize:26, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>
-                      {(hovered ? hovered.km : thisWk).toFixed(1)}
-                      <span style={{ fontSize:14, color:C.mid, fontWeight:400 }}> km</span>
+                    <Eyebrow>{hovered ? hovered.label : "Volume this week"}</Eyebrow>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:10, marginTop:4 }}>
+                      <BigNum size={48}>{(hovered ? hovered.km : thisWk).toFixed(1)}</BigNum>
+                      <span className="t-mono" style={{ fontSize:13, color:"var(--c-mute)" }}>km</span>
                     </div>
                   </div>
-                  <div style={{ fontSize:9, letterSpacing:2, color:C.mid, textTransform:"uppercase" }}>
-                    {stravaConnected ? "via Strava" : "manual"}
-                  </div>
+                  <span className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.12em" }}>
+                    {stravaConnected ? "VIA STRAVA" : "MANUAL"}
+                  </span>
                 </div>
                 <svg viewBox={`0 0 ${VB_W} ${VB_H}`} style={{ width:"100%", height:"auto", display:"block" }} onMouseLeave={() => setHoveredWeekIdx(null)}>
                   {/* Faint baseline */}
@@ -3236,7 +3347,15 @@ export default function App() {
             </div>
           </div>
         )}
-        <SectionCard label="Wellness">
+        <SectionCard label="How it felt">
+          {(sessionRpe || sessionSleepHrs || sessionSoreness || sessionMood) && (
+            <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.55, color:"var(--c-ink)", margin:"0 0 18px" }}>
+              {sessionRpe ? <>That run felt like a <em style={{ color:"var(--c-hot)", fontStyle:"italic" }}>{sessionRpe}/10</em>. </> : <>That run felt like a <em style={{ color:"var(--c-mute)", fontStyle:"italic" }}>—/10</em>. </>}
+              {sessionSleepHrs ? <>I slept <em style={{ color:"var(--c-accent)", fontStyle:"italic" }}>{sessionSleepHrs}h</em>, </> : null}
+              {sessionSoreness ? <>legs are <em style={{ color:"var(--c-cool)", fontStyle:"italic" }}>{["nothing","barely","bit sore","tight","wrecked"][sessionSoreness-1]}</em>, </> : null}
+              {sessionMood ? <>and I'm <em style={{ color:"var(--c-warn)", fontStyle:"italic" }}>{["awful","rough","ok","good","flying"][sessionMood-1]}</em>.</> : null}
+            </p>
+          )}
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>RPE — Effort 1–10</div>
             <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
@@ -3315,34 +3434,82 @@ export default function App() {
     return (
       <div style={S.page}>
         <div style={S.grain}/>
-        <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>setScreen("home")}/>
-        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
-          <div style={{ textAlign:"center", fontSize:64, margin:"20px 0 8px" }}>{an?.emoji || "✓"}</div>
-          <div style={{ textAlign:"center", fontSize:14, color:C.green, fontWeight:700, marginBottom:20, letterSpacing:1 }}>SESSION LOGGED</div>
-          <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-            {an?.distance_km && <StatPill label="Distance" val={`${an.distance_km}km`} color="#4ade80"/>}
-            {an?.duration_min && <StatPill label="Duration" val={`${an.duration_min}min`}/>}
+        <Header title={activeSession.type} subtitle={`Logged · ${activeSession.day}`} onBack={()=>setScreen("home")} right={<Tick size={16}/>}/>
+        <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 22px 80px" }}>
+
+          {/* Editorial header */}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+            <span className="fp-dot" style={{ background: typeMeta(activeSession.type).dot }}/>
+            <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.16em", color:"var(--c-mute)" }}>
+              {(activeSession.type || "RUN").toUpperCase()} · COMPLETE
+            </span>
           </div>
-          {log?.strava_data && <StravaCard data={log.strava_data}/>}
+          <h1 className="t-display" style={{ fontSize:38, fontWeight:400, lineHeight:1, margin:"0 0 6px" }}>
+            {activeSession.type}
+          </h1>
+          {an?.distance_km && (
+            <div className="t-display-italic" style={{ fontSize:15, color:"var(--c-mute)", marginBottom:18 }}>
+              {an.distance_km} km{an.duration_min ? ` · ${an.duration_min} min` : ""}{an.actual_date ? ` · ${an.actual_date}` : ""}
+            </div>
+          )}
+
+          {/* Pace strip */}
+          <div className="fp-pace-strip" style={{ marginBottom:24 }}>
+            <div>
+              <Eyebrow style={{ marginBottom:6 }}>Distance</Eyebrow>
+              <Num size={17}>{an?.distance_km ?? "—"}</Num>
+              {an?.distance_km && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> km</span>}
+            </div>
+            <div>
+              <Eyebrow style={{ marginBottom:6 }}>Time</Eyebrow>
+              <Num size={17}>{an?.duration_min ?? "—"}</Num>
+              {an?.duration_min && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> min</span>}
+            </div>
+            <div>
+              <Eyebrow style={{ marginBottom:6 }}>Pace</Eyebrow>
+              <Num size={17}>{an?.distance_km && an?.duration_min ? (() => {
+                const sec = (an.duration_min * 60) / an.distance_km;
+                return `${Math.floor(sec/60)}:${String(Math.round(sec%60)).padStart(2,"0")}`;
+              })() : "—"}</Num>
+            </div>
+            <div>
+              <Eyebrow style={{ marginBottom:6 }}>Avg HR</Eyebrow>
+              <Num size={17}>{log?.strava_data?.avg_heartrate || "—"}</Num>
+            </div>
+          </div>
+
+          {log?.strava_data && <div style={{ marginBottom:18 }}><StravaCard data={log.strava_data}/></div>}
+
           {an?.wellness && Object.keys(an.wellness).length > 0 && (
-            <SectionCard label="Wellness">
-              <div style={{ display:"flex", gap:14, flexWrap:"wrap", fontSize:13, color:C.navy }}>
-                {an.wellness.rpe        != null && <div><b>RPE</b> {an.wellness.rpe}/10</div>}
-                {an.wellness.sleep_hours != null && <div><b>Sleep</b> {an.wellness.sleep_hours}h</div>}
-                {an.wellness.soreness   != null && <div><b>Soreness</b> {an.wellness.soreness}/5</div>}
-                {an.wellness.mood       != null && <div><b>Mood</b> {["😞","😕","😐","🙂","😄"][an.wellness.mood-1]} {an.wellness.mood}/5</div>}
-              </div>
-            </SectionCard>
+            <div style={{ marginBottom:24 }}>
+              <SectionHead label="How it felt"/>
+              <p style={{ fontFamily:"var(--f-display)", fontSize:19, lineHeight:1.55, margin:"16px 0 0", color:"var(--c-ink)" }}>
+                {an.wellness.rpe != null && <>Felt like a <em style={{ color:"var(--c-hot)", fontStyle:"italic" }}>{an.wellness.rpe}/10</em>. </>}
+                {an.wellness.sleep_hours != null && <>Slept <em style={{ color:"var(--c-accent)", fontStyle:"italic" }}>{an.wellness.sleep_hours}h</em>, </>}
+                {an.wellness.soreness != null && <>legs <em style={{ color:"var(--c-cool)", fontStyle:"italic" }}>{["nothing","barely","bit sore","tight","wrecked"][an.wellness.soreness-1] || `${an.wellness.soreness}/5`}</em>, </>}
+                {an.wellness.mood != null && <>mood <em style={{ color:"var(--c-warn)", fontStyle:"italic" }}>{["awful","rough","ok","good","flying"][an.wellness.mood-1] || `${an.wellness.mood}/5`}</em>.</>}
+              </p>
+            </div>
           )}
+
           {(log?.feedback || feedbackText) && (
-            <SectionCard label="Your Notes">
-              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{log?.feedback || feedbackText}"</div>
-            </SectionCard>
+            <div style={{ marginBottom:24 }}>
+              <SectionHead label="Your note"/>
+              <p style={{ fontFamily:"var(--f-display)", fontStyle:"italic", fontSize:17, lineHeight:1.55, color:"var(--c-inkSoft)", margin:"14px 0 0" }}>
+                {log?.feedback || feedbackText}
+              </p>
+            </div>
           )}
+
           {(log?.coach_reply || resultLinkedAct?.coach_reply) && (
-            <SectionCard label="💬 Message from Coach" accent="#3b82f6">
-              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8 }}>{log?.coach_reply || resultLinkedAct?.coach_reply}</div>
-            </SectionCard>
+            <div style={{ marginBottom:24 }}>
+              <SectionHead label="From your coach"/>
+              <div style={{ marginTop:18, padding:"22px 22px", background:"var(--c-paper)", border:"1px solid var(--c-rule)" }}>
+                <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.55, margin:0, color:"var(--c-ink)" }}>
+                  {log?.coach_reply || resultLinkedAct?.coach_reply}
+                </p>
+              </div>
+            </div>
           )}
           <button onClick={() => {
             const an = log?.analysis;

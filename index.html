@@ -4,20 +4,99 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Form & Pace</title>
-    <meta name="description" content="Coaching platform for distance runners" />
+    <meta name="description" content="A training journal for distance runners and the coaches who push them." />
     <meta property="og:title" content="Form & Pace" />
-    <meta property="og:description" content="Coaching platform for distance runners" />
+    <meta property="og:description" content="A training journal for distance runners and the coaches who push them." />
     <meta property="og:site_name" content="Form & Pace" />
-    <meta name="theme-color" content="#f5ede2" />
+    <meta name="theme-color" content="#F4EFE6" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=EB+Garamond:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      :root {
+        --c-bg:        #F4EFE6;
+        --c-bgDeep:    #EDE6D9;
+        --c-paper:     #FBF8F1;
+        --c-ink:       #1A1814;
+        --c-inkSoft:   #4A4540;
+        --c-mute:      #8C857A;
+        --c-rule:      #D9D0BE;
+        --c-ruleSoft:  #E8E1D2;
+        --c-accent:    #5C6B3D;
+        --c-accentInk: #FBF8F1;
+        --c-hot:       #B5482A;
+        --c-hotInk:    #FBF8F1;
+        --c-cool:      #3F5A6B;
+        --c-warn:      #A87B2E;
+
+        --f-display: "Newsreader", Georgia, serif;
+        --f-body:    "Inter Tight", -apple-system, system-ui, sans-serif;
+        --f-mono:    "JetBrains Mono", ui-monospace, monospace;
+      }
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #f5ede2; }
-      input, textarea, select, button { font-family: 'EB Garamond', Georgia, serif; }
-      input:focus, textarea:focus, select:focus { outline: 1px solid #d8cabb; }
+      html, body {
+        background: var(--c-bg);
+        color: var(--c-ink);
+        font-family: var(--f-body);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      input, textarea, select, button { font-family: var(--f-body); }
+      input:focus, textarea:focus, select:focus { outline: 1px solid var(--c-rule); }
+
+      /* ─── Type primitives ─── */
+      .t-display       { font-family: var(--f-display); font-weight: 500; letter-spacing: -0.02em; line-height: 0.95; }
+      .t-display-italic{ font-family: var(--f-display); font-style: italic; font-weight: 400; letter-spacing: -0.01em; }
+      .t-eyebrow       { font-family: var(--f-body); font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--c-mute); }
+      .t-mono          { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+      .t-num           { font-feature-settings: "tnum" 1; font-variant-numeric: tabular-nums; }
+
+      /* ─── Atoms ─── */
+      .fp-rule       { height: 1px; background: var(--c-rule); border: 0; margin: 0; }
+      .fp-rule-soft  { height: 1px; background: var(--c-ruleSoft); border: 0; }
+      .fp-card       { background: var(--c-paper); border: 1px solid var(--c-rule); }
+      .fp-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 10px; border-radius: 999px;
+        border: 1px solid var(--c-rule);
+        font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+        color: var(--c-inkSoft); background: transparent;
+      }
+      .fp-dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+      .fp-seal { display: inline-flex; align-items: center; justify-content: center; font-family: var(--f-display); font-style: italic; font-weight: 500; line-height: 1; }
+
+      /* ─── Buttons ─── */
+      .fp-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        padding: 14px 20px; border-radius: 2px;
+        font-family: var(--f-body); font-weight: 600; font-size: 12px;
+        letter-spacing: 0.14em; text-transform: uppercase;
+        border: 1px solid var(--c-ink); background: var(--c-ink); color: var(--c-paper);
+        cursor: pointer; transition: transform 80ms ease, opacity 120ms ease;
+      }
+      .fp-btn:hover  { opacity: 0.92; }
+      .fp-btn:active { transform: translateY(1px); }
+      .fp-btn--ghost  { background: transparent; color: var(--c-ink); border-color: var(--c-rule); }
+      .fp-btn--accent { background: var(--c-accent); border-color: var(--c-accent); color: var(--c-accentInk); }
+      .fp-btn--hot    { background: var(--c-hot); border-color: var(--c-hot); color: var(--c-hotInk); }
+
+      /* Tabular pace strip — 4 cells separated by rules */
+      .fp-pace-strip {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        border-top: 1px solid var(--c-rule);
+        border-bottom: 1px solid var(--c-rule);
+      }
+      .fp-pace-strip > div { padding: 14px 12px; border-right: 1px solid var(--c-rule); }
+      .fp-pace-strip > div:last-child { border-right: none; }
+
+      /* Quiet scrollbars */
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-thumb { background: var(--c-rule); border-radius: 999px; }
+      ::-webkit-scrollbar-track { background: transparent; }
     </style>
   </head>
   <body>

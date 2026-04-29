@@ -1,53 +1,78 @@
-// ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
+// ─── DESIGN TOKENS — "Bone" theme (editorial / soft & human) ─────────────────
+// Palette + type system from the redesign. Old export names (C, S, TYPE_STYLE,
+// typeStyle, COMPLY_*, TAG_*) are preserved so existing screens keep working
+// without a refactor; their values just shift to the new design language.
 export const C = {
-  cream:     "#f5ede2",
-  white:     "#fffdf8",
-  navy:      "#0c1b2e",
-  crimson:   "#8b1c1c",
-  green:     "#2a6e27",
-  amber:     "#8b6914",
-  mid:       "#7a6a5a",
-  rule:      "#d8cabb",
-  lightRule: "#ece4d6",
+  // legacy keys — repointed to new "bone" palette
+  cream:     "#F4EFE6",   // bg
+  white:     "#FBF8F1",   // paper
+  navy:      "#1A1814",   // ink
+  crimson:   "#B5482A",   // hot (terracotta) — used sparingly
+  green:     "#5C6B3D",   // accent (dusty olive — calm "go" signal)
+  amber:     "#A87B2E",   // warn
+  mid:       "#8C857A",   // mute
+  rule:      "#D9D0BE",
+  lightRule: "#E8E1D2",
+
+  // new tokens (preferred)
+  bg:        "#F4EFE6",
+  bgDeep:    "#EDE6D9",
+  paper:     "#FBF8F1",
+  ink:       "#1A1814",
+  inkSoft:   "#4A4540",
+  mute:      "#8C857A",
+  ruleSoft:  "#E8E1D2",
+  accent:    "#5C6B3D",
+  accentInk: "#FBF8F1",
+  hot:       "#B5482A",
+  hotInk:    "#FBF8F1",
+  cool:      "#3F5A6B",
+  warn:      "#A87B2E",
 };
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
+const DISPLAY = "'Newsreader', Georgia, serif";
+const BODY    = "'Inter Tight', -apple-system, system-ui, sans-serif";
+const MONO    = "'JetBrains Mono', ui-monospace, monospace";
+
 export const S = {
-  displayFont: "'Playfair Display', Georgia, serif",
-  bodyFont:    "'EB Garamond', Georgia, serif",
-  monoFont:    "'Courier New', Courier, monospace",
-  page:       { minHeight:"100vh", background:C.cream, fontFamily:"'EB Garamond', Georgia, serif", color:C.navy, position:"relative" },
+  displayFont: DISPLAY,
+  bodyFont:    BODY,
+  monoFont:    MONO,
+  page:       { minHeight:"100vh", background:C.bg, fontFamily:BODY, color:C.ink, position:"relative", WebkitFontSmoothing:"antialiased" },
   grain:      { display:"none" },
-  card:       { background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 16px" },
-  statBox:    { flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 10px", textAlign:"center" },
-  textarea:   { width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 16px", color:C.navy, fontSize:15, lineHeight:1.8, resize:"none", minHeight:130, boxSizing:"border-box", fontFamily:"'EB Garamond', Georgia, serif", marginBottom:14, display:"block" },
-  input:      { width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 14px", color:C.navy, fontSize:15, boxSizing:"border-box", fontFamily:"'EB Garamond', Georgia, serif", display:"block" },
-  primaryBtn: (c, dis) => ({ width:"100%", background:dis?C.lightRule:c, color:dis?C.mid:"#fffdf8", border:"none", borderRadius:2, padding:"16px", fontSize:13, fontWeight:600, cursor:dis?"not-allowed":"pointer", letterSpacing:2, textTransform:"uppercase", display:"block", fontFamily:"'EB Garamond', Georgia, serif" }),
-  ghostBtn:   { width:"100%", background:"none", border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px", color:C.mid, fontSize:13, cursor:"pointer", marginTop:8, fontFamily:"'EB Garamond', Georgia, serif", letterSpacing:1, display:"block", textAlign:"center" },
-  signOutBtn: { background:"none", border:`1px solid ${C.rule}`, borderRadius:2, padding:"5px 12px", color:C.mid, fontSize:11, cursor:"pointer", letterSpacing:1, fontFamily:"'EB Garamond', Georgia, serif" },
+  card:       { background:C.paper, border:`1px solid ${C.rule}`, borderRadius:2, padding:"16px 18px" },
+  statBox:    { flex:1, background:C.paper, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 10px", textAlign:"center" },
+  textarea:   { width:"100%", background:C.paper, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 16px", color:C.ink, fontSize:16, lineHeight:1.55, resize:"none", minHeight:130, boxSizing:"border-box", fontFamily:DISPLAY, marginBottom:14, display:"block", outline:"none" },
+  input:      { width:"100%", background:C.paper, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 14px", color:C.ink, fontSize:15, boxSizing:"border-box", fontFamily:BODY, display:"block", outline:"none" },
+  primaryBtn: (c, dis) => ({ width:"100%", background:dis?C.lightRule:(c||C.ink), color:dis?C.mute:C.paper, border:"none", borderRadius:2, padding:"16px", fontSize:12, fontWeight:600, cursor:dis?"not-allowed":"pointer", letterSpacing:"0.16em", textTransform:"uppercase", display:"block", fontFamily:BODY }),
+  ghostBtn:   { width:"100%", background:"transparent", border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px", color:C.ink, fontSize:12, cursor:"pointer", marginTop:8, fontFamily:BODY, letterSpacing:"0.14em", textTransform:"uppercase", display:"block", textAlign:"center" },
+  signOutBtn: { background:"transparent", border:`1px solid ${C.rule}`, borderRadius:2, padding:"5px 12px", color:C.inkSoft, fontSize:11, cursor:"pointer", letterSpacing:"0.12em", fontFamily:BODY, textTransform:"uppercase" },
 };
 
+// Soft tag tints used in light contexts (kept for back-compat).
 export const TAG_STYLE = {
-  easy:  { bg:"#e6f0e3", accent:"#2a5c27", border:"#b8d4b4" },
-  speed: { bg:"#e2eaf5", accent:"#14365f", border:"#b0c8e8" },
-  tempo: { bg:"#f5e4e4", accent:"#7a1a1a", border:"#e0b8b8" },
+  easy:  { bg:"#EAEFD9", accent:C.accent, border:"#CFD9B0" },
+  speed: { bg:"#F2D9CF", accent:C.hot,    border:"#E2BAA8" },
+  tempo: { bg:"#F0E2C5", accent:C.warn,   border:"#E0CCA0" },
 };
 
-// Per-TYPE styling. Used everywhere a workout is rendered. Each entry has:
-//   accent  — solid colour for labels/borders
-//   bg      — soft tint for card background (when logged)
-//   pattern — optional CSS background for special types (Hyrox, Race Day)
+// Per-TYPE styling. Editorial palette — desaturated dots + soft tints.
+//   accent / dot — solid color used for the dot + label
+//   bg           — soft tint behind cards (when logged)
+//   border       — card border tint
 export const TYPE_STYLE = {
-  EASY:       { accent:"#2a6e27", bg:"#e6f0e3", border:"#b8d4b4" },
-  RECOVERY:   { accent:"#3a7ca8", bg:"#e3eef5", border:"#b8d0e0" },
-  "LONG RUN": { accent:"#5b3a7a", bg:"#ece2f0", border:"#cdb8d8" },
-  TEMPO:      { accent:"#c2691f", bg:"#f5e9d8", border:"#e6c8a0" },
-  SPEED:      { accent:"#8a2a2a", bg:"#f5e0e0", border:"#e0b8b8" },
-  HYROX:      { accent:"#c79541", bg:"#fff4d4", border:"#1c1d22",
-                pattern:"linear-gradient(135deg, #f5c542 0 50%, #1c1d22 50% 100%)" },
-  "RACE DAY": { accent:"#1c1d22", bg:"#fafafa", border:"#1c1d22",
-                pattern:"conic-gradient(#1c1d22 25%, #fff 25% 50%, #1c1d22 50% 75%, #fff 75%) 0 0 / 12px 12px" },
-  REST:       { accent:"#d63384", bg:"#fde6f0", border:"#f0b8d0" },
+  EASY:       { accent:C.accent,  dot:C.accent,  bg:"#EAEFD9", border:"#CFD9B0" },
+  RECOVERY:   { accent:C.cool,    dot:C.cool,    bg:"#DDE6EC", border:"#B7C9D5" },
+  "LONG RUN": { accent:"#7B5A8C", dot:"#7B5A8C", bg:"#E9DEF0", border:"#C9B8D5" },
+  TEMPO:      { accent:C.warn,    dot:C.warn,    bg:"#F0E2C5", border:"#E0CCA0" },
+  SPEED:      { accent:C.hot,     dot:C.hot,     bg:"#F2D9CF", border:"#E2BAA8" },
+  HYROX:      { accent:"#C79541", dot:"#C79541", bg:"#FFF4D4", border:"#1C1D22",
+                pattern:"linear-gradient(135deg, #F5C542 0 50%, #1C1D22 50% 100%)" },
+  "RACE DAY": { accent:C.ink,     dot:C.ink,     bg:"#FAFAFA", border:C.ink,
+                pattern:"conic-gradient(#1C1D22 25%, #FFF 25% 50%, #1C1D22 50% 75%, #FFF 75%) 0 0 / 12px 12px" },
+  REST:       { accent:C.mute,    dot:C.mute,    bg:"#EDE6D9", border:C.rule },
+  STRENGTH:   { accent:"#5A6B7B", dot:"#5A6B7B", bg:"#DEE5EC", border:"#B7C2CD" },
 };
 
 // Look up TYPE_STYLE for any type string. Falls back to EASY if unknown,
@@ -58,6 +83,6 @@ export function typeStyle(type) {
   return TYPE_STYLE[key] || TYPE_STYLE.EASY;
 }
 
-export const COMPLY_COLOR = { completed:"#2a6e27", missed:"#8b1c1c", partial:"#8b6914", pending:"#9a8a7a" };
+export const COMPLY_COLOR = { completed:C.accent, missed:C.hot, partial:C.warn, pending:C.mute };
 export const COMPLY_LABEL = { completed:"✓ Done", missed:"✗ Missed", partial:"~ Partial", pending:"Pending" };
 export const TAG_EMOJI    = { speed:"⚡", tempo:"🎯", easy:"🏃", long:"🏃" };
