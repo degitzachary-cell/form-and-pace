@@ -14,7 +14,8 @@ import {
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
 import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured } from "./lib/load.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart } from "./components.jsx";
+import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -2135,62 +2136,32 @@ export default function App() {
                 })()}
               </SectionCard>
 
-              <SectionCard label="💬 Your Reply">
-                {(log?.coach_reply || linkedAthAct?.coach_reply) ? (
-                  <>
-                    <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, marginBottom:12 }}>{log?.coach_reply || linkedAthAct?.coach_reply}</div>
-                    <button onClick={async ()=>{
-                      if (log?.coach_reply) {
-                        const { data: updated } = await supabase.from("session_logs").update({ coach_reply: "", updated_at: new Date().toISOString() }).eq("session_id", activeSession.id).select().maybeSingle();
-                        if (updated) setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
-                      } else if (linkedAthAct) {
-                        const { data: actUpd } = await supabase.from("activities").update({ coach_reply: "" }).eq("id", linkedAthAct.id).select().maybeSingle();
-                        if (actUpd) setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a));
-                      }
-                    }} style={S.ghostBtn}>Edit reply</button>
-                  </>
-                ) : (
-                  <>
-                    <textarea value={coachReply} onChange={e=>setCoachReply(e.target.value)}
-                      placeholder="Write a note back to the athlete..."
-                      style={{ ...S.textarea, minHeight:90 }}/>
-                    <button onClick={async ()=>{
-                      if (!coachReply.trim()) return;
+              {(() => {
+                // Prefer the session log thread; fall back to the activity.
+                const threadSource = (log?.messages?.length || log?.coach_reply) ? log : (linkedAthAct || null);
+                const thread = threadSource ? getThread(threadSource) : [];
+                return (
+                  <ThreadPanel
+                    thread={thread}
+                    viewerRole="coach"
+                    onSend={async (body) => {
+                      const next = appendMessage(threadSource?.messages || [], { author: "coach", body });
+                      if (!next) return;
                       const ts = new Date().toISOString();
-                      // Write to both stores: activities is canonical (Strava-first),
-                      // session_logs kept populated for backward compatibility.
                       let wroteAnywhere = false;
                       if (linkedAthAct) {
-                        const { data: actUpd, error: actErr } = await supabase
-                          .from("activities")
-                          .update({ coach_reply: coachReply })
-                          .eq("id", linkedAthAct.id)
-                          .select().maybeSingle();
-                        if (actUpd) {
-                          setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a));
-                          wroteAnywhere = true;
-                        } else if (actErr) console.error("activity reply error:", actErr);
+                        const { data: actUpd } = await supabase
+                          .from("activities").update({ messages: next, coach_reply: body }).eq("id", linkedAthAct.id).select().maybeSingle();
+                        if (actUpd) { setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a)); wroteAnywhere = true; }
                       }
-                      const { data: updated, error: updateErr } = await supabase
-                        .from("session_logs")
-                        .update({ coach_reply: coachReply, updated_at: ts })
-                        .eq("session_id", activeSession.id)
-                        .select().maybeSingle();
-                      if (updated) {
-                        setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
-                        wroteAnywhere = true;
-                      } else if (updateErr) console.error("session_log reply error:", updateErr);
-                      if (!wroteAnywhere) {
-                        alert("No session log or activity found for this session.");
-                        return;
-                      }
-                      setCoachReply("");
-                    }} disabled={!coachReply.trim()} style={S.primaryBtn("#14365f", !coachReply.trim())}>
-                      Send Reply →
-                    </button>
-                  </>
-                )}
-              </SectionCard>
+                      const { data: updated } = await supabase
+                        .from("session_logs").update({ messages: next, coach_reply: body, updated_at: ts }).eq("session_id", activeSession.id).select().maybeSingle();
+                      if (updated) { setLogs(prev => ({ ...prev, [activeSession.id]: updated })); wroteAnywhere = true; }
+                      if (!wroteAnywhere) alert("No session log or activity found for this session.");
+                    }}
+                  />
+                );
+              })()}
             </>
           )}
           <button onClick={() => {
@@ -3643,16 +3614,29 @@ export default function App() {
             </div>
           )}
 
-          {(log?.coach_reply || resultLinkedAct?.coach_reply) && (
-            <div style={{ marginBottom:24 }}>
-              <SectionHead label="From your coach"/>
-              <div style={{ marginTop:18, padding:"22px 22px", background:"var(--c-paper)", border:"1px solid var(--c-rule)" }}>
-                <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.55, margin:0, color:"var(--c-ink)" }}>
-                  {log?.coach_reply || resultLinkedAct?.coach_reply}
-                </p>
-              </div>
-            </div>
-          )}
+          {(() => {
+            // Pick the canonical thread source: prefer the session log,
+            // fall back to the linked activity (older athletes have replies
+            // attached to activities not session logs).
+            const threadSource = log?.messages?.length || log?.coach_reply ? log : (resultLinkedAct || null);
+            const thread = threadSource ? getThread(threadSource) : [];
+            if (!thread.length && !threadSource) return null;
+            return (
+              <ThreadPanel
+                thread={thread}
+                viewerRole="athlete"
+                onSend={async (body) => {
+                  const next = appendMessage(threadSource?.messages || [], { author: "athlete", body });
+                  if (!next) return;
+                  if (threadSource === log) {
+                    await saveLog(activeSession.id, { messages: next });
+                  } else if (resultLinkedAct?.id) {
+                    await supabase.from("activities").update({ messages: next }).eq("id", resultLinkedAct.id);
+                  }
+                }}
+              />
+            );
+          })()}
           <button onClick={() => {
             const an = log?.analysis;
             const w = an?.wellness || {};

@@ -42,6 +42,90 @@ export function RtssPillFor({ durationMin, distanceKm, profile, size = 11 }) {
   return <RtssPill rtss={rtss} size={size}/>;
 }
 
+// ─── THREAD PANEL ────────────────────────────────────────────────────────────
+// Renders a chronological thread of athlete↔coach messages plus an inline
+// reply box. Pure presentational — owner provides the thread array (already
+// blended via lib/messages.js getThread) and an onSend(body) callback.
+//
+// `viewerRole` flips alignment + highlight: messages from the OTHER party
+// sit on the paper-card side, the viewer's own messages float in plain text
+// on the right.
+export function ThreadPanel({ thread = [], viewerRole = "athlete", onSend }) {
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const otherAuthor = viewerRole === "coach" ? "athlete" : "coach";
+  const sectionLabel = viewerRole === "coach" ? "Reply to athlete" : "Coach thread";
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ padding: "0 0 12px", borderBottom: "1px solid var(--c-rule)", display:"flex", alignItems:"baseline", justifyContent:"space-between" }}>
+        <span className="t-eyebrow" style={{ color:"var(--c-ink)" }}>{sectionLabel}</span>
+        {thread.length > 0 && <span className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.08em" }}>{thread.length} MESSAGE{thread.length === 1 ? "" : "S"}</span>}
+      </div>
+      <div style={{ marginTop: 14, display:"flex", flexDirection:"column", gap:12 }}>
+        {thread.map(m => {
+          const isOther = m.author === otherAuthor;
+          return (
+            <div key={m.id} style={{
+              display:"flex",
+              flexDirection: isOther ? "row" : "row-reverse",
+              alignItems:"flex-start",
+              gap:10,
+            }}>
+              <div style={{
+                maxWidth: "85%",
+                padding: isOther ? "14px 16px" : "10px 14px",
+                background: isOther ? "var(--c-paper)" : "transparent",
+                border: isOther ? "1px solid var(--c-rule)" : "none",
+                borderLeft: isOther ? "2px solid var(--c-accent)" : "none",
+              }}>
+                <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:"var(--c-mute)", marginBottom:6 }}>
+                  {m.author === "coach" ? "COACH" : "ATHLETE"}
+                  {m.created_at && ` · ${new Date(m.created_at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}`}
+                </div>
+                <div style={{
+                  fontFamily: isOther ? "var(--f-display)" : "var(--f-body)",
+                  fontSize: isOther ? 17 : 15,
+                  lineHeight: 1.55,
+                  color:"var(--c-ink)",
+                  whiteSpace:"pre-wrap",
+                }}>
+                  {m.body}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <textarea
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder={viewerRole === "coach" ? "Reply to your athlete…" : "Write back to your coach…"}
+          style={{
+            width:"100%", minHeight:80, padding:"12px 14px",
+            background:"var(--c-paper)", border:"1px solid var(--c-rule)", borderRadius:2,
+            color:"var(--c-ink)", fontFamily:"var(--f-display)", fontSize:16, lineHeight:1.5,
+            resize:"vertical", outline:"none",
+          }}
+        />
+        <button
+          onClick={async () => {
+            if (!draft.trim() || sending) return;
+            setSending(true);
+            try { await onSend(draft); setDraft(""); }
+            catch (e) { console.error("send message failed", e); }
+            finally { setSending(false); }
+          }}
+          disabled={!draft.trim() || sending}
+          className="fp-btn fp-btn--accent"
+          style={{ marginTop:10, padding:"10px 20px", fontSize:11, opacity: !draft.trim() || sending ? 0.5 : 1 }}>
+          {sending ? "Sending…" : "Send"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── PMC CHART (CTL / ATL / TSB) ─────────────────────────────────────────────
 //
 // Minimal hand-rolled SVG line chart — keeps the bundle lean (no recharts).
