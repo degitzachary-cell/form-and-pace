@@ -305,6 +305,8 @@ export default function App() {
   const [dashAthlete,   setDashAthlete]   = useState(null);
   const [coachReply,    setCoachReply]    = useState("");
   const [coachFilter,   setCoachFilter]   = useState("all");
+  const [coachEditAct,  setCoachEditAct]  = useState(null);  // { date, distance, duration } draft for active activity edit
+  const [coachEditLog,  setCoachEditLog]  = useState(null);  // { date, distance, duration } draft for active log edit
   const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
 
@@ -805,7 +807,10 @@ export default function App() {
     if (stravaActivitiesLoading) return;
     setStravaActivitiesLoading(true);
     try {
-      const data = await stravaCall("list", { per_page: 50 });
+      // Pull last ~10 weeks of activity (UNIX seconds) so the 8-week chart
+      // always has enough data even for high-volume athletes.
+      const after = Math.floor(Date.now() / 1000) - 10 * 7 * 24 * 60 * 60;
+      const data = await stravaCall("list", { per_page: 200, after });
       if (Array.isArray(data)) {
         setStravaActivities(data.filter(a => a.sport_type === "Run" || a.type === "Run"));
       }
@@ -1909,6 +1914,69 @@ export default function App() {
                 </div>
               </SectionCard>
 
+              <SectionCard label="Edit logged run">
+                {(() => {
+                  const refId = `${activeSession.id}|${linkedAthAct?.id || "log"}`;
+                  const draft = coachEditLog?.id === refId ? coachEditLog : {
+                    id: refId,
+                    date: linkedAthAct?.activity_date || an?.actual_date || coachSDate || "",
+                    distance: (linkedAthAct?.distance_km ?? an?.distance_km) != null ? String(linkedAthAct?.distance_km ?? an?.distance_km) : "",
+                    duration: linkedAthAct?.duration_seconds != null ? String(Math.round(linkedAthAct.duration_seconds / 60))
+                              : (an?.duration_min != null ? String(an.duration_min) : ""),
+                  };
+                  return (
+                    <>
+                      <div style={{ display:"flex", gap:10, marginBottom:10 }}>
+                        <div style={{ flex:1.2 }}>
+                          <div style={{ fontSize:9, letterSpacing:2, color:C.mid, marginBottom:4 }}>DATE</div>
+                          <input type="date" value={draft.date} onChange={e => setCoachEditLog({ ...draft, date: e.target.value })} style={S.input}/>
+                        </div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:9, letterSpacing:2, color:C.mid, marginBottom:4 }}>DIST (km)</div>
+                          <input value={draft.distance} onChange={e => setCoachEditLog({ ...draft, distance: e.target.value })} style={S.input}/>
+                        </div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:9, letterSpacing:2, color:C.mid, marginBottom:4 }}>DURATION (min)</div>
+                          <input value={draft.duration} onChange={e => setCoachEditLog({ ...draft, duration: e.target.value })} style={S.input}/>
+                        </div>
+                      </div>
+                      <button onClick={async () => {
+                        const dist = draft.distance ? parseFloat(draft.distance) : null;
+                        const durMin = draft.duration ? parseFloat(draft.duration) : null;
+                        // Update the linked activity if present.
+                        if (linkedAthAct?.id) {
+                          const { data, error } = await supabase.from("activities").update({
+                            activity_date: draft.date,
+                            distance_km: dist,
+                            duration_seconds: durMin != null ? Math.round(durMin * 60) : null,
+                          }).eq("id", linkedAthAct.id).select().single();
+                          if (error) { alert("Activity save failed: " + error.message); return; }
+                          if (data) setActivities(prev => prev.map(a => a.id === data.id ? data : a));
+                        }
+                        // Update session_log analysis fields.
+                        if (log) {
+                          const nextAnalysis = {
+                            ...(an || {}),
+                            distance_km: dist,
+                            duration_min: durMin,
+                            ...(draft.date && draft.date !== coachSDate ? { actual_date: draft.date } : {}),
+                          };
+                          if (draft.date === coachSDate) delete nextAnalysis.actual_date;
+                          try { await saveLog(activeSession.id, { analysis: nextAnalysis }); }
+                          catch (e) { alert("Log save failed: " + e.message); return; }
+                        }
+                        setCoachEditLog(null);
+                      }} style={S.primaryBtn(C.crimson, false)}>Save changes</button>
+                      <button onClick={async () => {
+                        if (!confirm("Delete this logged run? The scheduled workout itself stays in the plan.")) return;
+                        const ok = await deleteSessionLog(activeSession.id, linkedAthAct?.id);
+                        if (ok) setCoachScreen("athlete");
+                      }} style={{ ...S.ghostBtn, color:C.crimson, borderColor:C.crimson, marginTop:8 }}>Delete logged run</button>
+                    </>
+                  );
+                })()}
+              </SectionCard>
+
               <SectionCard label="💬 Your Reply">
                 {(log?.coach_reply || linkedAthAct?.coach_reply) ? (
                   <>
@@ -2032,6 +2100,55 @@ export default function App() {
               </>
             )}
           </SectionCard>
+
+          <SectionCard label="Edit run">
+            {(() => {
+              const draft = coachEditAct?.id === act.id ? coachEditAct : {
+                id: act.id,
+                date: act.activity_date,
+                distance: act.distance_km != null ? String(act.distance_km) : "",
+                duration: act.duration_seconds != null ? String(Math.round(act.duration_seconds / 60)) : "",
+              };
+              return (
+                <>
+                  <div style={{ display:"flex", gap:10, marginBottom:10 }}>
+                    <div style={{ flex:1.2 }}>
+                      <div style={{ fontSize:9, letterSpacing:2, color:C.mid, marginBottom:4 }}>DATE</div>
+                      <input type="date" value={draft.date} onChange={e => setCoachEditAct({ ...draft, date: e.target.value })} style={S.input}/>
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:9, letterSpacing:2, color:C.mid, marginBottom:4 }}>DIST (km)</div>
+                      <input value={draft.distance} onChange={e => setCoachEditAct({ ...draft, distance: e.target.value })} style={S.input}/>
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:9, letterSpacing:2, color:C.mid, marginBottom:4 }}>DURATION (min)</div>
+                      <input value={draft.duration} onChange={e => setCoachEditAct({ ...draft, duration: e.target.value })} style={S.input}/>
+                    </div>
+                  </div>
+                  <button onClick={async () => {
+                    const payload = {
+                      activity_date: draft.date,
+                      distance_km: draft.distance ? parseFloat(draft.distance) : null,
+                      duration_seconds: draft.duration ? Math.round(parseFloat(draft.duration) * 60) : null,
+                    };
+                    const { data, error } = await supabase.from("activities").update(payload).eq("id", act.id).select().single();
+                    if (error) { alert("Save failed: " + error.message); return; }
+                    if (data) {
+                      setActivities(prev => prev.map(a => a.id === data.id ? data : a));
+                      setActiveExtraActivity(data);
+                      setCoachEditAct(null);
+                    }
+                  }} style={S.primaryBtn(C.crimson, false)}>Save changes</button>
+                </>
+              );
+            })()}
+          </SectionCard>
+
+          <button onClick={async () => {
+            if (!confirm("Delete this run?")) return;
+            const ok = await deleteActivity(act.id);
+            if (ok) { setActiveExtraActivity(null); setCoachScreen("athlete"); }
+          }} style={{ ...S.ghostBtn, color:C.crimson, borderColor:C.crimson, marginBottom:8 }}>Delete run</button>
           <button onClick={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }} style={S.ghostBtn}>← Back to athlete</button>
         </div>
       </div>
@@ -2344,13 +2461,6 @@ export default function App() {
       if (a.strava_data?.id) storedStravaIds.add(a.strava_data.id);
       if (a.source === "session" && !actByDate[a.activity_date]) actByDate[a.activity_date] = a;
     }
-    const weekBars = [7,6,5,4,3,2,1,0].map(ago => ({
-      km: weekKm(myActs, null, ago) + stravaWeekKm(stravaActivities, storedStravaIds, ago),
-      weeksAgo: ago,
-      label: ago === 0 ? "NOW" : `W-${ago}`,
-    }));
-    const maxBarKm = Math.max(...weekBars.map(b => b.km), 1);
-    const thisWeekKm = weekBars[7].km;
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -2372,59 +2482,105 @@ export default function App() {
             <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>Current PB: {fmtPbGoal(profile?.pbs) || athleteData.current || "—"}</div>
           </div>
 
-          {/* 8-Week Rolling Volume */}
-          <div style={{ margin:"0 16px 16px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 18px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
-              <div>
-                <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>This Week</div>
-                <div style={{ fontSize:26, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>
-                  {hoveredWeekIdx !== null ? weekBars[hoveredWeekIdx].km.toFixed(1) : thisWeekKm.toFixed(1)}
-                  <span style={{ fontSize:14, color:C.mid, fontWeight:400 }}> km</span>
-                  {hoveredWeekIdx !== null && hoveredWeekIdx !== 7 && (
-                    <span style={{ fontSize:11, color:C.mid, fontWeight:400, marginLeft:8 }}>{weekBars[hoveredWeekIdx].label}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:3, alignItems:"flex-end" }}>
-              {weekBars.map((b, i) => {
-                const BAR_MAX_PX = 52;
-                const pct = maxBarKm > 0 ? b.km / maxBarKm : 0;
-                const barPx = b.km > 0 ? Math.max(Math.round(pct * BAR_MAX_PX), 4) : 2;
-                const isCurrent = b.weeksAgo === 0;
-                const isHovered = hoveredWeekIdx === i;
-                return (
-                  <div key={i}
-                    onMouseEnter={() => setHoveredWeekIdx(i)}
-                    onMouseLeave={() => setHoveredWeekIdx(null)}
-                    onClick={(e) => { e.stopPropagation(); setHoveredWeekIdx(prev => prev === i ? null : i); }}
-                    data-bar-chart="1"
-                    style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer", userSelect:"none" }}>
-                    <div style={{ fontSize:9, color: isHovered ? C.navy : "transparent", marginBottom:3, fontWeight:600, minHeight:12, lineHeight:1 }}>
-                      {b.km > 0 ? b.km.toFixed(1) : ""}
-                    </div>
-                    <div style={{ width:"100%", height:BAR_MAX_PX, display:"flex", alignItems:"flex-end" }}>
-                      <div style={{
-                        width:"100%",
-                        height: barPx,
-                        background: isCurrent ? C.crimson : isHovered ? C.mid : C.lightRule,
-                        borderRadius:"3px 3px 0 0",
-                        transition:"background 0.15s",
-                        opacity: b.km === 0 ? 0.4 : 1,
-                      }}/>
-                    </div>
-                    <div style={{ width:"100%", height:1, background:C.rule, margin:"3px 0" }}/>
-                    <div style={{ fontSize:7, color: isCurrent ? C.mid : C.lightRule, letterSpacing:0.5, textTransform:"uppercase", whiteSpace:"nowrap" }}>
-                      {b.label}
+          {/* 8-Week Rolling Volume — line graph, Strava-first */}
+          {(() => {
+            // Strava is the source of truth when connected. We still merge
+            // activities table entries so manually-logged runs show up too.
+            const W = 8;
+            const points = Array.from({ length: W }, (_, i) => {
+              const ago = W - 1 - i; // i=0 -> 7 weeks ago, i=W-1 -> this week
+              let km = 0;
+              if (stravaConnected && stravaActivities.length) {
+                km = stravaWeekKm(stravaActivities, new Set(), ago);
+                // Add manual non-strava activities too
+                const localKm = (myActs.filter(a => !a.strava_data?.id)).reduce((s, a) => {
+                  const { monday, sunday } = (() => {
+                    const d = new Date(); d.setHours(0,0,0,0);
+                    const dow = d.getDay(); const off = dow === 0 ? -6 : 1 - dow;
+                    const mon = new Date(d); mon.setDate(d.getDate() + off - ago * 7);
+                    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59);
+                    return { monday: mon, sunday: sun };
+                  })();
+                  const ad = new Date(a.activity_date);
+                  return ad >= monday && ad <= sunday ? s + parseFloat(a.distance_km || 0) : s;
+                }, 0);
+                km += localKm;
+              } else {
+                km = weekKm(myActs, null, ago);
+              }
+              return { ago, km, label: ago === 0 ? "NOW" : `W-${ago}` };
+            });
+            const maxKm = Math.max(...points.map(p => p.km), 1);
+            const thisWk = points[W - 1].km;
+            const hovered = hoveredWeekIdx !== null && hoveredWeekIdx >= 0 && hoveredWeekIdx < W ? points[hoveredWeekIdx] : null;
+
+            // SVG geometry
+            const PAD_L = 8, PAD_R = 8, PAD_T = 14, PAD_B = 22;
+            const VB_W = 320, VB_H = 110;
+            const xFor = i => PAD_L + (i * (VB_W - PAD_L - PAD_R)) / (W - 1);
+            const yFor = km => PAD_T + (1 - km / maxKm) * (VB_H - PAD_T - PAD_B);
+            const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xFor(i).toFixed(1)} ${yFor(p.km).toFixed(1)}`).join(" ");
+            const areaPath = `${linePath} L ${xFor(W - 1).toFixed(1)} ${VB_H - PAD_B} L ${xFor(0).toFixed(1)} ${VB_H - PAD_B} Z`;
+
+            return (
+              <div style={{ margin:"0 16px 16px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 18px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                  <div>
+                    <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>{hovered ? hovered.label : "This Week"}</div>
+                    <div style={{ fontSize:26, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>
+                      {(hovered ? hovered.km : thisWk).toFixed(1)}
+                      <span style={{ fontSize:14, color:C.mid, fontWeight:400 }}> km</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-            {(activitiesByEmail.get(user.email?.toLowerCase()) || []).length === 0 && (
-              <div style={{ marginTop:10, fontSize:11, color:C.mid, textAlign:"center" }}>Log your first run to start tracking km</div>
-            )}
-          </div>
+                  <div style={{ fontSize:9, letterSpacing:2, color:C.mid, textTransform:"uppercase" }}>
+                    {stravaConnected ? "via Strava" : "manual"}
+                  </div>
+                </div>
+                <svg viewBox={`0 0 ${VB_W} ${VB_H}`} style={{ width:"100%", height:"auto", display:"block" }} onMouseLeave={() => setHoveredWeekIdx(null)}>
+                  {/* Faint baseline */}
+                  <line x1={PAD_L} y1={VB_H - PAD_B} x2={VB_W - PAD_R} y2={VB_H - PAD_B} stroke={C.rule} strokeWidth="0.6"/>
+                  {/* Filled area under line */}
+                  <path d={areaPath} fill={C.crimson} fillOpacity="0.08"/>
+                  {/* The line */}
+                  <path d={linePath} fill="none" stroke={C.crimson} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round"/>
+                  {/* Markers */}
+                  {points.map((p, i) => {
+                    const isCurrent = p.ago === 0;
+                    const isHovered = hoveredWeekIdx === i;
+                    const r = isCurrent || isHovered ? 4 : 3;
+                    return (
+                      <g key={i}>
+                        <circle
+                          cx={xFor(i)} cy={yFor(p.km)} r={r}
+                          fill={isCurrent ? C.crimson : C.white}
+                          stroke={C.crimson} strokeWidth="1.2"
+                        />
+                        {/* invisible larger hit target */}
+                        <rect
+                          x={xFor(i) - 14} y={0} width={28} height={VB_H}
+                          fill="transparent"
+                          onMouseEnter={() => setHoveredWeekIdx(i)}
+                          onClick={() => setHoveredWeekIdx(prev => prev === i ? null : i)}
+                          style={{ cursor:"pointer" }}
+                        />
+                        {isHovered && p.km > 0 && (
+                          <text x={xFor(i)} y={yFor(p.km) - 8} textAnchor="middle" fontSize="9" fontWeight="700" fill={C.navy}>
+                            {p.km.toFixed(1)}
+                          </text>
+                        )}
+                        <text x={xFor(i)} y={VB_H - 6} textAnchor="middle" fontSize="8" letterSpacing="0.5" fill={isCurrent ? C.navy : C.mid}>
+                          {p.label}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+                {!stravaConnected && (myActs.length === 0) && (
+                  <div style={{ marginTop:10, fontSize:11, color:C.mid, textAlign:"center" }}>Connect Strava or log a run to start tracking km</div>
+                )}
+              </div>
+            );
+          })()}
 
 
           {/* Strava connect / connected status */}
