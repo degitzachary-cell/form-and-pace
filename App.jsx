@@ -15,6 +15,7 @@ import {
 } from "./lib/constants.js";
 import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
+import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
@@ -131,7 +132,7 @@ function ExtraActivityCard({ act, onClick }) {
   );
 }
 
-function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun }) {
+function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun, markers }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr || dayLabel}` });
   const datePart = dateStr ? dateStr.slice(5).replace("-", "/") : "";
   const dayHeader = datePart ? `${dayLabel.toUpperCase()} · ${datePart}` : dayLabel.toUpperCase();
@@ -143,6 +144,24 @@ function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun }) {
       padding: isOver ? 4 : 0,
       transition: "border-color 120ms ease, padding 120ms ease",
     }}>
+      {Array.isArray(markers) && markers.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6, paddingLeft: 2 }}>
+          {markers.map(m => {
+            const ms = MARKER_STYLE[m.kind] || MARKER_STYLE.other;
+            return (
+              <span key={m.id} title={m.label || ms.label} style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                padding: "2px 8px", background: ms.ribbon, color: ms.ink,
+                fontSize: 9, letterSpacing: 1.5, fontWeight: 700, textTransform: "uppercase",
+                borderRadius: 1,
+              }}>
+                <span>{ms.label}</span>
+                {m.label && <span style={{ fontWeight: 400, opacity: 0.85 }}>· {m.label}</span>}
+              </span>
+            );
+          })}
+        </div>
+      )}
       <div style={{
         fontSize: 10, letterSpacing: 2, color: isToday ? C.crimson : C.mid,
         fontWeight: isToday ? 700 : 500, marginBottom: 4, paddingLeft: 2,
@@ -368,6 +387,10 @@ export default function App() {
 
   // Activities (manual logging + future Strava sync)
   const [activities,  setActivities]  = useState([]);
+  // Calendar markers — race / sick / taper / travel ribbons. Keyed by
+  // athlete email (lowercased). Athletes load their own; coaches load the
+  // currently-selected athlete's set on demand.
+  const [markersByEmail, setMarkersByEmail] = useState({});
   const [logForm,     setLogForm]     = useState({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [logSaving,   setLogSaving]   = useState(false);
@@ -435,10 +458,18 @@ export default function App() {
     }
   }, []);
 
+  // Load calendar markers for an athlete email and cache by email.
+  const loadMarkers = async (email) => {
+    if (!email) return;
+    const data = await fetchMarkersForAthlete(email);
+    setMarkersByEmail(prev => ({ ...prev, [email.toLowerCase()]: data }));
+  };
+
   // ── Load logs + Strava state when user + role are known ──
   useEffect(() => {
     if (!user || !role) return;
     Promise.all([loadLogs(), loadActivities()]);
+    if (role === "athlete") loadMarkers(user.email);
     const pendingCode = sessionStorage.getItem("strava_pending_code");
     if (pendingCode) {
       sessionStorage.removeItem("strava_pending_code");
@@ -484,6 +515,7 @@ export default function App() {
     if (role !== "coach") return;
     if (coachScreen === "athlete" && dashAthlete) {
       Promise.all([loadLogs(), loadActivities()]).catch(e => console.error("coach refresh error:", e));
+      loadMarkers(dashAthlete);
     }
     const onVis = () => {
       if (document.visibilityState === "visible") {
@@ -1820,6 +1852,61 @@ export default function App() {
               <div style={{ ...S.card, marginBottom:20 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
                 <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(today)} height={220}/>
+              </div>
+            );
+          })()}
+
+          {/* Calendar markers — race / sick / taper / travel */}
+          {(() => {
+            const list = markersByEmail[dashAthlete?.toLowerCase()] || [];
+            const upcoming = list.filter(m => (m.end_date || m.marker_date) >= todayStr()).slice(0, 5);
+            const addMarker = async () => {
+              const kind = prompt(`Marker kind? One of: ${MARKER_KINDS.join(", ")}`, "race");
+              if (!kind || !MARKER_KINDS.includes(kind)) return;
+              const markerDate = prompt("Date (YYYY-MM-DD)?", todayStr());
+              if (!markerDate || !/^\d{4}-\d{2}-\d{2}$/.test(markerDate)) return;
+              const endDate = prompt("End date (YYYY-MM-DD), blank for single day:", "") || null;
+              const label = prompt("Label (e.g. 'Berlin Marathon')?", "") || null;
+              const isARace = kind === "race" && confirm("Mark as A-race?");
+              const created = await createMarker({
+                athleteEmail: dashAthlete, kind, markerDate, endDate, label, isARace,
+                createdBy: user.email,
+              });
+              if (created) loadMarkers(dashAthlete);
+            };
+            return (
+              <div style={{ ...S.card, marginBottom:20 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
+                  <Eyebrow>Calendar markers</Eyebrow>
+                  <button type="button" onClick={addMarker} style={{
+                    background:"transparent", color:C.accent, border:`1px solid ${C.rule}`,
+                    borderRadius:2, padding:"4px 10px", fontSize:11, cursor:"pointer", fontWeight:600,
+                  }}>+ Add</button>
+                </div>
+                {upcoming.length === 0 ? (
+                  <div style={{ fontSize:13, color:C.mute, fontStyle:"italic" }}>None scheduled.</div>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {upcoming.map(m => {
+                      const ms = MARKER_STYLE[m.kind] || MARKER_STYLE.other;
+                      return (
+                        <div key={m.id} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                          <span style={{ width:8, height:8, borderRadius:999, background:ms.ribbon }}/>
+                          <span style={{ fontFamily:S.bodyFont, fontSize:11, letterSpacing:1.5, color:ms.ribbon, fontWeight:700, textTransform:"uppercase" }}>{ms.label}</span>
+                          <span style={{ fontFamily:S.displayFont, fontSize:14, color:C.ink, flex:1 }}>{m.label || ms.label}</span>
+                          <span className="t-mono" style={{ fontSize:11, color:C.mute }}>
+                            {m.marker_date}{m.end_date && m.end_date !== m.marker_date ? ` → ${m.end_date}` : ""}
+                          </span>
+                          <button type="button" onClick={async () => {
+                            if (!confirm("Delete this marker?")) return;
+                            const ok = await deleteMarker(m.id);
+                            if (ok) loadMarkers(dashAthlete);
+                          }} style={{ background:"transparent", border:"none", color:C.hot, cursor:"pointer", fontSize:13 }}>×</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -3198,6 +3285,7 @@ export default function App() {
                         });
                       const extrasHere = dayDate ? extraActs.filter(a => a.activity_date === dayDate) : [];
                       const hasItems = sessionsHere.length + extrasHere.length > 0;
+                      const dayMarkers = dayDate ? markersOnDate(markersByEmail[user.email?.toLowerCase()] || [], dayDate) : [];
                       return (
                         <DayRow
                           key={dayLabel}
@@ -3205,6 +3293,7 @@ export default function App() {
                           dayLabel={dayLabel}
                           isToday={isToday}
                           hasItems={hasItems}
+                          markers={dayMarkers}
                           onAddRun={dayDate ? () => {
                             setLogForm({ date: dayDate, distanceKm: "", durationMin: "", type: "Run", notes: "" });
                             setEditingActivityId(null);
