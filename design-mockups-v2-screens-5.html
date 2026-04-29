@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Form & Pace — Screens · Batch 5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#fbfaf7;--ink:#1c1d22;--muted:#8a8a8f;--rule:#e7e4dc;--accent:#b85a3c;--accent-soft:#f1d9cf;
+    --type-easy:#2f5d3a;--type-speed:#8a2a2a;--type-tempo:#c2691f;--type-recovery:#335f86;--type-long:#5b3a7a}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#ece9e2;font-family:'Inter',system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:48px 24px 80px}
+  .wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+  h1.lab{font-family:'Fraunces',serif;font-weight:400;font-size:22px;letter-spacing:-0.01em;margin:0}
+  .row{display:flex;gap:32px;flex-wrap:wrap;justify-content:center}
+  .case{display:flex;flex-direction:column;gap:12px;align-items:center}
+  .case .caption{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted)}
+  .phone{width:380px;background:var(--paper);border-radius:36px;box-shadow:0 30px 60px -30px rgba(20,20,30,0.25);overflow:hidden}
+  .phone-inner{padding:28px 26px 36px;min-height:760px;display:flex;flex-direction:column}
+
+  .navbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+  .navbar .back,.navbar .save{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);cursor:pointer}
+  .navbar .save{color:var(--accent)}
+  .navbar .title{font-family:'Fraunces',serif;font-size:18px}
+
+  .h-display{font-family:'Fraunces',serif;font-size:26px;letter-spacing:-0.02em;margin:0 0 4px}
+  .lede{color:var(--muted);font-size:13px;margin-bottom:22px}
+
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:18px}
+  .field label{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted)}
+  .field input,.field textarea{appearance:none;background:transparent;border:0;border-bottom:1px solid var(--rule);font-family:'Fraunces',serif;font-size:18px;color:var(--ink);padding:8px 2px}
+  .field textarea{font-family:'Inter',sans-serif;font-size:14px;line-height:1.5;min-height:80px;border:1px solid var(--rule);border-radius:12px;padding:12px}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+  .actions{display:flex;gap:10px;margin-top:auto;padding-top:24px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;height:44px;padding:0 18px;border-radius:999px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;font-weight:500;border:0;cursor:pointer;background:var(--ink);color:var(--paper);flex:1}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--rule)}
+  .btn.danger{background:transparent;color:var(--type-speed);border:1px solid var(--rule);flex:0 0 auto;padding:0 16px}
+
+  /* Type chooser — coloured chips */
+  .types{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px}
+  .chip{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:1px solid var(--rule);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);cursor:pointer;background:transparent}
+  .chip .sw{width:6px;height:12px;border-radius:1.5px;background:currentColor}
+  .chip[data-type="easy"]{color:var(--type-easy)}
+  .chip[data-type="speed"]{color:var(--type-speed)}
+  .chip[data-type="tempo"]{color:var(--type-tempo)}
+  .chip[data-type="recovery"]{color:var(--type-recovery)}
+  .chip[data-type="long"]{color:var(--type-long)}
+  .chip[data-type="rest"]{color:var(--muted)}
+  .chip[data-type="race"]{color:var(--accent)}
+  .chip.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .chip.on .sw{background:currentColor}
+
+  /* ===== Plan upload ===== */
+  .drop{border:1.5px dashed var(--rule);border-radius:18px;padding:32px 20px;text-align:center;margin-bottom:22px}
+  .drop .icon{font-family:'Fraunces',serif;font-size:36px;color:var(--accent);margin-bottom:8px}
+  .drop .h{font-family:'Fraunces',serif;font-size:18px;margin-bottom:4px}
+  .drop .sub{font-size:12px;color:var(--muted);margin-bottom:14px}
+  .drop .pick{display:inline-block;padding:10px 18px;border-radius:999px;border:1px solid var(--ink);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer}
+
+  .preview-h{font-family:'Fraunces',serif;font-size:14px;color:var(--muted);margin:18px 0 10px}
+  .preview-row{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--rule)}
+  .preview-row:last-child{border-bottom:0}
+  .preview-row .day-stamp{font-family:'Fraunces',serif;font-size:13px;color:var(--muted);width:54px;flex-shrink:0;letter-spacing:-0.01em}
+  .preview-row .sw{width:6px;height:12px;border-radius:1.5px;margin-top:5px;flex-shrink:0}
+  .preview-row .body{flex:1;min-width:0}
+  .preview-row .name{font-family:'Fraunces',serif;font-size:14px;letter-spacing:-0.01em;line-height:1.25;margin-bottom:2px}
+  .preview-row .meta{font-size:11.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1 class="lab">Batch 5 — Coach edit/add workout · Plan upload</h1>
+
+  <div class="row">
+
+    <!-- Coach edit workout -->
+    <div class="case">
+      <div class="phone"><div class="phone-inner">
+        <div class="navbar"><div class="back">‹ Cancel</div><div class="title">Workout</div><div class="save">Save</div></div>
+
+        <h2 class="h-display">Tue 29 Apr</h2>
+        <p class="lede">Editing scheduled workout for Alex Doyle.</p>
+
+        <div class="types">
+          <button class="chip" data-type="easy"><span class="sw"></span>Easy</button>
+          <button class="chip" data-type="recovery"><span class="sw"></span>Recovery</button>
+          <button class="chip on" data-type="tempo"><span class="sw"></span>Tempo</button>
+          <button class="chip" data-type="speed"><span class="sw"></span>Speed</button>
+          <button class="chip" data-type="long"><span class="sw"></span>Long</button>
+          <button class="chip" data-type="rest"><span class="sw"></span>Rest</button>
+          <button class="chip" data-type="race"><span class="sw"></span>Race</button>
+        </div>
+
+        <div class="field"><label>Title</label><input value="3 × 2 km @ threshold" /></div>
+        <div class="field"><label>Description</label><textarea>15 min easy warm-up. 3 × 2 km @ threshold pace with 90s float between reps. 15 min easy cool-down.</textarea></div>
+        <div class="field-row">
+          <div class="field"><label>Distance (km)</label><input value="10" /></div>
+          <div class="field"><label>Pace</label><input value="4:15/km" /></div>
+        </div>
+        <div class="field"><label>Terrain</label><input value="Road · flat" /></div>
+
+        <div class="actions">
+          <button class="btn ghost">Duplicate</button>
+          <button class="btn">Save</button>
+          <button class="btn danger">Delete</button>
+        </div>
+      </div></div>
+      <div class="caption">Coach · edit workout</div>
+    </div>
+
+    <!-- Add workout (same screen, blank state) -->
+    <div class="case">
+      <div class="phone"><div class="phone-inner">
+        <div class="navbar"><div class="back">‹ Cancel</div><div class="title">New workout</div><div class="save">Save</div></div>
+
+        <h2 class="h-display">Thu 1 May</h2>
+        <p class="lede">Adding a workout for Alex Doyle.</p>
+
+        <div class="types">
+          <button class="chip" data-type="easy"><span class="sw"></span>Easy</button>
+          <button class="chip" data-type="recovery"><span class="sw"></span>Recovery</button>
+          <button class="chip" data-type="tempo"><span class="sw"></span>Tempo</button>
+          <button class="chip" data-type="speed"><span class="sw"></span>Speed</button>
+          <button class="chip" data-type="long"><span class="sw"></span>Long</button>
+          <button class="chip" data-type="rest"><span class="sw"></span>Rest</button>
+          <button class="chip" data-type="race"><span class="sw"></span>Race</button>
+        </div>
+
+        <div class="field"><label>Title</label><input placeholder="e.g. Aerobic shakeout" style="font-style:italic;color:var(--muted)" /></div>
+        <div class="field"><label>Description</label><textarea placeholder="What should they do?"></textarea></div>
+        <div class="field-row">
+          <div class="field"><label>Distance (km)</label><input placeholder="—" style="color:var(--muted)" /></div>
+          <div class="field"><label>Pace</label><input placeholder="—" style="color:var(--muted)" /></div>
+        </div>
+        <div class="field"><label>Terrain</label><input placeholder="—" style="color:var(--muted)" /></div>
+
+        <div class="actions"><button class="btn">Add workout</button></div>
+      </div></div>
+      <div class="caption">Coach · add workout</div>
+    </div>
+
+    <!-- Plan upload -->
+    <div class="case">
+      <div class="phone"><div class="phone-inner">
+        <div class="navbar"><div class="back">‹ Back</div><div class="title">Upload plan</div><div class="save">Apply</div></div>
+
+        <h2 class="h-display">From spreadsheet</h2>
+        <p class="lede">Drop an Excel file. We'll parse weeks, days and workouts.</p>
+
+        <div class="drop">
+          <div class="icon">↑</div>
+          <div class="h">Drag a file here</div>
+          <div class="sub">.xlsx · .xls · or click to browse</div>
+          <div class="pick">Choose file</div>
+        </div>
+
+        <div class="preview-h">Preview · 4 weeks · 22 sessions</div>
+
+        <div class="preview-row">
+          <div class="day-stamp">Mon 28</div>
+          <div class="sw" style="background:var(--type-easy)"></div>
+          <div class="body"><div class="name">Aerobic shakeout</div><div class="meta">6 km · 5:30/km</div></div>
+        </div>
+        <div class="preview-row">
+          <div class="day-stamp">Tue 29</div>
+          <div class="sw" style="background:var(--type-tempo)"></div>
+          <div class="body"><div class="name">3 × 2 km @ threshold</div><div class="meta">10 km · 4:15/km</div></div>
+        </div>
+        <div class="preview-row">
+          <div class="day-stamp">Wed 30</div>
+          <div class="sw" style="background:var(--type-recovery)"></div>
+          <div class="body"><div class="name">Easy 45'</div><div class="meta">conversational · zone 2</div></div>
+        </div>
+        <div class="preview-row">
+          <div class="day-stamp">Fri 02</div>
+          <div class="sw" style="background:var(--type-speed)"></div>
+          <div class="body"><div class="name">8 × 400m</div><div class="meta">@ 5K pace · 200m jog</div></div>
+        </div>
+        <div class="preview-row">
+          <div class="day-stamp">Sat 03</div>
+          <div class="sw" style="background:var(--type-long)"></div>
+          <div class="body"><div class="name">Long run + surges</div><div class="meta">22 km · last 6 km @ MP</div></div>
+        </div>
+      </div></div>
+      <div class="caption">Plan upload</div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
