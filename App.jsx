@@ -757,6 +757,67 @@ export default function App() {
     if (error) setAuthError(error.message);
   };
 
+  // ── Sign in / sign up with email + password ──
+  // Uses Supabase auth. Unifies the two flows under one call: if mode is
+  // "signin" we call signInWithPassword; if "signup" we call signUp. Errors
+  // surface via setAuthError; on success the auth listener picks up the
+  // session and resolves the user.
+  const [authMode, setAuthMode] = useState("signin");      // "signin" | "signup"
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authNotice, setAuthNotice] = useState(null);
+
+  const signInWithEmail = async (e) => {
+    if (e?.preventDefault) e.preventDefault();
+    setAuthError(null);
+    setAuthNotice(null);
+    if (!authEmail.trim() || !authPassword) {
+      setAuthError("Email and password are required.");
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      if (authMode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email: authEmail.trim().toLowerCase(),
+          password: authPassword,
+          options: { emailRedirectTo: window.location.origin },
+        });
+        if (error) throw error;
+        setAuthNotice("Check your email to confirm — then sign in.");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: authEmail.trim().toLowerCase(),
+          password: authPassword,
+        });
+        if (error) throw error;
+      }
+    } catch (err) {
+      setAuthError(err.message || "Sign-in failed.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const requestPasswordReset = async () => {
+    setAuthError(null);
+    setAuthNotice(null);
+    if (!authEmail.trim()) { setAuthError("Type your email above first."); return; }
+    setAuthBusy(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(authEmail.trim().toLowerCase(), {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      setAuthNotice("Reset link sent — check your email.");
+    } catch (err) {
+      setAuthError(err.message || "Couldn't send reset link.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null); setRole(null); setProfile(null);
@@ -1114,42 +1175,94 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   //  LOGIN SCREEN
   // ────────────────────────────────────────────────────────────
-  if (!user) return (
-    <div style={{ ...S.page, display:"flex", flexDirection:"column", padding:"40px 28px", maxWidth:520, margin:"0 auto" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span className="fp-seal" style={{ fontSize:28, color:C.hot }}>✻</span>
-        <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.mute }}>A TRAINING JOURNAL</span>
-      </div>
-      <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", margin:"60px 0 40px" }}>
-        <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.2em", color:C.hot, marginBottom:24 }}>FOR DISTANCE RUNNERS</span>
-        <h1 className="t-display" style={{ fontSize:88, fontWeight:400, lineHeight:0.92, margin:0, color:C.ink }}>
-          Form
-          <br/>
-          <span className="t-display-italic" style={{ color:C.mute }}>&amp;</span>
-          <br/>
-          Pace.
+  if (!user) {
+    const underlineInput = {
+      width: "100%",
+      background: "transparent",
+      border: "none",
+      borderBottom: `1px solid ${C.rule}`,
+      borderRadius: 0,
+      padding: "8px 0",
+      fontFamily: S.bodyFont,
+      fontSize: 16,
+      color: C.ink,
+      outline: "none",
+      caretColor: C.accent,
+    };
+    return (
+      <div style={{ ...S.page, display:"flex", flexDirection:"column", padding:"40px 28px", maxWidth:520, margin:"0 auto", minHeight:"100vh" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", marginBottom:48 }}>
+          <span className="fp-seal" style={{ fontSize:48, color:C.accent }}>✻</span>
+        </div>
+
+        <h1 className="t-display" style={{ fontSize:48, fontWeight:400, lineHeight:1.0, margin:"0 0 14px", color:C.ink, textAlign:"center" }}>
+          Run with intention.
         </h1>
-        <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:19, lineHeight:1.5, color:C.inkSoft, marginTop:28, maxWidth:360 }}>
-          For distance runners and the coaches who push them. Write what you ran. Listen to what your body says back.
+        <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:17, lineHeight:1.5, color:C.mute, textAlign:"center", margin:"0 0 40px" }}>
+          A training journal for distance runners and the coaches who push them.
+        </p>
+
+        <form onSubmit={signInWithEmail} autoComplete="on">
+          <div style={{ marginBottom:20 }}>
+            <label className="t-eyebrow" htmlFor="login-email" style={{ display:"block", marginBottom:6 }}>Email</label>
+            <input
+              id="login-email" type="email" autoComplete="email" required
+              value={authEmail} onChange={e => setAuthEmail(e.target.value)}
+              style={underlineInput}
+            />
+          </div>
+          <div style={{ marginBottom:8 }}>
+            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6 }}>
+              <label className="t-eyebrow" htmlFor="login-password">Password</label>
+              <button type="button" onClick={requestPasswordReset}
+                style={{ background:"none", border:"none", color:C.accent, fontFamily:S.bodyFont, fontSize:11, letterSpacing:"0.1em", cursor:"pointer", padding:0 }}>
+                Forgot?
+              </button>
+            </div>
+            <input
+              id="login-password" type="password" autoComplete={authMode === "signup" ? "new-password" : "current-password"} required
+              value={authPassword} onChange={e => setAuthPassword(e.target.value)}
+              style={underlineInput}
+            />
+          </div>
+          {authError && (
+            <div style={{ marginTop:14, color:C.hot, fontSize:13, fontFamily:S.bodyFont }}>{authError}</div>
+          )}
+          {authNotice && (
+            <div style={{ marginTop:14, color:C.accent, fontSize:13, fontFamily:S.bodyFont }}>{authNotice}</div>
+          )}
+          <button type="submit" disabled={authBusy} className="fp-btn fp-btn--accent"
+            style={{ width:"100%", padding:"16px", marginTop:24, opacity:authBusy ? 0.6 : 1 }}>
+            {authBusy ? (authMode === "signup" ? "Creating…" : "Signing in…") : (authMode === "signup" ? "Create account" : "Sign in")}
+          </button>
+        </form>
+
+        <div style={{ display:"flex", alignItems:"center", gap:12, margin:"28px 0" }}>
+          <div style={{ flex:1, height:1, background:C.rule }}/>
+          <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.18em", color:C.mute }}>OR</span>
+          <div style={{ flex:1, height:1, background:C.rule }}/>
+        </div>
+
+        <button onClick={signInWithGoogle} type="button" className="fp-btn fp-btn--ghost" style={{ width:"100%", padding:"14px" }}>
+          <svg width="16" height="16" viewBox="0 0 48 48" style={{ display:"inline-block" }}>
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        <p style={{ marginTop:36, textAlign:"center", fontFamily:S.displayFont, fontSize:15, color:C.inkSoft, fontStyle:"italic" }}>
+          {authMode === "signup" ? "Already have an account? " : "New to Form & Pace? "}
+          <button type="button" onClick={() => { setAuthMode(authMode === "signup" ? "signin" : "signup"); setAuthError(null); setAuthNotice(null); }}
+            style={{ background:"none", border:"none", color:C.accent, cursor:"pointer", fontFamily:S.displayFont, fontSize:15, fontStyle:"italic", padding:0, textDecoration:"underline" }}>
+            {authMode === "signup" ? "Sign in." : "Start here."}
+          </button>
         </p>
       </div>
-      <button onClick={signInWithGoogle} className="fp-btn" style={{ width:"100%", padding:"18px" }}>
-        <svg width="16" height="16" viewBox="0 0 48 48" style={{ display:"inline-block" }}>
-          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-        </svg>
-        Continue with Google
-      </button>
-      {authError && (
-        <div style={{ marginTop:16, color:C.hot, fontSize:13, fontFamily:S.bodyFont, textAlign:"center" }}>{authError}</div>
-      )}
-      <div className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.1em", textAlign:"center", marginTop:16 }}>
-        ATHLETES ARE LINKED TO THEIR COACH BY EMAIL.
-      </div>
-    </div>
-  );
+    );
+  }
 
   // ────────────────────────────────────────────────────────────
   //  ATHLETE NOT FOUND
