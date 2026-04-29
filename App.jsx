@@ -738,6 +738,23 @@ export default function App() {
   // Throws on error so the Plan Builder's inline banner can surface the message.
   const handleSavePlan = async (athleteEmail, weeksArray, meta = {}) => {
     const key = athleteEmail?.toLowerCase();
+
+    // Refuse to overwrite a non-empty stored plan with an empty weeks array.
+    // Guards against a race where Plan Builder mounts before athletePrograms
+    // hydrates, plus silently-failing Excel imports in replace mode.
+    if (!weeksArray || weeksArray.length === 0) {
+      const { data: existing } = await supabase
+        .from('coach_plans')
+        .select('plan_json')
+        .eq('athlete_email', key)
+        .maybeSingle();
+      const pj = existing?.plan_json;
+      const existingWeeks = Array.isArray(pj) ? pj : (pj?.weeks || []);
+      if (existingWeeks.length > 0) {
+        throw new Error('Refusing to save: existing plan has ' + existingWeeks.length + ' week(s) but the form is empty. Reload the athlete or import a plan first.');
+      }
+    }
+
     const planJson = {
       athleteName: meta.name?.trim() || null,
       athleteGoal: meta.goal?.trim() || null,
