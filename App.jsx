@@ -806,6 +806,33 @@ export default function App() {
             ))}
           </div>
 
+          {da.weeks.length === 0 && (() => {
+            const athActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
+            if (athActs.length === 0) {
+              return <div style={{ textAlign:"center", padding:"40px 0", color:C.mid, fontSize:14 }}>No activities or training plan yet.</div>;
+            }
+            return (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:8, fontFamily:S.bodyFont }}>All Activities</div>
+                {athActs.map(act => (
+                  <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setCoachScreen("extra-activity"); }} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, background:"#fdf0f0", border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, cursor:"pointer" }}>
+                    <div style={{ fontSize:22 }}>🏃</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <div style={{ fontWeight:700, fontSize:14, color:C.navy }}>{act.activity_date} · {act.activity_type || "Run"}</div>
+                        <div style={{ fontSize:11, color:C.mid, fontWeight:700 }}>{(act.source || "manual").toUpperCase()}</div>
+                      </div>
+                      <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>
+                        {act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}
+                        {act.notes ? ` — ${act.notes}` : ""}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
           {da.weeks.length > 0 && coachWeekIdx !== null && (() => {
             const athActs     = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
             const athActDates = new Set(athActs.map(a => a.activity_date));
