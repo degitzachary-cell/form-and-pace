@@ -13,6 +13,39 @@ import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPick
 // New athletes get a blank program until their coach creates one.
 const ATHLETE_PROGRAMS = {};
 
+// Shared form used by athlete self-edit and coach edit-on-behalf screens.
+function ProfileForm({ form, setForm, email }) {
+  const inputStyle = { ...S.input };
+  const labelStyle = { fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: "uppercase", marginBottom: 6 };
+  const setField = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  return (
+    <div style={{ background: C.white, border: `1px solid ${C.rule}`, borderRadius: 2, padding: "16px 18px", marginBottom: 14 }}>
+      {email && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={labelStyle}>Email (cannot be changed)</div>
+          <input style={{ ...inputStyle, background: C.lightRule, color: C.mid }} value={email} disabled />
+        </div>
+      )}
+      <div style={{ marginBottom: 14 }}>
+        <div style={labelStyle}>Name</div>
+        <input style={inputStyle} value={form.name} onChange={setField("name")} placeholder="Full name" />
+      </div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={labelStyle}>Goal</div>
+        <input style={inputStyle} value={form.goal} onChange={setField("goal")} placeholder="e.g. <1:30 HM" />
+      </div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={labelStyle}>Current PB</div>
+        <input style={inputStyle} value={form.current_pb} onChange={setField("current_pb")} placeholder="e.g. HM 1:32 / FM 3:18" />
+      </div>
+      <div>
+        <div style={labelStyle}>Avatar (initials)</div>
+        <input style={inputStyle} maxLength={3} value={form.avatar} onChange={setField("avatar")} placeholder="e.g. JB" />
+      </div>
+    </div>
+  );
+}
+
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
@@ -33,6 +66,12 @@ export default function App() {
   const [sessionDateOverride, setSessionDateOverride] = useState(null);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
+
+  // Profile editor state — used by both athlete (self-edit) and coach
+  // (edit-on-behalf). The form is populated when entering either profile screen.
+  const [profileForm, setProfileForm] = useState({ name: "", goal: "", current_pb: "", avatar: "" });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileStatus, setProfileStatus] = useState(null);
 
   // Coach state
   const [coachScreen,   setCoachScreen]   = useState("dashboard");
@@ -555,6 +594,81 @@ export default function App() {
     setIsSaving(false);
   };
 
+  // ── Profile editor ──
+  // Populate the form whenever an athlete or coach enters the profile screen.
+  useEffect(() => {
+    if (role === "athlete" && screen === "profile" && profile) {
+      setProfileForm({
+        name: profile.name || "",
+        goal: profile.goal || "",
+        current_pb: profile.current_pb || "",
+        avatar: profile.avatar || "",
+      });
+      setProfileStatus(null);
+    }
+  }, [role, screen, profile]);
+
+  useEffect(() => {
+    if (role === "coach" && coachScreen === "profile" && dashAthlete) {
+      const ap = athletePrograms[dashAthlete] || {};
+      setProfileForm({
+        name: ap.name || "",
+        goal: ap.goal && ap.goal !== "—" ? ap.goal : "",
+        current_pb: ap.current && ap.current !== "—" ? ap.current : "",
+        avatar: ap.avatar || "",
+      });
+      setProfileStatus(null);
+    }
+  }, [role, coachScreen, dashAthlete, athletePrograms]);
+
+  const handleSaveProfile = async (targetEmail) => {
+    if (!targetEmail) return;
+    setProfileSaving(true);
+    setProfileStatus(null);
+    try {
+      const key = targetEmail.toLowerCase();
+      const payload = {
+        email: key,
+        name: profileForm.name.trim() || null,
+        goal: profileForm.goal.trim() || null,
+        current_pb: profileForm.current_pb.trim() || null,
+        avatar: profileForm.avatar.trim() || null,
+        role: "athlete",
+      };
+      const { data, error } = await supabase
+        .from("profiles")
+        .upsert(payload, { onConflict: "email" })
+        .select()
+        .single();
+      if (error) throw error;
+      if (role === "athlete" && key === user.email?.toLowerCase()) {
+        setProfile(data);
+      }
+      setAthletePrograms(prev => {
+        const existing = prev[key] || {};
+        return {
+          ...prev,
+          [key]: {
+            ...existing,
+            name:    data.name       || existing.name,
+            goal:    data.goal       || existing.goal,
+            current: data.current_pb || existing.current,
+            avatar:  data.avatar     || existing.avatar,
+            weeks:   existing.weeks  || [],
+          },
+        };
+      });
+      setProfileStatus({ kind: "success", message: "Profile saved." });
+      setTimeout(() => {
+        if (role === "athlete") setScreen("home");
+        else setCoachScreen("athlete");
+      }, 600);
+    } catch (e) {
+      setProfileStatus({ kind: "error", message: e.message || "Save failed." });
+    }
+    setProfileSaving(false);
+  };
+
   // ── Coach reply ──
   const handleCoachReply = async (sessionId) => {
     if (!coachReply.trim()) return;
@@ -811,6 +925,35 @@ export default function App() {
   }
 
   // ────────────────────────────────────────────────────────────
+  //  COACH → EDIT ATHLETE PROFILE
+  // ────────────────────────────────────────────────────────────
+  if (role === "coach" && coachScreen === "profile" && dashAthlete) {
+    const ap = athletePrograms[dashAthlete] || {};
+    const targetName = ap.name || prettyEmailName(dashAthlete);
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title={`Edit ${targetName}`} subtitle={dashAthlete} onBack={() => setCoachScreen("athlete")} />
+        <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 80px" }}>
+          <ProfileForm form={profileForm} setForm={setProfileForm} email={dashAthlete} />
+          {profileStatus && (
+            <div style={{ marginBottom: 12, padding: "10px 12px", fontSize: 13, borderRadius: 2,
+              background: profileStatus.kind === "error" ? "#fdf0f0" : "#eef6ec",
+              color:      profileStatus.kind === "error" ? C.crimson : C.green,
+              border: `1px solid ${profileStatus.kind === "error" ? C.crimson : C.green}` }}>
+              {profileStatus.message}
+            </div>
+          )}
+          <button onClick={() => handleSaveProfile(dashAthlete)} disabled={profileSaving}
+            style={S.primaryBtn(C.crimson, profileSaving)}>
+            {profileSaving ? "Saving…" : "Save profile"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
   //  COACH → ATHLETE DETAIL
   // ────────────────────────────────────────────────────────────
   if (role === "coach" && coachScreen === "athlete" && dashAthlete) {
@@ -839,6 +982,11 @@ export default function App() {
               </div>
             ))}
           </div>
+
+          <button onClick={() => setCoachScreen("profile")}
+            style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"10px", fontSize:13, fontWeight:600 }}>
+            ✏️ Edit Profile (name, goal, PB)
+          </button>
 
           {da.weeks.length === 0 && (() => {
             const athActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
@@ -1178,6 +1326,34 @@ export default function App() {
   }
 
   // ────────────────────────────────────────────────────────────
+  //  ATHLETE — PROFILE
+  // ────────────────────────────────────────────────────────────
+  if (role === "athlete" && screen === "profile") {
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title="My Profile" subtitle="Edit your details" onBack={() => setScreen("home")}
+          right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>} />
+        <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 80px" }}>
+          <ProfileForm form={profileForm} setForm={setProfileForm} email={user.email} />
+          {profileStatus && (
+            <div style={{ marginBottom: 12, padding: "10px 12px", fontSize: 13, borderRadius: 2,
+              background: profileStatus.kind === "error" ? "#fdf0f0" : "#eef6ec",
+              color:      profileStatus.kind === "error" ? C.crimson : C.green,
+              border: `1px solid ${profileStatus.kind === "error" ? C.crimson : C.green}` }}>
+              {profileStatus.message}
+            </div>
+          )}
+          <button onClick={() => handleSaveProfile(user.email)} disabled={profileSaving}
+            style={S.primaryBtn(C.crimson, profileSaving)}>
+            {profileSaving ? "Saving…" : "Save profile"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
   //  ATHLETE — HOME
   // ────────────────────────────────────────────────────────────
   if (role === "athlete" && screen === "home") {
@@ -1205,10 +1381,14 @@ export default function App() {
         />
         <div style={{ maxWidth:500, margin:"0 auto", padding:"0 0 80px" }}>
 
-          <div style={{ margin:"20px 16px", background:C.white, border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, borderRadius:2, padding:"14px 18px" }}>
-            <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>Season Goal</div>
-            <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>{athleteData.goal}</div>
-            <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>Current PB: {athleteData.current}</div>
+          <div onClick={() => setScreen("profile")}
+            style={{ margin:"20px 16px", background:C.white, border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, borderRadius:2, padding:"14px 18px", cursor:"pointer" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontSize:10, letterSpacing:3, color:C.crimson, textTransform:"uppercase", marginBottom:4, fontFamily:S.bodyFont }}>Season Goal</div>
+              <div style={{ fontSize:11, color:C.mid }}>Edit ›</div>
+            </div>
+            <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont }}>{athleteData.goal || "Set your goal"}</div>
+            <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>Current PB: {athleteData.current || "—"}</div>
           </div>
 
           {/* 8-Week Rolling Volume */}
