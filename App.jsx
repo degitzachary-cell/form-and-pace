@@ -57,7 +57,6 @@ function TimeSelect({ value, onChange, withHours }) {
     </div>
   );
 }
-
 const EMPTY_PB_GOAL = { "5k": "", "10k": "", "half_marathon": "", "full_marathon": "", "other": "" };
 
 const PB_GOAL_LABEL = { "5k": "5K", "10k": "10K", "half_marathon": "HM", "full_marathon": "FM" };
