@@ -16,7 +16,7 @@ import {
 import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail } from "./components.jsx";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -330,6 +330,7 @@ export default function App() {
   // Sub-tab inside the coach athlete detail screen: plan / logs / messages.
   // Profile tab routes to coachScreen "profile" instead.
   const [coachAthleteTab, setCoachAthleteTab] = useState("plan");
+  const [letterheadOpen, setLetterheadOpen] = useState(false);
   const [dashAthlete,   setDashAthlete]   = useState(null);
   const [coachReply,    setCoachReply]    = useState("");
   const [coachFilter,   setCoachFilter]   = useState("all");
@@ -2684,26 +2685,49 @@ export default function App() {
                 // Prefer the session log thread; fall back to the activity.
                 const threadSource = (log?.messages?.length || log?.coach_reply) ? log : (linkedAthAct || null);
                 const thread = threadSource ? getThread(threadSource) : [];
+                const sendCoachReply = async (body) => {
+                  const next = appendMessage(threadSource?.messages || [], { author: "coach", body });
+                  if (!next) return;
+                  const ts = new Date().toISOString();
+                  let wroteAnywhere = false;
+                  if (linkedAthAct) {
+                    const { data: actUpd } = await supabase
+                      .from("activities").update({ messages: next, coach_reply: body }).eq("id", linkedAthAct.id).select().maybeSingle();
+                    if (actUpd) { setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a)); wroteAnywhere = true; }
+                  }
+                  const { data: updated } = await supabase
+                    .from("session_logs").update({ messages: next, coach_reply: body, updated_at: ts }).eq("session_id", activeSession.id).select().maybeSingle();
+                  if (updated) { setLogs(prev => ({ ...prev, [activeSession.id]: updated })); wroteAnywhere = true; }
+                  if (!wroteAnywhere) alert("No session log or activity found for this session.");
+                };
+                const recap = log?.feedback || linkedAthAct?.notes || (an?.distance_km ? `${an.distance_km}km logged.` : null);
+                const athleteName = activeSession?.athleteEmail
+                  ? (athletePrograms[activeSession.athleteEmail.toLowerCase()]?.name || prettyEmailName(activeSession.athleteEmail))
+                  : null;
                 return (
-                  <ThreadPanel
-                    thread={thread}
-                    viewerRole="coach"
-                    onSend={async (body) => {
-                      const next = appendMessage(threadSource?.messages || [], { author: "coach", body });
-                      if (!next) return;
-                      const ts = new Date().toISOString();
-                      let wroteAnywhere = false;
-                      if (linkedAthAct) {
-                        const { data: actUpd } = await supabase
-                          .from("activities").update({ messages: next, coach_reply: body }).eq("id", linkedAthAct.id).select().maybeSingle();
-                        if (actUpd) { setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a)); wroteAnywhere = true; }
-                      }
-                      const { data: updated } = await supabase
-                        .from("session_logs").update({ messages: next, coach_reply: body, updated_at: ts }).eq("session_id", activeSession.id).select().maybeSingle();
-                      if (updated) { setLogs(prev => ({ ...prev, [activeSession.id]: updated })); wroteAnywhere = true; }
-                      if (!wroteAnywhere) alert("No session log or activity found for this session.");
-                    }}
-                  />
+                  <>
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                      <button type="button" onClick={() => setLetterheadOpen(true)}
+                        className="fp-btn fp-btn--ghost"
+                        style={{ padding:"8px 14px", fontSize:11 }}>
+                        Reply by letter →
+                      </button>
+                    </div>
+                    <ThreadPanel
+                      thread={thread}
+                      viewerRole="coach"
+                      onSend={sendCoachReply}
+                    />
+                    <LetterheadReplyModal
+                      open={letterheadOpen}
+                      onClose={() => setLetterheadOpen(false)}
+                      athleteName={athleteName}
+                      coachName={user.user_metadata?.full_name || user.email}
+                      recap={recap}
+                      recapByline={activeSession?.type ? `${activeSession.type}` : null}
+                      onSend={sendCoachReply}
+                    />
+                  </>
                 );
               })()}
             </>

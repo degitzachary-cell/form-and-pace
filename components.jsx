@@ -42,6 +42,113 @@ export function RtssPillFor({ durationMin, distanceKm, profile, size = 11 }) {
   return <RtssPill rtss={rtss} size={size}/>;
 }
 
+// ─── LETTERHEAD REPLY MODAL ──────────────────────────────────────────────────
+// Ceremonial reply experience for the coach. Opens over a scrim, displays
+// the athlete's recap as a pull-quote, then a generous textarea for the
+// coach to write back. Sign-off auto-line in mono mute. Saves as a normal
+// thread message via onSend.
+//
+// Props:
+//   open       — boolean controlling visibility
+//   onClose    — close (× or ESC)
+//   athleteName, coachName
+//   recap      — the athlete's note/feedback to anchor the reply
+//   recapByline — e.g. "8km tempo · 3 hours ago"
+//   onSend(body) — async; on success the modal clears + closes
+export function LetterheadReplyModal({ open, onClose, athleteName, coachName, recap, recapByline, onSend }) {
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  if (!open) return null;
+  const handleSend = async () => {
+    if (!draft.trim() || sending) return;
+    setSending(true);
+    try {
+      await onSend?.(draft);
+      setDraft("");
+      onClose?.();
+    } catch (e) { console.error("letterhead send failed", e); }
+    finally { setSending(false); }
+  };
+  const today = new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(26, 24, 20, 0.55)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 100, padding: 24,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "var(--c-paper)", border: "1px solid var(--c-rule)",
+        maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto",
+        padding: "32px 36px",
+      }}>
+        {/* Letterhead header */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+          <span className="fp-seal" style={{ fontSize: 28, color: "var(--c-accent)" }}>✻</span>
+          <button onClick={onClose}
+            style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--c-mute)", fontSize: 20, fontFamily: "var(--f-display)", lineHeight: 1, padding: 0 }}
+            aria-label="Close">×</button>
+        </div>
+
+        <div className="t-display-italic" style={{ fontSize: 16, color: "var(--c-mute)", marginBottom: 4 }}>
+          From {coachName || "Coach"}
+        </div>
+        <div className="t-mono" style={{ fontSize: 11, color: "var(--c-mute)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 22 }}>
+          {today}
+        </div>
+
+        {/* Athlete recap pull-quote */}
+        {recap && (
+          <div style={{ position: "relative", padding: "0 0 0 36px", marginBottom: 28 }}>
+            <span style={{ position: "absolute", left: 0, top: -6, fontFamily: "var(--f-display)", fontSize: 56, color: "var(--c-rule)", lineHeight: 1, fontStyle: "italic" }}>“</span>
+            <p style={{ fontFamily: "var(--f-display)", fontStyle: "italic", fontSize: 17, lineHeight: 1.55, color: "var(--c-inkSoft)", margin: 0 }}>
+              {recap}
+            </p>
+            {(recapByline || athleteName) && (
+              <div className="t-mono" style={{ fontSize: 10, color: "var(--c-mute)", letterSpacing: "0.14em", marginTop: 10, textTransform: "uppercase" }}>
+                — {athleteName || "Athlete"}{recapByline ? ` · ${recapByline}` : ""}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Reply textarea — display serif, big and quiet */}
+        <textarea
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder={athleteName ? `Write back to ${athleteName.split(" ")[0]}…` : "Write back…"}
+          autoFocus
+          style={{
+            width: "100%", minHeight: 200, padding: "14px 0",
+            background: "transparent", border: 0,
+            borderTop: "1px solid var(--c-rule)", borderBottom: "1px solid var(--c-rule)",
+            color: "var(--c-ink)",
+            fontFamily: "var(--f-display)", fontSize: 20, lineHeight: 1.55,
+            resize: "vertical", outline: "none",
+          }}
+        />
+
+        {/* Sign-off auto-line */}
+        <div className="t-mono" style={{ marginTop: 14, fontSize: 11, color: "var(--c-mute)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+          — {coachName ? coachName.split(" ")[0] : "Coach"}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10, marginTop: 28, alignItems: "center", justifyContent: "flex-end" }}>
+          <button onClick={onClose} type="button"
+            style={{ background: "transparent", border: 0, color: "var(--c-mute)", padding: "10px 14px", fontFamily: "var(--f-body)", fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer" }}>
+            Save draft
+          </button>
+          <button onClick={handleSend} type="button" disabled={!draft.trim() || sending}
+            className="fp-btn fp-btn--accent"
+            style={{ padding: "12px 24px", opacity: !draft.trim() || sending ? 0.5 : 1 }}>
+            {sending ? "Sending…" : "Send reply"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── COACH LEFT RAIL (desktop) ───────────────────────────────────────────────
 // Heavy ink panel on the left edge, paper-tinted text. Five nav items
 // (Dashboard / Athletes / Plans / Inbox / Library) with an inbox count badge,
