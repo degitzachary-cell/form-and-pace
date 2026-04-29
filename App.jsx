@@ -1575,15 +1575,96 @@ export default function App() {
               {rosterContent}
             </div>
 
-            {/* Right panel — athlete week detail */}
+            {/* Right panel — athlete week detail (or inbox preview when none) */}
             <div style={{ flex:1, overflowY:"auto", background:C.cream, padding:"28px 36px 80px" }}>
-              {!dpAthlete ? (
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60%", flexDirection:"column", gap:16, color:C.mid }}>
-                  <div style={{ fontSize:48, opacity:0.2, fontFamily:S.displayFont }}>←</div>
-                  <div style={{ fontSize:16, fontFamily:S.displayFont, color:C.navy }}>Select an athlete</div>
-                  <div style={{ fontSize:13 }}>Their training week will appear here</div>
-                </div>
-              ) : (
+              {!dpAthlete ? (() => {
+                // Inbox preview — latest 5 logs/activities across all athletes,
+                // newest first. Mirrors the full /inbox screen but in a quiet
+                // panel so coaches can land on dashboard and spot what's hot.
+                const previews = [];
+                for (const [email, data] of athletes) {
+                  const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
+                  const actsForA = activitiesByEmail.get(email.toLowerCase()) || [];
+                  for (const w of weeksList) {
+                    for (const s of (w.sessions || [])) {
+                      const log = logs[s.id];
+                      if (!log?.feedback && !log?.analysis?.distance_km) continue;
+                      const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
+                      previews.push({
+                        kind: "log", email, athleteName: data.name || prettyEmailName(email),
+                        excerpt: log?.feedback || `${log?.analysis?.distance_km}km logged`,
+                        ts: log?.updated_at || log?.created_at || onDate,
+                        sess: s, weekStart: w.weekStart,
+                      });
+                    }
+                  }
+                  for (const a of actsForA) {
+                    if (a.source === "session") continue;
+                    previews.push({
+                      kind: "act", email, athleteName: data.name || prettyEmailName(email),
+                      excerpt: a.notes || `${a.distance_km}km extra activity`,
+                      ts: a.updated_at || a.created_at || a.activity_date,
+                      act: a,
+                    });
+                  }
+                }
+                previews.sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
+                const top = previews.slice(0, 5);
+                const fmtAgo = (ts) => {
+                  if (!ts) return "";
+                  const then = new Date(ts);
+                  const minsAgo = Math.max(0, Math.round((Date.now() - then.getTime()) / 60000));
+                  if (minsAgo < 60) return `${minsAgo}m`;
+                  const hrs = Math.round(minsAgo / 60);
+                  if (hrs < 24) return `${hrs}h`;
+                  return `${Math.round(hrs / 24)}d`;
+                };
+                return (
+                  <div style={{ maxWidth:560 }}>
+                    <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", paddingBottom:12, borderBottom:`1px solid ${C.rule}` }}>
+                      <span className="t-eyebrow" style={{ color:C.ink }}>Inbox</span>
+                      <button onClick={() => setCoachScreen("inbox")}
+                        style={{ background:"transparent", border:0, color:C.accent, fontFamily:S.bodyFont, fontSize:11, letterSpacing:"0.1em", cursor:"pointer" }}>
+                        Open inbox →
+                      </button>
+                    </div>
+                    {top.length === 0 ? (
+                      <div style={{ marginTop:18, fontFamily:S.displayFont, fontStyle:"italic", color:C.mute, fontSize:15 }}>
+                        Nothing waiting. The athletes are quiet.
+                      </div>
+                    ) : (
+                      <div>
+                        {top.map((it, i) => (
+                          <div key={i} onClick={() => {
+                              setDashAthlete(it.email);
+                              if (it.kind === "log") {
+                                setActiveSession({ ...it.sess, weekStart: it.weekStart, athleteEmail: it.email });
+                                setCoachScreen("session");
+                              } else {
+                                setActiveExtraActivity(it.act);
+                                setCoachScreen("extra-activity");
+                              }
+                            }}
+                            style={{ padding:"14px 0", borderBottom:`1px solid ${C.ruleSoft}`, cursor:"pointer" }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:10 }}>
+                              <span style={{ fontFamily:S.displayFont, fontSize:17, color:C.ink }}>{it.athleteName}</span>
+                              <span className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.08em" }}>{fmtAgo(it.ts).toUpperCase()}</span>
+                            </div>
+                            <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:14, color:C.inkSoft, margin:"4px 0 0", lineHeight:1.45, overflow:"hidden", textOverflow:"ellipsis", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                              "{it.excerpt}"
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginTop:32, padding:"24px", border:`1px dashed ${C.rule}`, textAlign:"center", color:C.mute }}>
+                      <span style={{ fontFamily:S.displayFont, fontSize:15, fontStyle:"italic" }}>
+                        Pick an athlete from the roster to see their week.
+                      </span>
+                    </div>
+                  </div>
+                );
+              })() : (
                 <>
                   {/* Athlete header */}
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:22 }}>
