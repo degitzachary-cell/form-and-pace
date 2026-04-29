@@ -1964,15 +1964,6 @@ export default function App() {
           />
         )}
 
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: "uppercase", marginBottom: 6 }}>Session date</div>
-          <input
-            type="date"
-            value={sessionDateOverride || ""}
-            onChange={e => setSessionDateOverride(e.target.value)}
-            style={{ ...S.input, width: "auto" }}
-          />
-        </div>
 
         {!stravaDetail && (
           <div style={{ display:"flex", gap:12, marginBottom:14 }}>
