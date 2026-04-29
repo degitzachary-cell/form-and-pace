@@ -16,7 +16,7 @@ import {
 import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel } from "./components.jsx";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -1849,11 +1849,11 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   //  PROFILE EDITOR — shared renderer for athlete-self and coach-edit-on-behalf
   // ────────────────────────────────────────────────────────────
-  const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight }) => (
+  const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight, tabBar = null }) => (
     <div style={S.page}>
       <div style={S.grain}/>
       <Header title={title} subtitle={subtitle} onBack={onBack} right={headerRight} />
-      <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 80px" }}>
+      <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 96px" }}>
         <ProfileForm form={profileForm} setForm={setProfileForm} email={email} />
         {profileStatus && (
           <div style={{ marginBottom: 12, padding: "10px 12px", fontSize: 13, borderRadius: 2,
@@ -1868,6 +1868,7 @@ export default function App() {
           {profileSaving ? "Saving…" : "Save profile"}
         </button>
       </div>
+      {tabBar}
     </div>
   );
 
@@ -2612,6 +2613,7 @@ export default function App() {
       email: user.email,
       onBack: () => setScreen("today"),
       headerRight: <button onClick={signOut} style={S.signOutBtn}>Sign out</button>,
+      tabBar: <MobileTabBar current="profile" isDesktop={isDesktop} onTab={(s) => setScreen(s)} onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}/>,
     });
   }
 
@@ -3262,6 +3264,12 @@ export default function App() {
 
           </>}
         </div>
+        <MobileTabBar
+          current="today"
+          isDesktop={isDesktop}
+          onTab={(s) => setScreen(s)}
+          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+        />
       </div>
     );
   }
@@ -3559,6 +3567,12 @@ export default function App() {
             );
           })()}
         </div>
+        <MobileTabBar
+          current="home"
+          isDesktop={isDesktop}
+          onTab={(s) => setScreen(s)}
+          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+        />
       </div>
     );
   }
@@ -4188,6 +4202,12 @@ export default function App() {
             );
           })}
         </div>
+        <MobileTabBar
+          current="home"
+          isDesktop={isDesktop}
+          onTab={(s) => setScreen(s)}
+          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+        />
       </div>
     );
   }

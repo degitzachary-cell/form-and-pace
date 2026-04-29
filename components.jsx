@@ -42,6 +42,97 @@ export function RtssPillFor({ durationMin, distanceKm, profile, size = 11 }) {
   return <RtssPill rtss={rtss} size={size}/>;
 }
 
+// ─── MOBILE TAB BAR ──────────────────────────────────────────────────────────
+// Sticky bottom nav for the athlete on small screens. Four destinations:
+// Today / Week / Log / Profile. Hairline-top, paper background, ink dot
+// under the active item. No hover effects; tap-only.
+//
+// `current` is one of: "today" | "home" | "log" | "profile". The Log tab is
+// special — instead of a standalone screen, tapping it routes the parent
+// into the log-activity flow via `onTapLog`. All other taps call onTab(name).
+//
+// Hidden on tablet/desktop where a different navigation pattern applies.
+export function MobileTabBar({ current, onTab, onTapLog, isDesktop }) {
+  if (isDesktop) return null;
+
+  const Item = ({ name, label, glyph, onClick }) => {
+    const active = current === name;
+    return (
+      <button
+        onClick={onClick}
+        style={{
+          flex: 1, background: "transparent", border: 0,
+          padding: "10px 4px 8px",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+          cursor: "pointer", color: active ? "var(--c-ink)" : "var(--c-mute)",
+        }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 18 }}>
+          {glyph}
+        </div>
+        <span className="t-mono" style={{
+          fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase",
+          fontWeight: active ? 600 : 500,
+        }}>{label}</span>
+        <span style={{
+          width: 4, height: 4, borderRadius: 999,
+          background: active ? "var(--c-ink)" : "transparent",
+          marginTop: 1,
+        }}/>
+      </button>
+    );
+  };
+
+  // All glyphs are stroke-only SVG to match the spec's "no decorative icons"
+  // rule — these are wayfinding marks, drawn at hairline weight in current
+  // color so they inherit the active/inactive ink/mute treatment.
+  const sw = 1.4;
+  const Today = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="2.5" y="3.5" width="13" height="11" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="2.5" y1="6.5" x2="15.5" y2="6.5" stroke="currentColor" strokeWidth={sw}/>
+      <circle cx="9" cy="10.5" r="1.4" fill="currentColor"/>
+    </svg>
+  );
+  const Week = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="2.5" y="3.5" width="13" height="11" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="2.5"  y1="7" x2="15.5" y2="7" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="6.5"  y1="3.5" x2="6.5"  y2="14.5" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="11.5" y1="3.5" x2="11.5" y2="14.5" stroke="currentColor" strokeWidth={sw}/>
+    </svg>
+  );
+  const Log = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <line x1="9" y1="3" x2="9"  y2="15" stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
+      <line x1="3" y1="9" x2="15" y2="9"  stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
+    </svg>
+  );
+  const Profile = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <circle cx="9" cy="6.2" r="2.6" stroke="currentColor" strokeWidth={sw}/>
+      <path d="M3.5 15.5 C 4.5 11.8, 13.5 11.8, 14.5 15.5"
+            stroke="currentColor" strokeWidth={sw} strokeLinecap="round" fill="none"/>
+    </svg>
+  );
+
+  return (
+    <div style={{
+      position: "fixed", left: 0, right: 0, bottom: 0,
+      background: "var(--c-bg)",
+      borderTop: "1px solid var(--c-rule)",
+      paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      zIndex: 50,
+    }}>
+      <div style={{ maxWidth: 500, margin: "0 auto", display: "flex" }}>
+        <Item name="today"   label="Today"   glyph={Today}   onClick={() => onTab("today")}/>
+        <Item name="home"    label="Week"    glyph={Week}    onClick={() => onTab("home")}/>
+        <Item name="log"     label="Log"     glyph={Log}     onClick={onTapLog}/>
+        <Item name="profile" label="Profile" glyph={Profile} onClick={() => onTab("profile")}/>
+      </div>
+    </div>
+  );
+}
+
 // ─── THREAD PANEL ────────────────────────────────────────────────────────────
 // Renders a chronological thread of athlete↔coach messages plus an inline
 // reply box. Pure presentational — owner provides the thread array (already
