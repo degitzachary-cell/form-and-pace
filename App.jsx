@@ -3,7 +3,7 @@ import CoachPlanBuilder from "./CoachPlanBuilder";
 import { supabase, STRAVA_CLIENT_ID, exchangeStravaCode, stravaCall } from "./lib/supabase.js";
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr,
-  extractStravaData, getStats,
+  extractStravaData, getStats, prettyEmailName,
 } from "./lib/helpers.js";
 import { C, S, TAG_STYLE, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker } from "./components.jsx";
@@ -58,7 +58,27 @@ export default function App() {
           const key = row.athlete_email?.toLowerCase();
           if (!key) return;
           const existing = updated[key] || {};
-          updated[key] = { ...existing, weeks: row.plan_json };
+          // plan_json is either a bare weeks array (legacy) or an object with
+          // athleteName/athleteGoal/athletePb/weeks. Coaches edit name/goal/PB
+          // straight into the plan so athletes who haven't signed in yet still
+          // render correctly.
+          const pj = row.plan_json;
+          let weeks = [];
+          let meta = {};
+          if (Array.isArray(pj)) weeks = pj;
+          else if (pj && typeof pj === 'object') {
+            weeks = Array.isArray(pj.weeks) ? pj.weeks : [];
+            meta = {
+              name:    pj.athleteName || undefined,
+              goal:    pj.athleteGoal || undefined,
+              current: pj.athletePb   || undefined,
+            };
+          }
+          updated[key] = {
+            ...existing,
+            ...Object.fromEntries(Object.entries(meta).filter(([,v]) => v)),
+            weeks,
+          };
         });
         return updated;
       });
@@ -71,11 +91,11 @@ export default function App() {
   // resolveUser already loaded.
   useEffect(() => {
     if (!user || role !== 'coach') return;
+    const coachEmail = user.email?.toLowerCase();
     const loadAthleteProfiles = async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('email, name, goal, current_pb, avatar, role')
-        .eq('role', 'athlete');
+        .select('email, name, goal, current_pb, avatar, role');
       if (error) {
         console.error('Failed to load athlete profiles:', error);
         return;
@@ -84,16 +104,18 @@ export default function App() {
         const updated = { ...prev };
         data.forEach(p => {
           const key = p.email?.toLowerCase();
-          if (!key) return;
+          if (!key || key === coachEmail) return;
+          if (p.role === 'coach') return;
           const existing = updated[key] || {};
-          const displayName = p.name || key;
           updated[key] = {
             ...existing,
-            name:    p.name    || existing.name    || displayName,
-            goal:    p.goal    || existing.goal    || '—',
-            current: p.current_pb || existing.current || '—',
-            avatar:  p.avatar  || existing.avatar  || displayName.slice(0, 2).toUpperCase(),
-            weeks:   existing.weeks || [],
+            // Profile values overwrite coach-plan placeholders only when
+            // the profile actually has a value (athletes who logged in).
+            ...(p.name        ? { name:    p.name        } : {}),
+            ...(p.goal        ? { goal:    p.goal        } : {}),
+            ...(p.current_pb  ? { current: p.current_pb  } : {}),
+            ...(p.avatar      ? { avatar:  p.avatar      } : {}),
+            weeks: existing.weeks || [],
           };
         });
         return updated;
@@ -666,7 +688,7 @@ export default function App() {
             const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
             const recentSessions = weeksList.flatMap(w=>w.sessions || []).filter(s=>logs[s.id]).slice(-3);
             const thisWeekKm = weekKm(activities, email, 0);
-            const displayName = data.name || email.split("@")[0];
+            const displayName = data.name || prettyEmailName(email);
             const avatar = data.avatar || displayName.slice(0, 2).toUpperCase();
             return (
               <div key={email} onClick={()=>{ setDashAthlete(email); setCoachScreen("athlete"); }}
@@ -714,16 +736,29 @@ export default function App() {
   //  COACH → PLAN BUILDER
   // ────────────────────────────────────────────────────────────
   // Throws on error so the Plan Builder's inline banner can surface the message.
-  const handleSavePlan = async (athleteEmail, weeksArray) => {
+  const handleSavePlan = async (athleteEmail, weeksArray, meta = {}) => {
+    const key = athleteEmail?.toLowerCase();
+    const planJson = {
+      athleteName: meta.name?.trim() || null,
+      athleteGoal: meta.goal?.trim() || null,
+      athletePb:   meta.current?.trim() || null,
+      weeks: weeksArray,
+    };
     const { error } = await supabase.from('coach_plans').upsert({
-      athlete_email: athleteEmail,
-      plan_json: weeksArray,
+      athlete_email: key,
+      plan_json: planJson,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'athlete_email' });
     if (error) throw error;
     setAthletePrograms(prev => ({
       ...prev,
-      [athleteEmail]: { ...(prev[athleteEmail] || {}), weeks: weeksArray },
+      [key]: {
+        ...(prev[key] || {}),
+        ...(planJson.athleteName ? { name:    planJson.athleteName } : {}),
+        ...(planJson.athleteGoal ? { goal:    planJson.athleteGoal } : {}),
+        ...(planJson.athletePb   ? { current: planJson.athletePb   } : {}),
+        weeks: weeksArray,
+      },
     }));
   };
 
@@ -748,7 +783,7 @@ export default function App() {
     const da  = athletePrograms[dashAthlete] || { weeks: [] };
     const st  = statsFor(dashAthlete);
     const athWeekKm = weekKm(activities, dashAthlete, 0);
-    const daName = da.name || dashAthlete.split("@")[0];
+    const daName = da.name || prettyEmailName(dashAthlete);
     const daGoal = da.goal || "—";
     return (
       <div style={S.page}>

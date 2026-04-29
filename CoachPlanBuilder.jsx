@@ -170,6 +170,9 @@ function StatusBanner({ status, onDismiss }) {
 export default function CoachPlanBuilder({ athletes, onSave }) {
   const [selectedEmail, setSelectedEmail] = useState('');
   const [weeks, setWeeks] = useState([]);
+  const [athleteName, setAthleteName] = useState('');
+  const [athleteGoal, setAthleteGoal] = useState('');
+  const [athletePb,   setAthletePb]   = useState('');
   const [newWeekLabel, setNewWeekLabel] = useState('');
   const [newWeekStart, setNewWeekStart] = useState('');
   const [showAddWeek, setShowAddWeek] = useState(false);
@@ -186,12 +189,18 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   }));
 
   useEffect(() => {
-    if (selectedEmail && athletes[selectedEmail]?.weeks) {
-      setWeeks(athletes[selectedEmail].weeks);
-    } else {
-      setWeeks([]);
-    }
+    const entry = selectedEmail ? athletes[selectedEmail] : null;
+    setWeeks(entry?.weeks || []);
+    setAthleteName(entry?.name && entry.name !== selectedEmail ? entry.name : '');
+    setAthleteGoal(entry?.goal && entry.goal !== '—' ? entry.goal : '');
+    setAthletePb(entry?.current && entry.current !== '—' ? entry.current : '');
   }, [selectedEmail, athletes]);
+
+  const buildMeta = () => ({
+    name:    athleteName,
+    goal:    athleteGoal,
+    current: athletePb,
+  });
 
   const handleExcelUpload = async (e) => {
     const file = e.target.files[0];
@@ -201,7 +210,13 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
       const parsedWeeks = await parseExcelToWeeks(file);
       const existing = athletes[uploadTarget]?.weeks || [];
       const updated = uploadMode === 'replace' ? parsedWeeks : [...existing, ...parsedWeeks];
-      await Promise.resolve(onSave(uploadTarget, updated));
+      const targetData = athletes[uploadTarget] || {};
+      const importMeta = {
+        name:    targetData.name    && targetData.name    !== uploadTarget ? targetData.name    : '',
+        goal:    targetData.goal    && targetData.goal    !== '—'         ? targetData.goal    : '',
+        current: targetData.current && targetData.current !== '—'         ? targetData.current : '',
+      };
+      await Promise.resolve(onSave(uploadTarget, updated, importMeta));
       setSelectedEmail(uploadTarget);
       setStatus({ kind: 'success', message: `Imported ${parsedWeeks.length} week${parsedWeeks.length === 1 ? '' : 's'} for ${athletes[uploadTarget]?.name || uploadTarget}.` });
     } catch (err) {
@@ -250,8 +265,9 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     if (!selectedEmail) return;
     setSaving(true);
     try {
-      await Promise.resolve(onSave(selectedEmail, weeks));
-      setStatus({ kind: 'success', message: `Plan saved for ${athletes[selectedEmail]?.name || selectedEmail}.` });
+      await Promise.resolve(onSave(selectedEmail, weeks, buildMeta()));
+      const displayName = athleteName || athletes[selectedEmail]?.name || selectedEmail;
+      setStatus({ kind: 'success', message: `Plan saved for ${displayName}.` });
     } catch (err) {
       setStatus({ kind: 'error', message: `Save failed: ${err.message}` });
     }
@@ -305,6 +321,35 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
 
       {selectedEmail ? (
         <>
+          {/* ── Athlete metadata (name / goal / PB) ── */}
+          <div style={cardStyle}>
+            <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 10 }}>Athlete details</div>
+            <div style={{ fontSize: 11, color: C.mid, marginBottom: 10, lineHeight: 1.5 }}>
+              These show on the athlete's card before they sign in. Once they
+              log in, their own profile takes over.
+            </div>
+            <input
+              style={{ ...inputStyle, marginBottom: 8 }}
+              placeholder="Full name (e.g. Jeremy Blackmore)"
+              value={athleteName}
+              onChange={e => setAthleteName(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                style={{ ...inputStyle, flex: 1 }}
+                placeholder="Goal (e.g. 1:50 HM)"
+                value={athleteGoal}
+                onChange={e => setAthleteGoal(e.target.value)}
+              />
+              <input
+                style={{ ...inputStyle, flex: 1 }}
+                placeholder="Current PB (e.g. 1:55)"
+                value={athletePb}
+                onChange={e => setAthletePb(e.target.value)}
+              />
+            </div>
+          </div>
+
           {weeks.map(week => (
             <div key={week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
