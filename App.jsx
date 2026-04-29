@@ -491,6 +491,35 @@ export default function App() {
     return () => { cancelled = true; };
   }, [coachScreen, activeSession?.id, role]);
 
+  // ── Athlete: mark coach replies as read when viewing result/extra screens ──
+  useEffect(() => {
+    if (role !== "athlete") return;
+    const ts = new Date().toISOString();
+    if (screen === "result" && activeSession?.id) {
+      const log = logs[activeSession.id];
+      if (log?.coach_reply && !log.athlete_read_at) {
+        supabase.from("session_logs").update({ athlete_read_at: ts })
+          .eq("id", log.id).select().maybeSingle()
+          .then(({ data }) => { if (data) setLogs(prev => ({ ...prev, [activeSession.id]: data })); })
+          .catch(e => console.error("mark read (log) error:", e));
+      }
+    }
+    if (screen === "extra-activity" && activeExtraActivity?.id) {
+      const a = activeExtraActivity;
+      if (a.coach_reply && !a.athlete_read_at) {
+        supabase.from("activities").update({ athlete_read_at: ts })
+          .eq("id", a.id).select().maybeSingle()
+          .then(({ data }) => {
+            if (data) {
+              setActivities(prev => prev.map(x => x.id === data.id ? data : x));
+              setActiveExtraActivity(data);
+            }
+          })
+          .catch(e => console.error("mark read (activity) error:", e));
+      }
+    }
+  }, [role, screen, activeSession?.id, activeExtraActivity?.id]);
+
   const loadLogs = async () => {
     setLogsLoading(true);
     const email = user.email?.toLowerCase();
@@ -2410,6 +2439,52 @@ export default function App() {
     const todaysStravaUnimported = todaysStrava && !myActs.some(a => a.strava_data?.id === todaysStrava.id);
     const dateNice = t.toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" });
 
+    // Coach replies the athlete hasn't read yet — banner + per-day dot.
+    const sessionLogIdsByDate = {};
+    for (const log of Object.values(logs)) {
+      if (!log?.session_id || log.athlete_email?.toLowerCase() !== user.email?.toLowerCase()) continue;
+      const linkedSession = allSessions.find(s => s.id === log.session_id);
+      if (!linkedSession) continue;
+      // Use actual_date if moved, otherwise the scheduled date.
+      const wk = (programEntry?.weeks || []).find(w => w.sessions.some(s => s.id === linkedSession.id));
+      if (!wk) continue;
+      const d = log.analysis?.actual_date || sessionDateStr(wk.weekStart, linkedSession.day);
+      sessionLogIdsByDate[d] = log.session_id;
+    }
+    const unreadLogs = Object.values(logs).filter(l =>
+      l?.coach_reply && !l.athlete_read_at && l.athlete_email?.toLowerCase() === user.email?.toLowerCase()
+    );
+    const unreadActs = myActs.filter(a => a.coach_reply && !a.athlete_read_at);
+    // Avoid double-counting an activity that's linked to an unread session_log.
+    const unreadActsDeduped = unreadActs.filter(a => {
+      if (a.source === "session") {
+        const matchingLog = unreadLogs.find(l =>
+          l.analysis?.actual_date === a.activity_date || sessionDateStr(l.session_id, "") === a.activity_date
+        );
+        if (matchingLog) return false;
+      }
+      return true;
+    });
+    const unreadCount = unreadLogs.length + unreadActsDeduped.length;
+    const openMostRecentUnread = () => {
+      const allUnread = [
+        ...unreadLogs.map(l => ({ kind: "log", log: l, ts: l.updated_at })),
+        ...unreadActsDeduped.map(a => ({ kind: "act", act: a, ts: a.updated_at || a.created_at })),
+      ].sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
+      const top = allUnread[0];
+      if (!top) return;
+      if (top.kind === "log") {
+        const sess = allSessions.find(s => s.id === top.log.session_id);
+        if (!sess) return;
+        const wk = (programEntry?.weeks || []).find(w => w.sessions.some(s => s.id === sess.id));
+        setActiveSession({ ...sess, weekStart: wk?.weekStart });
+        setScreen("result");
+      } else {
+        setActiveExtraActivity(top.act);
+        setScreen("extra-activity");
+      }
+    };
+
     const weekStrip = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => {
       const dDate = sessionDateStr(monStr, d);
       // sessionHere = a planned session whose effective day (after any move) lands here.
@@ -2437,6 +2512,20 @@ export default function App() {
           right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}
         />
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 0 80px" }}>
+          {unreadCount > 0 && (
+            <div onClick={openMostRecentUnread}
+              style={{
+                margin:"16px 16px 0", padding:"12px 14px",
+                background:"#3b82f6", color:"#fffdf8",
+                borderRadius:2, cursor:"pointer", display:"flex",
+                alignItems:"center", justifyContent:"space-between", gap:10,
+              }}>
+              <div style={{ fontSize:13, fontWeight:700, letterSpacing:0.5 }}>
+                💬 {unreadCount} new {unreadCount === 1 ? "reply" : "replies"} from your coach
+              </div>
+              <div style={{ fontSize:13, opacity:0.85 }}>›</div>
+            </div>
+          )}
           {isDesktop && (
             <div style={{ display:"flex", gap:0, alignItems:"flex-start" }}>
               {/* ── DESKTOP LEFT: today hero + strava ── */}
