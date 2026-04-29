@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useWindowWidth } from "./lib/hooks.js";
 import CoachPlanBuilder from "./CoachPlanBuilder";
 import { supabase, STRAVA_CLIENT_ID, exchangeStravaCode, stravaCall } from "./lib/supabase.js";
 import {
@@ -249,16 +250,7 @@ export default function App() {
   const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
 
-  // Desktop layout: two-column coach view at >= 960px.
-  const [windowWidth, setWindowWidth] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth : 1024
-  );
-  useEffect(() => {
-    const onResize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  const isDesktop = windowWidth >= 960;
+  const isDesktop = useWindowWidth() >= 960;
 
   // Load saved plans from Supabase. Athletes only see their own plan;
   // coaches see every plan.
