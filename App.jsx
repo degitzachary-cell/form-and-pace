@@ -528,6 +528,15 @@ export default function App() {
         };
         const { data: actData } = await supabase.from("activities").insert(payload).select().single();
         if (actData) setActivities(prev => [actData, ...prev]);
+      } else {
+        const { data: updAct } = await supabase.from("activities").update({
+          distance_km: parseFloat(sessionDistKm),
+          duration_seconds: sessionDurMin ? Math.round(parseFloat(sessionDurMin) * 60) : null,
+          notes: feedbackText || null,
+          source: stravaDetail ? "strava" : "session",
+          strava_data: stravaDetail || null,
+        }).eq("id", existing.id).select().single();
+        if (updAct) setActivities(prev => prev.map(a => a.id === updAct.id ? updAct : a));
       }
 
       setSessionDistKm("");
@@ -1596,6 +1605,14 @@ export default function App() {
               <div style={{ fontSize:14, color:C.navy, lineHeight:1.8 }}>{log?.coach_reply || resultLinkedAct?.coach_reply}</div>
             </SectionCard>
           )}
+          <button onClick={() => {
+            const an = log?.analysis;
+            setFeedbackText(log?.feedback || "");
+            setSessionDistKm(an?.distance_km?.toString() || "");
+            setSessionDurMin(an?.duration_min?.toString() || "");
+            if (log?.strava_data) setStravaDetail(log.strava_data);
+            setScreen("session");
+          }} style={{ ...S.ghostBtn, marginBottom: 8 }}>Edit session →</button>
           <button onClick={()=>setScreen("home")} style={S.ghostBtn}>← Back to week</button>
         </div>
       </div>
