@@ -83,6 +83,6 @@ export function typeStyle(type) {
   return TYPE_STYLE[key] || TYPE_STYLE.EASY;
 }
 
-export const COMPLY_COLOR = { completed:C.accent, missed:C.hot, partial:C.warn, pending:C.mute };
-export const COMPLY_LABEL = { completed:"✓ Done", missed:"✗ Missed", partial:"~ Partial", pending:"Pending" };
+export const COMPLY_COLOR = { completed:C.accent, missed:C.hot, partial:C.warn, over:C.cool, pending:C.mute };
+export const COMPLY_LABEL = { completed:"✓ Done", missed:"✗ Missed", partial:"~ Partial", over:"↑ Over", pending:"Pending" };
 export const TAG_EMOJI    = { speed:"⚡", tempo:"🎯", easy:"🏃", long:"🏃" };

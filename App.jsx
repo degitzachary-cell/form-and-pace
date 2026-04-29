@@ -13,6 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
+import { effectiveCompliance } from "./lib/load.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
@@ -1410,7 +1411,7 @@ export default function App() {
                                   const sDate = log?.analysis?.actual_date || sessionDateStr(dpWk.weekStart, s.day);
                                   const linkedAct = dpActByDate[sDate];
                                   const isPastDate = sDate && sDate < todayStr();
-                                  const comply = log?.analysis?.compliance || (linkedAct ? "completed" : isPastDate && (s.type||"").toUpperCase() !== "REST" ? "missed" : "pending");
+                                  const comply = effectiveCompliance({ session: s, log, linkedAct, isPastDate, profile: dpAthlete });
                                   const cts = typeStyle(s.type);
                                   return (
                                     <div key={s.id}
@@ -1882,10 +1883,7 @@ export default function App() {
                               const sDate  = log?.analysis?.actual_date || sessionDateStr(wk.weekStart, s.day);
                               const linkedAct = actByDate[sDate];
                               const isPastDate = sDate && sDate < todayStr();
-                              const comply = log?.analysis?.compliance
-                                || (linkedAct ? "completed"
-                                  : isPastDate && (s.type || "").toUpperCase() !== "REST" ? "missed"
-                                  : "pending");
+                              const comply = effectiveCompliance({ session: s, log, linkedAct, isPastDate, profile: da });
                               const cts = typeStyle(s.type);
                               return (
                                 <div key={s.id}
@@ -2017,7 +2015,13 @@ export default function App() {
                     { val:"partial",   label:"~ Partial", color:C.amber   },
                     { val:"missed",    label:"✗ Missed",  color:C.crimson },
                   ].map(opt => {
-                    const current = an?.compliance || (linkedAthAct ? "completed" : "pending");
+                    const current = effectiveCompliance({
+                      session: activeSession,
+                      log: log,
+                      linkedAct: linkedAthAct,
+                      isPastDate: false,
+                      profile: athletePrograms[activeSession?.athleteEmail] || {},
+                    });
                     const active  = current === opt.val;
                     return (
                       <button key={opt.val} type="button"
@@ -3727,6 +3731,7 @@ export default function App() {
                     const distKm = an?.distance_km ?? linkedAct?.distance_km;
                     const ts = typeStyle(s.type);
                     const dayLabel = new Date(onDate + "T00:00:00").toLocaleDateString(undefined, { weekday:"short", day:"numeric" });
+                    const compHist = effectiveCompliance({ session: s, log, linkedAct, isPastDate: onDate < todayStr(), profile });
                     return (
                       <div key={s.id}
                         onClick={() => { setActiveSession({ ...s, weekStart }); setScreen(isLogged ? "result" : "session"); }}
@@ -3740,8 +3745,8 @@ export default function App() {
                             </div>
                           )}
                         </div>
-                        <div style={{ fontSize:10, color: isLogged ? COMPLY_COLOR[an?.compliance || "completed"] : C.mid, fontWeight:700, letterSpacing:1 }}>
-                          {isLogged ? COMPLY_LABEL[an?.compliance || "completed"] : "PLANNED"}
+                        <div style={{ fontSize:10, color: isLogged ? COMPLY_COLOR[compHist] || C.mid : C.mid, fontWeight:700, letterSpacing:1 }}>
+                          {isLogged ? COMPLY_LABEL[compHist] || compHist?.toUpperCase() : "PLANNED"}
                         </div>
                       </div>
                     );
