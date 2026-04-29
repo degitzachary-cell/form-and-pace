@@ -1815,7 +1815,7 @@ export default function App() {
                           {sessionsHere.map(({ s, log }) => {
                             const sDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
                             const linkedAct = actByDate[sDate];
-                            const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
+                            const isLogged = !!log || !!linkedAct;
                             return (
                               <DraggableSession
                                 key={s.id}
@@ -1828,7 +1828,7 @@ export default function App() {
                                   setSessionDistKm("");
                                   setSessionDurMin("");
                                   setSessionDateOverride(log?.analysis?.actual_date || linkedAct?.activity_date || todayStr());
-                                  setScreen((log && hasFullFeedback) ? "result" : "session");
+                                  setScreen(isLogged ? "result" : "session");
                                 }}
                               />
                             );
