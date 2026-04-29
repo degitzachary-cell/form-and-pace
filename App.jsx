@@ -1358,7 +1358,7 @@ export default function App() {
                     const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
                     return (
                       <div key={s.id}
-                        onClick={()=>{ setActiveSession({...s, weekStart: w.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionDateOverride(log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day)); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
+                        onClick={()=>{ setActiveSession({...s, weekStart: w.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionDateOverride(log?.analysis?.actual_date || actByDate[sDate]?.activity_date || todayStr()); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
                         style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"14px 16px", marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
                         <div style={{ width:40, height:40, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
                           {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
@@ -1522,7 +1522,7 @@ export default function App() {
         style={{ maxWidth:500, margin:"0 auto", padding:"0 16px 80px" }}
       >
         <SectionCard label="Today's Session">
-          {activeSession.desc.split("\n").map((l,i)=>(
+          {activeSession.desc.split("\n").filter(l => !/^\w{3} \w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2}/.test(l.trim())).map((l,i)=>(
             <div key={i} style={{ fontSize:14, color:i===0?C.navy:C.mid, lineHeight:1.9 }}>{l}</div>
           ))}
           <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
