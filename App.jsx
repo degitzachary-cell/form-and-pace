@@ -250,7 +250,8 @@ export default function App() {
   const [activeSession, setActiveSession] = useState(null);
   const [activeExtraActivity, setActiveExtraActivity] = useState(null);
   const [activeMonday, setActiveMonday] = useState(null);
-  const [coachWeekIdx, setCoachWeekIdx] = useState(null);
+  const [coachActiveMonday, setCoachActiveMonday] = useState(null);
+  const [editingWorkout, setEditingWorkout] = useState(null);
   const [feedbackText,  setFeedbackText]  = useState("");
   const [sessionDistKm, setSessionDistKm] = useState("");
   const [sessionDurMin, setSessionDurMin] = useState("");
@@ -456,27 +457,23 @@ export default function App() {
     }
   }, [user, role]);
 
-  // Default the coach week dropdown to the current week whenever they open
-  // an athlete (or null when they leave the screen).
+  // Default the coach calendar to today's Monday whenever they open an athlete
+  // (or clear it when they leave that screen).
   useEffect(() => {
     if (role !== "coach" || coachScreen !== "athlete" || !dashAthlete) {
-      if (coachWeekIdx !== null) setCoachWeekIdx(null);
+      if (coachActiveMonday !== null) setCoachActiveMonday(null);
       return;
     }
-    const wks = athletePrograms[dashAthlete]?.weeks || [];
-    if (wks.length === 0) return;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    let idx = wks.findIndex(w => {
-      const mon = new Date(w.weekStart + "T00:00:00");
-      const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
-      return today >= mon && today <= sun;
-    });
-    if (idx < 0) {
-      idx = wks.findIndex(w => new Date(w.weekStart + "T00:00:00") > today);
-      if (idx < 0) idx = wks.length - 1;
-    }
-    setCoachWeekIdx(idx);
-  }, [role, coachScreen, dashAthlete, athletePrograms]);
+    if (coachActiveMonday) return;
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const dow = t.getDay();
+    const offset = dow === 0 ? -6 : 1 - dow;
+    t.setDate(t.getDate() + offset);
+    const y = t.getFullYear();
+    const m = String(t.getMonth() + 1).padStart(2, "0");
+    const d = String(t.getDate()).padStart(2, "0");
+    setCoachActiveMonday(`${y}-${m}-${d}`);
+  }, [role, coachScreen, dashAthlete, coachActiveMonday]);
 
   // ── Refresh session log when coach opens a session detail ──
   // Single round-trip; no separate activities re-fetch (the home query already
@@ -639,7 +636,7 @@ export default function App() {
     setStravaConnected(false); setStravaActivities([]);
     setSelectedStravaId(null); setStravaDetail(null);
     setActiveSession(null); setActiveExtraActivity(null);
-    setActiveWeekIdx(null); setCoachWeekIdx(null); setHoveredWeekIdx(null);
+    setActiveMonday(null); setCoachActiveMonday(null); setHoveredWeekIdx(null);
     setCoachReply(""); setFeedbackText("");
     setSessionDistKm(""); setSessionDurMin(""); setSessionDateOverride(null);
     setScreen("home"); setCoachScreen("dashboard");
@@ -1114,6 +1111,44 @@ export default function App() {
   //  COACH → PLAN BUILDER
   // ────────────────────────────────────────────────────────────
   // Throws on error so the Plan Builder's inline banner can surface the message.
+  // Upsert a single session into an athlete's weeks. weekStart is the Monday;
+  // a new week is appended (and inserted in chronological order) if needed.
+  const saveWorkout = async (athleteEmail, weekStart, sessionData, sessionId = null) => {
+    const key = athleteEmail?.toLowerCase();
+    const meta = athletePrograms[key] || {};
+    const existingWeeks = (meta.weeks || []).map(w => ({ ...w, sessions: [...(w.sessions || [])] }));
+    let week = existingWeeks.find(w => w.weekStart === weekStart);
+    if (!week) {
+      const m = new Date(weekStart + "T00:00:00");
+      const sun = new Date(m); sun.setDate(m.getDate() + 6);
+      const monthLabel = m.toLocaleString("en-AU", { month: "short" });
+      const sunMonthLabel = sun.toLocaleString("en-AU", { month: "short" });
+      const weekLabel = monthLabel === sunMonthLabel
+        ? `Week of ${m.getDate()}–${sun.getDate()} ${monthLabel}`
+        : `Week of ${m.getDate()} ${monthLabel} – ${sun.getDate()} ${sunMonthLabel}`;
+      week = { weekStart, weekLabel, sessions: [] };
+      existingWeeks.push(week);
+      existingWeeks.sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+    }
+    if (sessionId) {
+      const idx = week.sessions.findIndex(s => s.id === sessionId);
+      if (idx >= 0) week.sessions[idx] = { ...week.sessions[idx], ...sessionData };
+    } else {
+      week.sessions.push({ id: newId(), ...sessionData });
+    }
+    await handleSavePlan(athleteEmail, existingWeeks, { name: meta.name, goal: meta.goal, current: meta.current });
+  };
+
+  const deleteWorkout = async (athleteEmail, weekStart, sessionId) => {
+    const key = athleteEmail?.toLowerCase();
+    const meta = athletePrograms[key] || {};
+    const nextWeeks = (meta.weeks || []).map(w => {
+      if (w.weekStart !== weekStart) return w;
+      return { ...w, sessions: (w.sessions || []).filter(s => s.id !== sessionId) };
+    });
+    await handleSavePlan(athleteEmail, nextWeeks, { name: meta.name, goal: meta.goal, current: meta.current });
+  };
+
   const handleSavePlan = async (athleteEmail, weeksArray, meta = {}) => {
     const key = athleteEmail?.toLowerCase();
 
@@ -1235,126 +1270,136 @@ export default function App() {
             ✏️ Edit Profile (name, goal, PB)
           </button>
 
-          {da.weeks.length === 0 && (() => {
+          {coachActiveMonday && (() => {
             const athActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
-            if (athActs.length === 0) {
-              return <div style={{ textAlign:"center", padding:"40px 0", color:C.mid, fontSize:14 }}>No activities or training plan yet.</div>;
-            }
-            return (
-              <div style={{ marginBottom:20 }}>
-                <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:8, fontFamily:S.bodyFont }}>All Activities</div>
-                {athActs.map(act => (
-                  <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setCoachScreen("extra-activity"); }} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, background:"#fdf0f0", border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, cursor:"pointer" }}>
-                    <div style={{ fontSize:22 }}>🏃</div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                        <div style={{ fontWeight:700, fontSize:14, color:C.navy }}>{act.activity_date} · {act.activity_type || "Run"}</div>
-                        <div style={{ fontSize:11, color:C.mid, fontWeight:700 }}>{(act.source || "manual").toUpperCase()}</div>
-                      </div>
-                      <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>
-                        {act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}
-                        {act.notes ? ` — ${act.notes}` : ""}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-
-          {da.weeks.length > 0 && coachWeekIdx !== null && (() => {
-            const athActs     = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
-            const athActDates = new Set(athActs.map(a => a.activity_date));
             const today = new Date(); today.setHours(0,0,0,0);
-            const weekStatus = (w) => {
-              const mon = new Date(w.weekStart + "T00:00:00");
-              const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
-              if (today > sun) return "past";
-              if (today >= mon) return "current";
-              return "future";
+            const monDate = new Date(coachActiveMonday + "T00:00:00");
+            const sunDate = new Date(monDate); sunDate.setDate(monDate.getDate() + 6); sunDate.setHours(23,59,59,999);
+            const isCurrent = today >= monDate && today <= sunDate;
+            const isPast = today > sunDate;
+            const planned = da.weeks.find(w => w.weekStart === coachActiveMonday);
+            const fmtRange = () => {
+              const m = monDate.toLocaleString("en-AU", { month: "short" });
+              const m2 = sunDate.toLocaleString("en-AU", { month: "short" });
+              return m === m2
+                ? `${monDate.getDate()}–${sunDate.getDate()} ${m}`
+                : `${monDate.getDate()} ${m} – ${sunDate.getDate()} ${m2}`;
             };
-            const idx = Math.min(coachWeekIdx, da.weeks.length - 1);
-            const wk = da.weeks[idx];
-            const status = weekStatus(wk);
-            const isCurrent = status === "current";
+            const wk = planned || { weekStart: coachActiveMonday, weekLabel: fmtRange(), sessions: [] };
             const wkEnd = weekEndStr(wk.weekStart);
             const extraActs = athActs.filter(a => a.source !== "session" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
+            const actByDate = {};
+            for (const a of athActs) if (a.source === "session") actByDate[a.activity_date] = a;
+
+            const snapToMonday = (dateStr) => {
+              if (!dateStr) return;
+              const d = new Date(dateStr + "T00:00:00");
+              if (isNaN(d)) return;
+              const dow = d.getDay();
+              const off = dow === 0 ? -6 : 1 - dow;
+              d.setDate(d.getDate() + off);
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, "0");
+              const dy = String(d.getDate()).padStart(2, "0");
+              setCoachActiveMonday(`${y}-${m}-${dy}`);
+            };
+
             return (
               <>
                 <div style={{ marginBottom:16 }}>
-                  <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:6, fontFamily:S.bodyFont }}>Week</div>
-                  <div style={{ position:"relative" }}>
-                    <select
-                      value={idx}
-                      onChange={(e) => setCoachWeekIdx(Number(e.target.value))}
-                      style={{
-                        width:"100%",
-                        appearance:"none",
-                        WebkitAppearance:"none",
-                        background: isCurrent ? C.crimson : C.white,
-                        color: isCurrent ? "#fffdf8" : C.navy,
-                        border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
-                        borderRadius:2,
-                        padding:"12px 36px 12px 14px",
-                        fontSize:13,
-                        fontWeight:700,
-                        letterSpacing:0.5,
-                        fontFamily:S.bodyFont,
-                        cursor:"pointer",
-                      }}>
-                      {da.weeks.map((w, i) => {
-                        const s = weekStatus(w);
-                        const tag = s === "current" ? " · THIS WEEK" : s === "past" ? " · PAST" : "";
-                        return <option key={i} value={i}>{w.weekLabel}{tag}</option>;
-                      })}
-                    </select>
-                    <div style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color: isCurrent ? "rgba(255,255,255,0.75)" : C.mid, fontSize:14 }}>▾</div>
+                  <div style={{ fontSize:10, letterSpacing:3, color:C.mid, textTransform:"uppercase", marginBottom:6, fontFamily:S.bodyFont }}>Week of</div>
+                  <input
+                    type="date"
+                    value={coachActiveMonday}
+                    onChange={(e) => snapToMonday(e.target.value)}
+                    style={{
+                      width:"100%",
+                      background: isCurrent ? C.crimson : C.white,
+                      color: isCurrent ? "#fffdf8" : C.navy,
+                      border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
+                      borderRadius:2,
+                      padding:"12px 14px",
+                      fontSize:13,
+                      fontWeight:700,
+                      letterSpacing:0.5,
+                      fontFamily:S.bodyFont,
+                      cursor:"pointer",
+                      colorScheme: isCurrent ? "dark" : "light",
+                    }}/>
+                  <div style={{ fontSize:10, color:C.mid, marginTop:6, paddingLeft:2, letterSpacing:1 }}>
+                    {wk.weekLabel}{isCurrent ? " · THIS WEEK" : isPast ? " · PAST" : " · UPCOMING"}
                   </div>
                 </div>
 
                 <div style={{ marginBottom:20 }}>
-                  {wk.sessions.map(s => {
-                    const log    = logs[s.id];
-                    const sDate  = sessionDateStr(wk.weekStart, s.day);
-                    const comply = log?.analysis?.compliance || (athActDates.has(sDate) ? "completed" : "pending");
+                  {DAY_LABELS.map(dayLabel => {
+                    const dayDate = sessionDateStr(wk.weekStart, dayLabel);
+                    const isToday = dayDate === todayStr();
+                    const sessionsHere = (wk.sessions || []).filter(s => {
+                      const overrideDate = logs[s.id]?.analysis?.actual_date;
+                      if (overrideDate && dayDate) return overrideDate === dayDate;
+                      return s.day?.slice(0, 3) === dayLabel;
+                    });
+                    const extrasHere = dayDate ? extraActs.filter(a => a.activity_date === dayDate) : [];
+                    const datePart = dayDate ? dayDate.slice(5).replace("-", "/") : "";
                     return (
-                      <div key={s.id}
-                        onClick={()=>{
-                          const sess = {...s, weekStart: wk.weekStart, athleteEmail: dashAthlete};
-                          setActiveSession(sess);
-                          setCoachScreen("session");
-                        }}
-                        style={{ ...S.card, marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:12 }}>
-                        <div style={{ fontSize:22 }}>{log?.analysis?.emoji || "⏳"}</div>
-                        <div style={{ flex:1 }}>
-                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                            <div style={{ fontWeight:700, fontSize:14 }}>{s.day} · {s.type}</div>
-                            <div style={{ fontSize:11, color: COMPLY_COLOR[comply], fontWeight:700 }}>{COMPLY_LABEL[comply]}</div>
-                          </div>
-                          {log?.analysis?.distance_km && (
-                            <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>
-                          )}
-                          {log?.coach_reply && <div style={{ fontSize:11, color:"#14365f", marginTop:3 }}>💬 You replied</div>}
+                      <div key={dayLabel} style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize:10, letterSpacing:2, color: isToday ? C.crimson : C.mid, fontWeight: isToday ? 700 : 500, marginBottom:4, paddingLeft:2 }}>
+                          {dayLabel.toUpperCase()}{datePart ? ` · ${datePart}` : ""}{isToday ? " · TODAY" : ""}
                         </div>
-                        <div style={{ color:C.mid }}>›</div>
+                        {sessionsHere.length === 0 && extrasHere.length === 0 ? (
+                          <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"12px", fontSize:11, color:C.mid, textAlign:"center", letterSpacing:1 }}>NO WORKOUT</div>
+                        ) : (
+                          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                            {sessionsHere.map(s => {
+                              const log    = logs[s.id];
+                              const sDate  = log?.analysis?.actual_date || sessionDateStr(wk.weekStart, s.day);
+                              const linkedAct = actByDate[sDate];
+                              const comply = log?.analysis?.compliance || (linkedAct ? "completed" : "pending");
+                              return (
+                                <div key={s.id}
+                                  onClick={()=>{ const sess = {...s, weekStart: wk.weekStart, athleteEmail: dashAthlete}; setActiveSession(sess); setCoachScreen("session"); }}
+                                  style={{ ...S.card, padding:"10px 12px", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>
+                                  <div style={{ fontSize:18 }}>{log?.analysis?.emoji || "⏳"}</div>
+                                  <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
+                                      <div style={{ fontWeight:700, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.type}</div>
+                                      <div style={{ fontSize:10, color: COMPLY_COLOR[comply], fontWeight:700, flexShrink:0 }}>{COMPLY_LABEL[comply]}</div>
+                                    </div>
+                                    {log?.analysis?.distance_km && (
+                                      <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>
+                                    )}
+                                    {log?.coach_reply && <div style={{ fontSize:10, color:"#14365f", marginTop:2 }}>💬 You replied</div>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {extrasHere.map(act => (
+                              <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setCoachScreen("extra-activity"); }}
+                                style={{ ...S.card, padding:"10px 12px", display:"flex", alignItems:"center", gap:10, background:"#fdf0f0", borderLeft:`3px solid ${C.crimson}`, cursor:"pointer" }}>
+                                <div style={{ fontSize:18 }}>➕</div>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
+                                    <div style={{ fontWeight:700, fontSize:14, color:C.navy }}>{act.activity_type || "Run"}</div>
+                                    <div style={{ fontSize:10, color:C.crimson, flexShrink:0 }}>EXTRA</div>
+                                  </div>
+                                  <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>
+                                    {act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {dayDate && (
+                          <button onClick={() => { setEditingWorkout({ weekStart: wk.weekStart, dayLabel, sessionId: null, athleteEmail: dashAthlete, prefill: null }); setCoachScreen("edit-workout"); }}
+                            style={{ marginTop:6, width:"100%", background:"transparent", border:`1px dashed ${C.rule}`, borderRadius:2, padding:"6px 10px", color:C.mid, fontSize:10, letterSpacing:2, cursor:"pointer" }}>
+                            + ADD WORKOUT
+                          </button>
+                        )}
                       </div>
                     );
                   })}
-                  {extraActs.map(act => (
-                    <div key={act.id} onClick={()=>{ setActiveExtraActivity(act); setCoachScreen("extra-activity"); }} style={{ ...S.card, marginBottom:8, display:"flex", alignItems:"center", gap:12, background:"#fdf0f0", border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.crimson}`, cursor:"pointer" }}>
-                      <div style={{ fontSize:22 }}>➕</div>
-                      <div style={{ flex:1 }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                          <div style={{ fontWeight:700, fontSize:14, color:C.navy }}>{act.activity_date.slice(5).replace("-"," ")} · Extra Run</div>
-                          <div style={{ fontSize:11, color:C.mid, fontWeight:700 }}>EXTRA</div>
-                        </div>
-                        <div style={{ fontSize:12, color:C.mid, marginTop:3 }}>
-                          {act.distance_km}km{act.duration_seconds ? ` · ${Math.round(act.duration_seconds/60)}min` : ""}
-                          {act.notes ? ` — ${act.notes}` : ""}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </>
             );
@@ -1511,6 +1556,16 @@ export default function App() {
               </SectionCard>
             </>
           )}
+          <button onClick={() => {
+            setEditingWorkout({
+              weekStart: activeSession.weekStart,
+              dayLabel: activeSession.day?.slice(0, 3),
+              sessionId: activeSession.id,
+              athleteEmail: activeSession.athleteEmail || dashAthlete,
+              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain },
+            });
+            setCoachScreen("edit-workout");
+          }} style={{ ...S.ghostBtn, marginTop:16 }}>✏️ Edit prescribed workout</button>
         </div>
       </div>
     );
@@ -1567,6 +1622,89 @@ export default function App() {
             )}
           </SectionCard>
           <button onClick={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }} style={S.ghostBtn}>← Back to athlete</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  COACH → EDIT / ADD WORKOUT
+  // ────────────────────────────────────────────────────────────
+  if (role === "coach" && coachScreen === "edit-workout" && editingWorkout) {
+    const ew = editingWorkout;
+    const isNew = !ew.sessionId;
+    const f = ew.prefill || {};
+    const dayDate = sessionDateStr(ew.weekStart, ew.dayLabel);
+    const dayDisplay = dayDate ? `${ew.dayLabel} ${parseInt(dayDate.slice(8), 10)}` : ew.dayLabel;
+    const setField = (k, v) => setEditingWorkout(prev => ({ ...prev, prefill: { ...(prev.prefill || {}), [k]: v } }));
+    const TYPES = ["EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX", "RACE DAY", "REST"];
+    const tagFor = (t) => t === "SPEED" ? "speed" : t === "TEMPO" ? "tempo" : "easy";
+    const canSave = (f.type || "EASY") && (f.desc || "").trim().length > 0;
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title={isNew ? "Add Workout" : "Edit Workout"} subtitle={`${ew.athleteEmail} · ${dayDisplay}`} onBack={()=>{ setEditingWorkout(null); setCoachScreen("athlete"); }}/>
+        <div style={{ maxWidth:500, margin:"0 auto", padding:"24px 16px 80px" }}>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Type</div>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {TYPES.map(t => (
+                <button key={t} type="button" onClick={() => setField("type", t)}
+                  style={{ background:(f.type || "EASY") === t ? C.crimson : C.white, border:`1px solid ${(f.type || "EASY") === t ? C.crimson : C.rule}`, borderRadius:2, padding:"6px 12px", color:(f.type || "EASY") === t ? "#fffdf8" : C.mid, fontSize:12, cursor:"pointer", letterSpacing:1 }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Description</div>
+            <textarea value={f.desc || ""} onChange={e => setField("desc", e.target.value)} rows={6}
+              placeholder={"e.g. WU 15min\\n5 × 800m @ 3:50/km\\n90sec rest\\nCD 15min"}
+              style={{ ...S.input, width:"100%", fontFamily:"monospace", lineHeight:1.6 }}/>
+          </div>
+          <div style={{ display:"flex", gap:12, marginBottom:14 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Pace</div>
+              <input type="text" value={f.pace || ""} onChange={e => setField("pace", e.target.value)} placeholder="e.g. 4:30/km" style={S.input}/>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Terrain</div>
+              <input type="text" value={f.terrain || ""} onChange={e => setField("terrain", e.target.value)} placeholder="e.g. FLAT/ROAD" style={S.input}/>
+            </div>
+          </div>
+          <button disabled={!canSave} onClick={async () => {
+            const type = f.type || "EASY";
+            const sessionData = {
+              day: dayDate ? `${ew.dayLabel} ${parseInt(dayDate.slice(8), 10)}` : ew.dayLabel,
+              type,
+              tag: tagFor(type),
+              desc: (f.desc || "").trim(),
+              pace: (f.pace || "").trim(),
+              terrain: (f.terrain || "").trim(),
+            };
+            try {
+              await saveWorkout(ew.athleteEmail, ew.weekStart, sessionData, ew.sessionId);
+              setEditingWorkout(null);
+              setCoachScreen("athlete");
+            } catch (err) {
+              alert("Save failed: " + (err.message || err));
+            }
+          }} style={{ ...S.primaryBtn(C.crimson, !canSave), width:"100%", marginBottom:8 }}>
+            {isNew ? "Add Workout" : "Save Changes"}
+          </button>
+          {!isNew && (
+            <button onClick={async () => {
+              if (!confirm("Delete this workout from the plan?")) return;
+              try {
+                await deleteWorkout(ew.athleteEmail, ew.weekStart, ew.sessionId);
+                setEditingWorkout(null);
+                setCoachScreen("athlete");
+              } catch (err) {
+                alert("Delete failed: " + (err.message || err));
+              }
+            }} style={{ ...S.ghostBtn, marginBottom:8, color:C.crimson, borderColor:C.crimson }}>Delete workout</button>
+          )}
+          <button onClick={()=>{ setEditingWorkout(null); setCoachScreen("athlete"); }} style={S.ghostBtn}>← Back to week</button>
         </div>
       </div>
     );
