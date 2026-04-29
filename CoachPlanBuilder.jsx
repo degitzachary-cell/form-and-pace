@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { C, S } from './styles.js';
-import { newId } from './lib/helpers.js';
+import { newId, snapToMonday } from './lib/helpers.js';
+import { DAY_LABELS } from './lib/constants.js';
 
 // ─── EXCEL PARSER ────────────────────────────────────────────
 function inferSessionType(desc) {
@@ -214,7 +215,20 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState(null);   // { kind: 'success' | 'error', message }
   const [saving, setSaving] = useState(false);
+  const [baseline, setBaseline] = useState('');
   const fileInputRef = useRef(null);
+
+  // Dirty = current state differs from last loaded/saved snapshot.
+  const currentSnapshot = JSON.stringify({ weeks, athleteName, athleteGoal, athletePb });
+  const isDirty = !!selectedEmail && baseline !== '' && currentSnapshot !== baseline;
+
+  // Warn before leaving the tab with unsaved changes.
+  useEffect(() => {
+    if (!isDirty) return;
+    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
 
   const athleteList = Object.entries(athletes || {}).map(([email, data]) => ({
     email,
@@ -223,10 +237,15 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
 
   useEffect(() => {
     const entry = selectedEmail ? athletes[selectedEmail] : null;
-    setWeeks(entry?.weeks || []);
-    setAthleteName(entry?.name && entry.name !== selectedEmail ? entry.name : '');
-    setAthleteGoal(entry?.goal && entry.goal !== '—' ? entry.goal : '');
-    setAthletePb(entry?.current && entry.current !== '—' ? entry.current : '');
+    const w = entry?.weeks || [];
+    const n = entry?.name && entry.name !== selectedEmail ? entry.name : '';
+    const g = entry?.goal && entry.goal !== '—' ? entry.goal : '';
+    const p = entry?.current && entry.current !== '—' ? entry.current : '';
+    setWeeks(w);
+    setAthleteName(n);
+    setAthleteGoal(g);
+    setAthletePb(p);
+    setBaseline(JSON.stringify({ weeks: w, athleteName: n, athleteGoal: g, athletePb: p }));
   }, [selectedEmail, athletes]);
 
   const buildMeta = () => ({
@@ -261,11 +280,37 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
 
   const handleAddWeek = () => {
     if (!newWeekLabel || !newWeekStart) return;
-    const newWeek = { id: newId(), weekLabel: newWeekLabel, weekStart: newWeekStart, sessions: [] };
+    // Always snap to Monday so weeks line up with sessionDateStr lookups.
+    const monday = snapToMonday(newWeekStart) || newWeekStart;
+    const newWeek = { id: newId(), weekLabel: newWeekLabel, weekStart: monday, sessions: [] };
     setWeeks([...weeks, newWeek]);
     setNewWeekLabel('');
     setNewWeekStart('');
     setShowAddWeek(false);
+  };
+
+  const handleDuplicateWeek = (weekId) => {
+    const src = weeks.find(w => w.id === weekId);
+    if (!src) return;
+    // Default the new weekStart to the Monday after the source week.
+    const next = new Date((src.weekStart || todayMondayFallback()) + 'T00:00:00');
+    next.setDate(next.getDate() + 7);
+    const y = next.getFullYear();
+    const m = String(next.getMonth() + 1).padStart(2, '0');
+    const dy = String(next.getDate()).padStart(2, '0');
+    const newWeek = {
+      id: newId(),
+      weekLabel: `${src.weekLabel || 'Week'} (copy)`,
+      weekStart: `${y}-${m}-${dy}`,
+      sessions: src.sessions.map(s => ({ ...s, id: newId() })),
+    };
+    const idx = weeks.findIndex(w => w.id === weekId);
+    setWeeks([...weeks.slice(0, idx + 1), newWeek, ...weeks.slice(idx + 1)]);
+  };
+
+  const todayMondayFallback = () => {
+    const t = new Date();
+    return snapToMonday(t.toISOString().slice(0, 10));
   };
 
   const handleDeleteWeek = (weekId) => {
@@ -301,6 +346,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
       await Promise.resolve(onSave(selectedEmail, weeks, buildMeta()));
       const displayName = athleteName || athletes[selectedEmail]?.name || selectedEmail;
       setStatus({ kind: 'success', message: `Plan saved for ${displayName}.` });
+      setBaseline(JSON.stringify({ weeks, athleteName, athleteGoal, athletePb }));
     } catch (err) {
       setStatus({ kind: 'error', message: `Save failed: ${err.message}` });
     }
@@ -390,10 +436,16 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                   <div style={{ fontWeight: 700, color: C.navy, fontFamily: S.displayFont, fontSize: 16 }}>{week.weekLabel || 'Untitled week'}</div>
                   <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{week.weekStart}</div>
                 </div>
-                <button type="button" onClick={() => handleDeleteWeek(week.id)} style={{
-                  background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
-                  borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
-                }}>Delete week</button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" onClick={() => handleDuplicateWeek(week.id)} style={{
+                    background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
+                    borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                  }}>Duplicate</button>
+                  <button type="button" onClick={() => handleDeleteWeek(week.id)} style={{
+                    background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
+                    borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                  }}>Delete week</button>
+                </div>
               </div>
 
               {week.sessions.map(session => {
@@ -404,12 +456,14 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                     borderRadius: 2, padding: 12, marginBottom: 8,
                   }}>
                     <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                      <input
+                      <select
                         style={{ ...inputStyle, flex: '0 0 90px' }}
-                        placeholder="Mon 24"
-                        value={session.day}
+                        value={DAY_LABELS.includes(session.day?.slice(0, 3)) ? session.day.slice(0, 3) : ''}
                         onChange={e => handleSessionChange(week.id, session.id, 'day', e.target.value)}
-                      />
+                      >
+                        <option value="">Day…</option>
+                        {DAY_LABELS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
                       <select
                         style={{ ...inputStyle, flex: '1 1 140px', color: accent, fontWeight: 600 }}
                         value={session.type}
@@ -479,8 +533,9 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
             <button type="button" onClick={() => setShowAddWeek(true)} style={S.ghostBtn}>+ Add week</button>
           )}
 
-          <button type="button" onClick={handleSave} disabled={saving} style={{ ...S.primaryBtn(C.crimson, saving), marginTop: 16 }}>
-            {saving ? 'Saving…' : 'Save plan'}
+          <button type="button" onClick={handleSave} disabled={saving || !isDirty}
+            style={{ ...S.primaryBtn(C.crimson, saving || !isDirty), marginTop: 16 }}>
+            {saving ? 'Saving…' : isDirty ? '● Save plan (unsaved changes)' : 'Saved'}
           </button>
         </>
       ) : (
