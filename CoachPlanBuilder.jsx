@@ -218,6 +218,24 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [baseline, setBaseline] = useState('');
   const fileInputRef = useRef(null);
 
+  // Cross-athlete copy/paste — survives switching the selected athlete.
+  // Persisted in localStorage so it also survives a tab refresh: the coach
+  // can copy on Monday morning and paste later in the day. Stores the week's
+  // sessions stripped of IDs (regenerated on paste).
+  const [clipboardWeek, setClipboardWeek] = useState(() => {
+    try {
+      const raw = localStorage.getItem('fp.planBuilder.clipboardWeek');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+  const writeClipboard = (week) => {
+    setClipboardWeek(week);
+    try {
+      if (week) localStorage.setItem('fp.planBuilder.clipboardWeek', JSON.stringify(week));
+      else      localStorage.removeItem('fp.planBuilder.clipboardWeek');
+    } catch { /* quota / private mode — ignore */ }
+  };
+
   // Dirty = current state differs from last loaded/saved snapshot.
   const currentSnapshot = JSON.stringify({ weeks, athleteName, athleteGoal, athletePb });
   const isDirty = !!selectedEmail && baseline !== '' && currentSnapshot !== baseline;
@@ -311,6 +329,52 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const todayMondayFallback = () => {
     const t = new Date();
     return snapToMonday(t.toISOString().slice(0, 10));
+  };
+
+  // Copy a week to the cross-athlete clipboard. Strips IDs and dates — the
+  // skeleton (label, sessions with their day/type/pace/desc) is what travels.
+  const handleCopyWeek = (weekId) => {
+    const src = weeks.find(w => w.id === weekId);
+    if (!src) return;
+    writeClipboard({
+      weekLabel: src.weekLabel || 'Copied week',
+      sessions: src.sessions.map(({ id, ...rest }) => ({ ...rest })),
+      _copiedFrom: athleteName || selectedEmail || '',
+      _copiedAt: new Date().toISOString(),
+    });
+    setStatus({ kind: 'success', message: 'Week copied — paste into any athlete.' });
+  };
+
+  // Paste the clipboard into the currently selected athlete. Picks the
+  // Monday after the latest existing week as the weekStart (or this Monday
+  // if the athlete has no weeks yet). New IDs are minted for each session.
+  const handlePasteWeek = () => {
+    if (!clipboardWeek || !selectedEmail) return;
+    let weekStart;
+    if (weeks.length > 0) {
+      const latest = [...weeks]
+        .map(w => w.weekStart)
+        .filter(Boolean)
+        .sort()
+        .pop();
+      if (latest) {
+        const next = new Date(latest + 'T00:00:00');
+        next.setDate(next.getDate() + 7);
+        const y = next.getFullYear();
+        const m = String(next.getMonth() + 1).padStart(2, '0');
+        const dy = String(next.getDate()).padStart(2, '0');
+        weekStart = `${y}-${m}-${dy}`;
+      }
+    }
+    if (!weekStart) weekStart = todayMondayFallback();
+    const newWeek = {
+      id: newId(),
+      weekLabel: clipboardWeek.weekLabel || 'Pasted week',
+      weekStart,
+      sessions: (clipboardWeek.sessions || []).map(s => ({ ...s, id: newId() })),
+    };
+    setWeeks([...weeks, newWeek]);
+    setStatus({ kind: 'success', message: `Pasted week (${newWeek.sessions.length} sessions) into ${athleteName || selectedEmail}.` });
   };
 
   const handleDeleteWeek = (weekId) => {
@@ -429,6 +493,34 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
             </div>
           </div>
 
+          {clipboardWeek && selectedEmail && (
+            <div style={{
+              ...cardStyle,
+              background: C.bgDeep, borderColor: C.accent, borderLeft: `3px solid ${C.accent}`,
+              marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+            }}>
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: 2, color: C.accent, textTransform: 'uppercase', fontWeight: 700 }}>Clipboard</div>
+                <div style={{ fontFamily: S.displayFont, fontSize: 16, color: C.ink, marginTop: 2 }}>
+                  {clipboardWeek.weekLabel || 'Copied week'}
+                  <span style={{ fontStyle: 'italic', color: C.mute, fontSize: 13, marginLeft: 8 }}>
+                    · {clipboardWeek.sessions?.length || 0} sessions{clipboardWeek._copiedFrom ? ` from ${clipboardWeek._copiedFrom}` : ''}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={handlePasteWeek} style={{
+                  background: C.accent, color: C.accentInk, border: 'none', borderRadius: 2,
+                  padding: '8px 16px', fontSize: 11, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
+                }}>Paste here →</button>
+                <button type="button" onClick={() => writeClipboard(null)} style={{
+                  background: 'transparent', color: C.mute, border: `1px solid ${C.rule}`,
+                  borderRadius: 2, padding: '8px 12px', fontSize: 11, cursor: 'pointer',
+                }}>Clear</button>
+              </div>
+            </div>
+          )}
+
           {weeks.map(week => (
             <div key={week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -437,6 +529,10 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                   <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{week.weekStart}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" onClick={() => handleCopyWeek(week.id)} style={{
+                    background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
+                    borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                  }} title="Copy this week to clipboard — paste into any athlete">Copy</button>
                   <button type="button" onClick={() => handleDuplicateWeek(week.id)} style={{
                     background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
