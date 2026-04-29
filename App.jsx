@@ -1198,19 +1198,19 @@ export default function App() {
     // Shared roster content — rendered in the left sidebar (desktop) or full page (mobile)
     const rosterContent = (
       <>
-        {/* Summary strip */}
-        <div style={{ display:"flex", gap:10, marginBottom:20 }}>
-          <div style={S.statBox}>
-            <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{athletes.length}</div>
-            <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Athletes</div>
+        {/* Editorial summary — three big numerals with eyebrows */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:0, padding:"6px 0 22px", borderBottom:"1px solid var(--c-rule)", marginBottom:20 }}>
+          <div style={{ paddingRight:14 }}>
+            <Eyebrow>Athletes</Eyebrow>
+            <BigNum size={44} style={{ display:"block", marginTop:6 }}>{athletes.length}</BigNum>
           </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize:22, fontWeight:900, color:C.navy }}>{logsToday}</div>
-            <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Today's Logs</div>
+          <div style={{ paddingLeft:14, paddingRight:14, borderLeft:"1px solid var(--c-rule)" }}>
+            <Eyebrow>Logged today</Eyebrow>
+            <BigNum size={44} style={{ display:"block", marginTop:6 }}>{logsToday}</BigNum>
           </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize:22, fontWeight:900, color: totalReplies > 0 ? C.crimson : C.navy }}>{totalReplies}</div>
-            <div style={{ fontSize:9, color:C.mid, letterSpacing:2, textTransform:"uppercase", marginTop:4 }}>Replies Due</div>
+          <div style={{ paddingLeft:14, borderLeft:"1px solid var(--c-rule)" }}>
+            <Eyebrow>Replies due</Eyebrow>
+            <BigNum size={44} color={totalReplies > 0 ? "var(--c-hot)" : "var(--c-ink)"} style={{ display:"block", marginTop:6 }}>{totalReplies}</BigNum>
           </div>
         </div>
 
@@ -1264,27 +1264,33 @@ export default function App() {
               setDashAthlete(email);
               if (!isDesktop) setCoachScreen("athlete");
             }}
-              style={{ ...S.card, marginBottom:10, cursor:"pointer", padding:"14px 16px",
-                ...(isSelected ? { borderColor:C.navy, boxShadow:`0 0 0 1.5px ${C.navy}` } : {}) }}>
-              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                <div style={{ width:38, height:38, borderRadius:"50%", background:C.navy, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:12, flexShrink:0, color:C.cream }}>
+              style={{
+                marginBottom:0, cursor:"pointer", padding:"18px 16px",
+                borderBottom:"1px solid var(--c-ruleSoft)",
+                background: isSelected ? "var(--c-paper)" : "transparent",
+                borderLeft: isSelected ? "3px solid var(--c-hot)" : "3px solid transparent",
+              }}>
+              <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+                <div style={{ width:44, height:44, borderRadius:999, background:"var(--c-bgDeep)", border:"1px solid var(--c-rule)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontFamily:"var(--f-display)", fontSize:16, color:"var(--c-ink)" }}>
                   {avatar}
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{displayName}</div>
-                    {repliesNeeded > 0 && <span style={{ background:C.crimson, color:C.white, borderRadius:99, padding:"1px 7px", fontSize:9, fontWeight:700, letterSpacing:0.5 }}>{repliesNeeded}</span>}
-                  </div>
-                  <div style={{ fontSize:11, color:C.mid, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{goalText}</div>
+                  <div style={{ fontFamily:"var(--f-display)", fontSize:20, fontWeight:400, color:"var(--c-ink)", lineHeight:1.05, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{displayName}</div>
+                  <div className="t-display-italic" style={{ fontSize:13, color:"var(--c-mute)", marginTop:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{goalText}</div>
                 </div>
-                {!isDesktop && <div style={{ color:C.mid, fontSize:18, flexShrink:0 }}>›</div>}
+                {repliesNeeded > 0 && (
+                  <span className="t-mono" style={{ fontSize:10, color:"var(--c-hot)", letterSpacing:"0.14em", fontWeight:600, flexShrink:0 }}>
+                    {repliesNeeded} REPLY
+                  </span>
+                )}
+                {!isDesktop && <div style={{ color:"var(--c-mute)", fontSize:18, flexShrink:0, marginLeft:6 }}>›</div>}
               </div>
-              <div style={{ display:"flex", gap:5, marginTop:12, paddingLeft:50 }}>
+              <div style={{ display:"flex", gap:3, marginTop:12, paddingLeft:58 }}>
                 {days.map((d, i) => (
                   <div key={i} title={d.dStr} style={{
-                    flex:1, height:8, borderRadius:2, background: d.pattern || d.color,
-                    border: d.isToday ? `2px solid ${C.navy}` : "none",
-                    boxSizing: d.isToday ? "border-box" : "content-box"
+                    flex:1, height:14, background: d.pattern || d.color,
+                    outline: d.isToday ? "1.5px solid var(--c-ink)" : "none",
+                    outlineOffset: -1,
                   }}/>
                 ))}
               </div>
