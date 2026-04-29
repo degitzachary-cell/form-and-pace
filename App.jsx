@@ -5,7 +5,7 @@ import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr,
   extractStravaData, getStats, prettyEmailName, todayStr, newId,
 } from "./lib/helpers.js";
-import { C, S, TAG_STYLE, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
+import { C, S, TAG_STYLE, TYPE_STYLE, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
@@ -112,12 +112,15 @@ function DraggableSession({ session, log, linkedAct, isMissed, onClick }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `session:${session.id}`,
   });
-  const ts = TAG_STYLE[session.tag] || TAG_STYLE.easy;
+  const ts = typeStyle(session.type);
   const isLogged = !!log || !!linkedAct;
   const showMissed = isMissed && !isLogged;
   const style = {
-    background: isLogged ? "#f0f7ee" : showMissed ? "#fdf0f0" : C.white,
-    border: `1px solid ${isLogged ? "#b8d4b4" : showMissed ? "#e6b8b8" : C.rule}`,
+    background: isLogged ? ts.bg : showMissed ? "#fdf0f0" : C.white,
+    borderTop: `1px solid ${isLogged ? ts.border : showMissed ? "#e6b8b8" : C.rule}`,
+    borderRight: `1px solid ${isLogged ? ts.border : showMissed ? "#e6b8b8" : C.rule}`,
+    borderBottom: `1px solid ${isLogged ? ts.border : showMissed ? "#e6b8b8" : C.rule}`,
+    borderLeft: `4px solid ${ts.accent}`,
     borderRadius: 2,
     padding: "10px 12px",
     display: "flex",
@@ -131,8 +134,14 @@ function DraggableSession({ session, log, linkedAct, isMissed, onClick }) {
   };
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes} onClick={onClick}>
-      <div style={{ width: 32, height: 32, borderRadius: "50%", background: ts.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
-        {log?.analysis?.emoji || (session.tag === "speed" ? "⚡" : session.tag === "tempo" ? "🎯" : "🏃")}
+      <div style={{
+        width: 32, height: 32, borderRadius: "50%",
+        background: ts.pattern || ts.bg,
+        border: `1.5px solid ${ts.accent}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 14, flexShrink: 0, color: ts.accent, fontWeight: 700,
+      }}>
+        {ts.pattern ? "" : (session.type || "").slice(0, 1).toUpperCase()}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -1530,7 +1539,7 @@ export default function App() {
             <div key={t.id} style={{ ...S.card, marginBottom:10, padding:"14px 16px" }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:10, letterSpacing:2, color:TAG_STYLE[t.tag]?.accent || C.mid, fontWeight:700, marginBottom:4 }}>{(t.tag || "").toUpperCase()}</div>
+                  <div style={{ fontSize:10, letterSpacing:2, color:typeStyle(t.type).accent, fontWeight:700, marginBottom:4 }}>{(t.type || t.tag || "").toUpperCase()}</div>
                   <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, marginBottom:4 }}>{t.name}</div>
                   {t.description && <div style={{ fontSize:12, color:C.mid, lineHeight:1.5, marginBottom:4 }}>{t.description}</div>}
                   {t.pace && <div style={{ fontSize:11, color:C.mid, fontFamily:"monospace" }}>{t.pace}{t.terrain ? ` · ${t.terrain}` : ""}</div>}
@@ -1722,11 +1731,18 @@ export default function App() {
                                 || (linkedAct ? "completed"
                                   : isPastDate && (s.type || "").toUpperCase() !== "REST" ? "missed"
                                   : "pending");
+                              const cts = typeStyle(s.type);
                               return (
                                 <div key={s.id}
                                   onClick={()=>{ const sess = {...s, weekStart: wk.weekStart, athleteEmail: dashAthlete}; setActiveSession(sess); setCoachScreen("session"); }}
-                                  style={{ ...S.card, padding:"10px 12px", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>
-                                  <div style={{ fontSize:18 }}>{log?.analysis?.emoji || "⏳"}</div>
+                                  style={{ ...S.card, padding:"10px 12px", cursor:"pointer", display:"flex", alignItems:"center", gap:10, borderLeft:`4px solid ${cts.accent}` }}>
+                                  <div style={{
+                                    width:28, height:28, borderRadius:"50%",
+                                    background: cts.pattern || cts.bg,
+                                    border:`1.5px solid ${cts.accent}`,
+                                    display:"flex", alignItems:"center", justifyContent:"center",
+                                    fontSize:11, color:cts.accent, fontWeight:700, flexShrink:0,
+                                  }}>{cts.pattern ? "" : (s.type || "").slice(0,1).toUpperCase()}</div>
                                   <div style={{ flex:1, minWidth:0 }}>
                                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
                                       <div style={{ fontWeight:700, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.type}</div>
@@ -2032,12 +2048,25 @@ export default function App() {
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Type</div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {TYPES.map(t => (
-                <button key={t} type="button" onClick={() => setField("type", t)}
-                  style={{ background:(f.type || "EASY") === t ? C.crimson : C.white, border:`1px solid ${(f.type || "EASY") === t ? C.crimson : C.rule}`, borderRadius:2, padding:"6px 12px", color:(f.type || "EASY") === t ? "#fffdf8" : C.mid, fontSize:12, cursor:"pointer", letterSpacing:1 }}>
-                  {t}
-                </button>
-              ))}
+              {TYPES.map(t => {
+                const sel = (f.type || "EASY") === t;
+                const tts = typeStyle(t);
+                return (
+                  <button key={t} type="button" onClick={() => setField("type", t)}
+                    style={{
+                      background: sel ? (tts.pattern || tts.accent) : C.white,
+                      border: `1px solid ${sel ? tts.accent : C.rule}`,
+                      borderRadius: 2,
+                      padding: "6px 12px",
+                      color: sel ? (tts.pattern ? tts.accent : "#fffdf8") : tts.accent,
+                      fontSize: 12, cursor: "pointer", letterSpacing: 1,
+                      fontWeight: sel ? 700 : 500,
+                      textShadow: sel && tts.pattern ? "0 0 3px #fff, 0 0 3px #fff" : undefined,
+                    }}>
+                    {t}
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div style={{ marginBottom:14 }}>
@@ -2183,9 +2212,12 @@ export default function App() {
                   const isLogged = !!todaysSession.log || !!todaysActivity;
                   setScreen(isLogged ? "result" : "session");
                 }}
-                style={{ background:C.white, border:`1px solid ${C.rule}`, borderLeft:`4px solid ${TAG_STYLE[todaysSession.s.tag]?.accent || C.crimson}`, borderRadius:2, padding:"18px 20px", cursor:"pointer" }}>
-                <div style={{ fontSize:11, letterSpacing:2, color:TAG_STYLE[todaysSession.s.tag]?.accent || C.mid, marginBottom:6, fontWeight:700 }}>
-                  {(todaysSession.s.tag || "RUN").toUpperCase()}
+                style={{ background:C.white, border:`1px solid ${C.rule}`, borderLeft:`4px solid ${typeStyle(todaysSession.s.type).accent}`, borderRadius:2, padding:"18px 20px", cursor:"pointer", position:"relative" }}>
+                {typeStyle(todaysSession.s.type).pattern && (
+                  <div style={{ position:"absolute", top:0, right:0, width:42, height:42, background:typeStyle(todaysSession.s.type).pattern, borderTopRightRadius:2 }}/>
+                )}
+                <div style={{ fontSize:11, letterSpacing:2, color:typeStyle(todaysSession.s.type).accent, marginBottom:6, fontWeight:700 }}>
+                  {(todaysSession.s.type || "RUN").toUpperCase()}
                 </div>
                 <div style={{ fontSize:22, fontWeight:900, color:C.navy, fontFamily:S.displayFont, lineHeight:1.15, marginBottom:6 }}>
                   {todaysSession.s.type}
