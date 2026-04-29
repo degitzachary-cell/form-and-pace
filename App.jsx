@@ -3952,10 +3952,28 @@ export default function App() {
           </div>
         </SectionCard>
 
-        <div style={{ fontSize:11, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:10 }}>How did it go?</div>
+        <div style={{ fontSize:11, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:10 }}>Notes</div>
         <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)}
-          placeholder="Tell me about the session... how did it feel? Did you hit the paces? Any soreness or highlights?"
+          placeholder="Anything else…"
           style={S.textarea}/>
+        {/* Quick chips — tap to append a phrase to the notes. Saves typing
+            on the most common notes. Inserts with leading space if there's
+            already content so the chips read as a comma-separated phrase. */}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:-6, marginBottom:14 }}>
+          {[
+            { label: "legs heavy",     phrase: "Legs heavy." },
+            { label: "felt strong",    phrase: "Felt strong." },
+            { label: "weather rough",  phrase: "Weather was rough." },
+            { label: "trail not road", phrase: "Trail not road." },
+          ].map(c => (
+            <button key={c.label} type="button"
+              onClick={() => setFeedbackText(prev => prev?.trim() ? `${prev.trimEnd()} ${c.phrase}` : c.phrase)}
+              className="fp-pill"
+              style={{ fontSize:11, padding:"4px 10px", cursor:"pointer", color:C.inkSoft, background:"transparent", borderColor:C.rule, fontFamily:S.bodyFont, letterSpacing:"0.06em" }}>
+              + {c.label}
+            </button>
+          ))}
+        </div>
 
         <button type="submit"
           disabled={!sessionDistKm||isSaving}
