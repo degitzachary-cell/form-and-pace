@@ -1241,8 +1241,8 @@ export default function App() {
         const isLogged = !!act || !!orphanLog;
         let color = C.lightRule;
         let pattern = null;
-        if (isLogged) color = "#2a6e27"; // green
-        else if (plannedSess && dStr < today) color = "#8b1c1c"; // missed
+        if (isLogged) color = C.accent; // green
+        else if (plannedSess && dStr < today) color = C.hot; // missed
         else if (plannedSess) {
           const ts = typeStyle(plannedSess.type);
           color = ts.accent;
@@ -1349,7 +1349,7 @@ export default function App() {
             TEMPLATES
           </button>
           <button onClick={() => setCoachScreen("plan-builder")}
-            style={{ flex:1, background:"#1a2744", border:"1px solid #2a3a5c", borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:"#e8dcc8", fontWeight:700, cursor:"pointer" }}>
+            style={{ flex:1, background:C.bgDeep, border:`1px solid ${C.ink}`, borderRadius:2, padding:"10px", fontSize:11, letterSpacing:2, color:C.paper, fontWeight:700, cursor:"pointer" }}>
             PLAN BUILDER
           </button>
         </div>
@@ -1487,7 +1487,7 @@ export default function App() {
                       <div style={{ marginBottom:22 }}>
                         <input type="date" value={coachActiveMonday}
                           onChange={e => dpSnapMonday(e.target.value)}
-                          style={{ ...S.input, background:isCurr?C.crimson:C.white, color:isCurr?"#fffdf8":C.navy, border:`1px solid ${isCurr?"#E06666":C.rule}`, fontWeight:700, letterSpacing:0.5, fontFamily:S.bodyFont, cursor:"pointer", colorScheme:isCurr?"dark":"light", maxWidth:280 }}/>
+                          style={{ ...S.input, background:isCurr?C.crimson:C.white, color:isCurr?"#fffdf8":C.navy, border:`1px solid ${isCurr?C.accent:C.rule}`, fontWeight:700, letterSpacing:0.5, fontFamily:S.bodyFont, cursor:"pointer", colorScheme:isCurr?"dark":"light", maxWidth:280 }}/>
                         <div style={{ fontSize:10, color:C.mid, marginTop:6, paddingLeft:2, letterSpacing:1 }}>
                           {isCurr ? "THIS WEEK" : new Date() > sunD ? "PAST" : "UPCOMING"}
                         </div>
@@ -2024,7 +2024,7 @@ export default function App() {
                       width:"100%",
                       background: isCurrent ? C.crimson : C.white,
                       color: isCurrent ? "#fffdf8" : C.navy,
-                      border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
+                      border:`1px solid ${isCurrent ? C.accent : C.rule}`,
                       borderRadius:2,
                       padding:"12px 14px",
                       fontSize:13,
@@ -2413,7 +2413,7 @@ export default function App() {
                   if (!coachReply.trim()) return;
                   const { data } = await supabase.from("activities").update({ coach_reply: coachReply }).eq("id", act.id).select().single();
                   if (data) { setActiveExtraActivity(data); setActivities(prev => prev.map(a => a.id === data.id ? data : a)); setCoachReply(""); }
-                }} disabled={!coachReply.trim()} style={S.primaryBtn("#14365f", !coachReply.trim())}>
+                }} disabled={!coachReply.trim()} style={S.primaryBtn(C.accent, !coachReply.trim())}>
                   Send Reply →
                 </button>
               </>
@@ -2697,8 +2697,8 @@ export default function App() {
       const isToday = dDate === today;
       const isRest = (sessionPlanned?.type || "").toUpperCase() === "REST";
       let dotColor = C.lightRule;
-      if (isLogged) dotColor = "#2a6e27"; // green
-      else if (sessionPlanned && dDate < today && !isRest) dotColor = "#8b1c1c"; // missed
+      if (isLogged) dotColor = C.accent; // green
+      else if (sessionPlanned && dDate < today && !isRest) dotColor = C.hot; // missed
       else if (sessionPlanned && !isRest) dotColor = typeStyle(sessionPlanned.type).accent;
       const isPattern = sessionPlanned && !isLogged && !isRest && typeStyle(sessionPlanned.type).pattern;
       return { d, dDate, isToday, isLogged, dotColor, hasPlan: !!sessionPlanned, pattern: isPattern ? typeStyle(sessionPlanned.type).pattern : null };
@@ -3460,7 +3460,7 @@ export default function App() {
                       width:"100%",
                       background: isCurrent ? C.crimson : C.white,
                       color: isCurrent ? "#fffdf8" : C.navy,
-                      border:`1px solid ${isCurrent ? "#E06666" : C.rule}`,
+                      border:`1px solid ${isCurrent ? C.accent : C.rule}`,
                       borderRadius:2,
                       padding:"12px 14px",
                       fontSize:13,
@@ -3675,7 +3675,7 @@ export default function App() {
 
           {logError && <div style={{ color:C.crimson, fontSize:13, marginBottom:10, textAlign:"center", padding:"8px", background:"#fdf0f0", borderRadius:2, border:`1px solid ${C.rule}` }}>{logError}</div>}
           <button type="submit" disabled={!canSubmit||logSaving}
-            style={S.primaryBtn("#E06666", !canSubmit||logSaving)}>
+            style={S.primaryBtn(C.accent, !canSubmit||logSaving)}>
             {logSaving ? "Saving..." : "Save Activity →"}
           </button>
         </form>
@@ -3718,7 +3718,7 @@ export default function App() {
           ))}
           <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
             <MiniStat label="Terrain" val={activeSession.terrain}/>
-            <MiniStat label="Target Pace" val={activeSession.pace} color="#E06666"/>
+            <MiniStat label="Target Pace" val={activeSession.pace} color={C.accent}/>
           </div>
         </SectionCard>
 
@@ -3832,7 +3832,7 @@ export default function App() {
 
         <button type="submit"
           disabled={!sessionDistKm||isSaving}
-          style={S.primaryBtn("#E06666", !sessionDistKm||isSaving)}>
+          style={S.primaryBtn(C.accent, !sessionDistKm||isSaving)}>
           {isSaving ? "Saving..." : "Save Session →"}
         </button>
       </form>
@@ -3996,7 +3996,7 @@ export default function App() {
           <div style={{ textAlign:"center", fontFamily:"var(--f-display)", fontSize:64, fontWeight:400, color:C.accent, margin:"20px 0 8px", lineHeight:1 }}>+</div>
           <div style={{ textAlign:"center", fontSize:14, color:C.crimson, fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
           <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-            {act.distance_km && <StatPill label="Distance" val={`${act.distance_km}km`} color="#4ade80"/>}
+            {act.distance_km && <StatPill label="Distance" val={`${act.distance_km}km`} color={C.accent}/>}
             {durMin && <StatPill label="Duration" val={`${durMin}min`}/>}
           </div>
           {act.strava_data && <StravaCard data={act.strava_data}/>}
@@ -4100,7 +4100,7 @@ export default function App() {
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
           <div style={{ display:"flex", gap:10, marginBottom:24 }}>
             {[
-              { label:"Compliance", val:`${last4Compl}%`, color: last4Compl>75?"#4ade80":"#fbbf24" },
+              { label:"Compliance", val:`${last4Compl}%`, color: last4Compl>75?C.accent:C.warn },
               { label:"Sessions",   val:`${last4Done}/${last4Total}` },
               { label:"Total Km",   val:`${last4Km.toFixed(0)}`, color:C.navy },
             ].map((s,i)=>(
@@ -4132,7 +4132,7 @@ export default function App() {
                     </div>
                   </div>
                   {pct !== null && (
-                    <div style={{ fontSize:13, fontWeight:700, color: pct>75?"#4ade80":pct>40?"#fbbf24":"#f87171" }}>{pct}%</div>
+                    <div style={{ fontSize:13, fontWeight:700, color: pct>75?C.accent:pct>40?C.warn:C.hot }}>{pct}%</div>
                   )}
                 </div>
                 <div style={{ padding:"4px 0" }}>

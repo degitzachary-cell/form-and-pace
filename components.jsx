@@ -129,7 +129,7 @@ export function ThreadPanel({ thread = [], viewerRole = "athlete", onSend }) {
 // ─── PMC CHART (CTL / ATL / TSB) ─────────────────────────────────────────────
 //
 // Minimal hand-rolled SVG line chart — keeps the bundle lean (no recharts).
-// Three lines: CTL (fitness, dusty olive, thick), ATL (fatigue, terracotta,
+// Three lines: CTL (fitness, accent terracotta, thick), ATL (fatigue, hot,
 // thinner), TSB (form, shown as filled bars beneath the zero line so
 // over-/under-training is visually obvious). Daily rTSS shown as faint
 // vertical bars in the background.
