@@ -4,7 +4,7 @@ import CoachPlanBuilder from "./CoachPlanBuilder";
 import { supabase, exchangeStravaCode } from "./lib/supabase.js";
 import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail } from "./lib/strava.js";
 import {
-  weekKm, stravaWeekKm, sessionDateStr, weekEndStr,
+  weekKm, stravaWeekKm, sessionDateStr, weekEndStr, getWeekBounds,
   prettyEmailName, todayStr, newId,
   snapToMonday, thisMonday,
 } from "./lib/helpers.js";
@@ -13,7 +13,10 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta } from "./components.jsx";
+import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace } from "./lib/load.js";
+import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
+import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -129,7 +132,7 @@ function ExtraActivityCard({ act, onClick }) {
   );
 }
 
-function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun }) {
+function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun, markers }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr || dayLabel}` });
   const datePart = dateStr ? dateStr.slice(5).replace("-", "/") : "";
   const dayHeader = datePart ? `${dayLabel.toUpperCase()} · ${datePart}` : dayLabel.toUpperCase();
@@ -141,6 +144,24 @@ function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun }) {
       padding: isOver ? 4 : 0,
       transition: "border-color 120ms ease, padding 120ms ease",
     }}>
+      {Array.isArray(markers) && markers.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6, paddingLeft: 2 }}>
+          {markers.map(m => {
+            const ms = MARKER_STYLE[m.kind] || MARKER_STYLE.other;
+            return (
+              <span key={m.id} title={m.label || ms.label} style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                padding: "2px 8px", background: ms.ribbon, color: ms.ink,
+                fontSize: 9, letterSpacing: 1.5, fontWeight: 700, textTransform: "uppercase",
+                borderRadius: 1,
+              }}>
+                <span>{ms.label}</span>
+                {m.label && <span style={{ fontWeight: 400, opacity: 0.85 }}>· {m.label}</span>}
+              </span>
+            );
+          })}
+        </div>
+      )}
       <div style={{
         fontSize: 10, letterSpacing: 2, color: isToday ? C.crimson : C.mid,
         fontWeight: isToday ? 700 : 500, marginBottom: 4, paddingLeft: 2,
@@ -185,6 +206,14 @@ function ProfileForm({ form, setForm, email }) {
       <div style={{ marginBottom: 18 }}>
         <div style={labelStyle}>Avatar (initials)</div>
         <input style={inputStyle} maxLength={3} value={form.avatar} onChange={setField("avatar")} placeholder="e.g. JB" />
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <div style={labelStyle}>Threshold pace (optional)</div>
+        <input style={inputStyle} value={form.threshold_pace || ""} onChange={setField("threshold_pace")} placeholder="e.g. 4:35" />
+        <div style={{ fontSize: 11, color: C.mid, marginTop: 6, lineHeight: 1.5 }}>
+          Lactate-threshold pace as min/km. The pace you can hold for ~1 hour all-out — close to half-marathon pace. Used for rTSS load and Z1–Z5 zones. If left blank, we estimate it from your PBs.
+        </div>
       </div>
 
       <div style={{ fontSize: 10, letterSpacing: 2, color: C.crimson, textTransform: "uppercase", marginBottom: 4 }}>PBs &amp; Goals</div>
@@ -238,12 +267,20 @@ export default function App() {
   const [sessionSleepHrs,  setSessionSleepHrs]  = useState("");    // free number
   const [sessionSoreness,  setSessionSoreness]  = useState(null);  // 1–5
   const [sessionMood,      setSessionMood]      = useState(null);  // 1–5
+
+  // Quick-prompt wellness on Today — only used by the inline check-in card.
+  // Independent state so it doesn't clobber the full session-log form.
+  const [quickRpe,      setQuickRpe]      = useState(null);
+  const [quickSleep,    setQuickSleep]    = useState("");
+  const [quickSoreness, setQuickSoreness] = useState(null);
+  const [quickMood,     setQuickMood]     = useState(null);
+  const [quickSaving,   setQuickSaving]   = useState(false);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
 
   // Profile editor state — used by both athlete (self-edit) and coach
   // (edit-on-behalf). The form is populated when entering either profile screen.
-  const [profileForm, setProfileForm] = useState({ name: "", avatar: "", pbs: { ...EMPTY_PB_GOAL }, goals: { ...EMPTY_PB_GOAL } });
+  const [profileForm, setProfileForm] = useState({ name: "", avatar: "", threshold_pace: "", pbs: { ...EMPTY_PB_GOAL }, goals: { ...EMPTY_PB_GOAL } });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileStatus, setProfileStatus] = useState(null);
 
@@ -302,7 +339,7 @@ export default function App() {
     const loadAthleteProfiles = async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('email, name, goal, current_pb, avatar, role');
+        .select('email, name, goal, current_pb, avatar, role, threshold_pace, pbs, goals');
       if (error) {
         console.error('Failed to load athlete profiles:', error);
         return;
@@ -350,6 +387,10 @@ export default function App() {
 
   // Activities (manual logging + future Strava sync)
   const [activities,  setActivities]  = useState([]);
+  // Calendar markers — race / sick / taper / travel ribbons. Keyed by
+  // athlete email (lowercased). Athletes load their own; coaches load the
+  // currently-selected athlete's set on demand.
+  const [markersByEmail, setMarkersByEmail] = useState({});
   const [logForm,     setLogForm]     = useState({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [logSaving,   setLogSaving]   = useState(false);
@@ -417,10 +458,18 @@ export default function App() {
     }
   }, []);
 
+  // Load calendar markers for an athlete email and cache by email.
+  const loadMarkers = async (email) => {
+    if (!email) return;
+    const data = await fetchMarkersForAthlete(email);
+    setMarkersByEmail(prev => ({ ...prev, [email.toLowerCase()]: data }));
+  };
+
   // ── Load logs + Strava state when user + role are known ──
   useEffect(() => {
     if (!user || !role) return;
     Promise.all([loadLogs(), loadActivities()]);
+    if (role === "athlete") loadMarkers(user.email);
     const pendingCode = sessionStorage.getItem("strava_pending_code");
     if (pendingCode) {
       sessionStorage.removeItem("strava_pending_code");
@@ -466,6 +515,7 @@ export default function App() {
     if (role !== "coach") return;
     if (coachScreen === "athlete" && dashAthlete) {
       Promise.all([loadLogs(), loadActivities()]).catch(e => console.error("coach refresh error:", e));
+      loadMarkers(dashAthlete);
     }
     const onVis = () => {
       if (document.visibilityState === "visible") {
@@ -890,6 +940,7 @@ export default function App() {
       setProfileForm({
         name: profile.name || "",
         avatar: profile.avatar || "",
+        threshold_pace: profile.threshold_pace || "",
         pbs:   { ...EMPTY_PB_GOAL, ...(profile.pbs   || {}) },
         goals: { ...EMPTY_PB_GOAL, ...(profile.goals || {}) },
       });
@@ -903,6 +954,7 @@ export default function App() {
       setProfileForm({
         name: ap.name || "",
         avatar: ap.avatar || "",
+        threshold_pace: ap.threshold_pace || "",
         pbs:   { ...EMPTY_PB_GOAL, ...(ap.pbs   || {}) },
         goals: { ...EMPTY_PB_GOAL, ...(ap.goals || {}) },
       });
@@ -922,6 +974,7 @@ export default function App() {
         email: key,
         name: profileForm.name.trim() || null,
         avatar: profileForm.avatar.trim() || null,
+        threshold_pace: profileForm.threshold_pace?.trim() || null,
         pbs:   cleanedPbs,
         goals: cleanedGoals,
         // Keep legacy text columns in sync for screens that still read them.
@@ -1399,7 +1452,7 @@ export default function App() {
                                   const sDate = log?.analysis?.actual_date || sessionDateStr(dpWk.weekStart, s.day);
                                   const linkedAct = dpActByDate[sDate];
                                   const isPastDate = sDate && sDate < todayStr();
-                                  const comply = log?.analysis?.compliance || (linkedAct ? "completed" : isPastDate && (s.type||"").toUpperCase() !== "REST" ? "missed" : "pending");
+                                  const comply = effectiveCompliance({ session: s, log, linkedAct, isPastDate, profile: dpAthlete });
                                   const cts = typeStyle(s.type);
                                   return (
                                     <div key={s.id}
@@ -1788,6 +1841,76 @@ export default function App() {
             ))}
           </div>
 
+          {/* Performance Management Chart — 90-day fitness/fatigue/form */}
+          {(() => {
+            const daActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
+            const dailyRtss = dailyRtssFromActivities(daActs, da);
+            const today = new Date();
+            const from = new Date(today); from.setDate(today.getDate() - 89);
+            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+            return (
+              <div style={{ ...S.card, marginBottom:20 }}>
+                <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
+                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(today)} height={220}/>
+              </div>
+            );
+          })()}
+
+          {/* Calendar markers — race / sick / taper / travel */}
+          {(() => {
+            const list = markersByEmail[dashAthlete?.toLowerCase()] || [];
+            const upcoming = list.filter(m => (m.end_date || m.marker_date) >= todayStr()).slice(0, 5);
+            const addMarker = async () => {
+              const kind = prompt(`Marker kind? One of: ${MARKER_KINDS.join(", ")}`, "race");
+              if (!kind || !MARKER_KINDS.includes(kind)) return;
+              const markerDate = prompt("Date (YYYY-MM-DD)?", todayStr());
+              if (!markerDate || !/^\d{4}-\d{2}-\d{2}$/.test(markerDate)) return;
+              const endDate = prompt("End date (YYYY-MM-DD), blank for single day:", "") || null;
+              const label = prompt("Label (e.g. 'Berlin Marathon')?", "") || null;
+              const isARace = kind === "race" && confirm("Mark as A-race?");
+              const created = await createMarker({
+                athleteEmail: dashAthlete, kind, markerDate, endDate, label, isARace,
+                createdBy: user.email,
+              });
+              if (created) loadMarkers(dashAthlete);
+            };
+            return (
+              <div style={{ ...S.card, marginBottom:20 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
+                  <Eyebrow>Calendar markers</Eyebrow>
+                  <button type="button" onClick={addMarker} style={{
+                    background:"transparent", color:C.accent, border:`1px solid ${C.rule}`,
+                    borderRadius:2, padding:"4px 10px", fontSize:11, cursor:"pointer", fontWeight:600,
+                  }}>+ Add</button>
+                </div>
+                {upcoming.length === 0 ? (
+                  <div style={{ fontSize:13, color:C.mute, fontStyle:"italic" }}>None scheduled.</div>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {upcoming.map(m => {
+                      const ms = MARKER_STYLE[m.kind] || MARKER_STYLE.other;
+                      return (
+                        <div key={m.id} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                          <span style={{ width:8, height:8, borderRadius:999, background:ms.ribbon }}/>
+                          <span style={{ fontFamily:S.bodyFont, fontSize:11, letterSpacing:1.5, color:ms.ribbon, fontWeight:700, textTransform:"uppercase" }}>{ms.label}</span>
+                          <span style={{ fontFamily:S.displayFont, fontSize:14, color:C.ink, flex:1 }}>{m.label || ms.label}</span>
+                          <span className="t-mono" style={{ fontSize:11, color:C.mute }}>
+                            {m.marker_date}{m.end_date && m.end_date !== m.marker_date ? ` → ${m.end_date}` : ""}
+                          </span>
+                          <button type="button" onClick={async () => {
+                            if (!confirm("Delete this marker?")) return;
+                            const ok = await deleteMarker(m.id);
+                            if (ok) loadMarkers(dashAthlete);
+                          }} style={{ background:"transparent", border:"none", color:C.hot, cursor:"pointer", fontSize:13 }}>×</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <button onClick={() => setCoachScreen("profile")}
             style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"10px", fontSize:13, fontWeight:600 }}>
             ✏️ Edit Profile (name, goal, PB)
@@ -1871,10 +1994,7 @@ export default function App() {
                               const sDate  = log?.analysis?.actual_date || sessionDateStr(wk.weekStart, s.day);
                               const linkedAct = actByDate[sDate];
                               const isPastDate = sDate && sDate < todayStr();
-                              const comply = log?.analysis?.compliance
-                                || (linkedAct ? "completed"
-                                  : isPastDate && (s.type || "").toUpperCase() !== "REST" ? "missed"
-                                  : "pending");
+                              const comply = effectiveCompliance({ session: s, log, linkedAct, isPastDate, profile: da });
                               const cts = typeStyle(s.type);
                               return (
                                 <div key={s.id}
@@ -2006,7 +2126,13 @@ export default function App() {
                     { val:"partial",   label:"~ Partial", color:C.amber   },
                     { val:"missed",    label:"✗ Missed",  color:C.crimson },
                   ].map(opt => {
-                    const current = an?.compliance || (linkedAthAct ? "completed" : "pending");
+                    const current = effectiveCompliance({
+                      session: activeSession,
+                      log: log,
+                      linkedAct: linkedAthAct,
+                      isPastDate: false,
+                      profile: athletePrograms[activeSession?.athleteEmail] || {},
+                    });
                     const active  = current === opt.val;
                     return (
                       <button key={opt.val} type="button"
@@ -2097,62 +2223,32 @@ export default function App() {
                 })()}
               </SectionCard>
 
-              <SectionCard label="💬 Your Reply">
-                {(log?.coach_reply || linkedAthAct?.coach_reply) ? (
-                  <>
-                    <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, marginBottom:12 }}>{log?.coach_reply || linkedAthAct?.coach_reply}</div>
-                    <button onClick={async ()=>{
-                      if (log?.coach_reply) {
-                        const { data: updated } = await supabase.from("session_logs").update({ coach_reply: "", updated_at: new Date().toISOString() }).eq("session_id", activeSession.id).select().maybeSingle();
-                        if (updated) setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
-                      } else if (linkedAthAct) {
-                        const { data: actUpd } = await supabase.from("activities").update({ coach_reply: "" }).eq("id", linkedAthAct.id).select().maybeSingle();
-                        if (actUpd) setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a));
-                      }
-                    }} style={S.ghostBtn}>Edit reply</button>
-                  </>
-                ) : (
-                  <>
-                    <textarea value={coachReply} onChange={e=>setCoachReply(e.target.value)}
-                      placeholder="Write a note back to the athlete..."
-                      style={{ ...S.textarea, minHeight:90 }}/>
-                    <button onClick={async ()=>{
-                      if (!coachReply.trim()) return;
+              {(() => {
+                // Prefer the session log thread; fall back to the activity.
+                const threadSource = (log?.messages?.length || log?.coach_reply) ? log : (linkedAthAct || null);
+                const thread = threadSource ? getThread(threadSource) : [];
+                return (
+                  <ThreadPanel
+                    thread={thread}
+                    viewerRole="coach"
+                    onSend={async (body) => {
+                      const next = appendMessage(threadSource?.messages || [], { author: "coach", body });
+                      if (!next) return;
                       const ts = new Date().toISOString();
-                      // Write to both stores: activities is canonical (Strava-first),
-                      // session_logs kept populated for backward compatibility.
                       let wroteAnywhere = false;
                       if (linkedAthAct) {
-                        const { data: actUpd, error: actErr } = await supabase
-                          .from("activities")
-                          .update({ coach_reply: coachReply })
-                          .eq("id", linkedAthAct.id)
-                          .select().maybeSingle();
-                        if (actUpd) {
-                          setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a));
-                          wroteAnywhere = true;
-                        } else if (actErr) console.error("activity reply error:", actErr);
+                        const { data: actUpd } = await supabase
+                          .from("activities").update({ messages: next, coach_reply: body }).eq("id", linkedAthAct.id).select().maybeSingle();
+                        if (actUpd) { setActivities(prev => prev.map(a => a.id === actUpd.id ? actUpd : a)); wroteAnywhere = true; }
                       }
-                      const { data: updated, error: updateErr } = await supabase
-                        .from("session_logs")
-                        .update({ coach_reply: coachReply, updated_at: ts })
-                        .eq("session_id", activeSession.id)
-                        .select().maybeSingle();
-                      if (updated) {
-                        setLogs(prev => ({ ...prev, [activeSession.id]: updated }));
-                        wroteAnywhere = true;
-                      } else if (updateErr) console.error("session_log reply error:", updateErr);
-                      if (!wroteAnywhere) {
-                        alert("No session log or activity found for this session.");
-                        return;
-                      }
-                      setCoachReply("");
-                    }} disabled={!coachReply.trim()} style={S.primaryBtn("#14365f", !coachReply.trim())}>
-                      Send Reply →
-                    </button>
-                  </>
-                )}
-              </SectionCard>
+                      const { data: updated } = await supabase
+                        .from("session_logs").update({ messages: next, coach_reply: body, updated_at: ts }).eq("session_id", activeSession.id).select().maybeSingle();
+                      if (updated) { setLogs(prev => ({ ...prev, [activeSession.id]: updated })); wroteAnywhere = true; }
+                      if (!wroteAnywhere) alert("No session log or activity found for this session.");
+                    }}
+                  />
+                );
+              })()}
             </>
           )}
           <button onClick={() => {
@@ -2786,6 +2882,76 @@ export default function App() {
             </div>
           )}
 
+          {/* ─── Wellness quick check-in ─────────────────────────── */}
+          {(() => {
+            // Show only when there's a logged run today AND wellness hasn't
+            // been recorded yet. Once any field is set, the prompt disappears
+            // (the athlete can still edit via the full form).
+            const log = todaysSession?.log;
+            const w = log?.analysis?.wellness || {};
+            const hasAny = w.rpe != null || w.sleep_hours != null || w.soreness != null || w.mood != null;
+            const loggedToday = !!log?.analysis?.distance_km || !!todaysActivity;
+            if (!loggedToday || hasAny) return null;
+            const submit = async () => {
+              if (!todaysSession?.s?.id) return;
+              setQuickSaving(true);
+              try {
+                const wellness = {
+                  ...(quickRpe       != null    ? { rpe: quickRpe }                      : {}),
+                  ...(quickSleep      !== ""    ? { sleep_hours: parseFloat(quickSleep) } : {}),
+                  ...(quickSoreness  != null    ? { soreness: quickSoreness }            : {}),
+                  ...(quickMood      != null    ? { mood: quickMood }                    : {}),
+                };
+                if (Object.keys(wellness).length === 0) { setQuickSaving(false); return; }
+                const nextAnalysis = { ...(log?.analysis || {}), wellness };
+                await saveLog(todaysSession.s.id, { analysis: nextAnalysis });
+                setQuickRpe(null); setQuickSleep(""); setQuickSoreness(null); setQuickMood(null);
+              } catch (e) { console.error("quick wellness save failed", e); }
+              finally { setQuickSaving(false); }
+            };
+            const PickRow = ({ label, options, value, onChange }) => (
+              <div style={{ marginBottom:12 }}>
+                <Eyebrow style={{ marginBottom:6 }}>{label}</Eyebrow>
+                <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                  {options.map(n => (
+                    <button key={n} type="button" onClick={() => onChange(value === n ? null : n)}
+                      style={{
+                        flex:`1 0 ${100 / options.length - 1}%`, minWidth:30, padding:"8px 4px",
+                        background: value === n ? "var(--c-ink)" : "transparent",
+                        color:      value === n ? "var(--c-paper)" : "var(--c-ink)",
+                        border:`1px solid ${value === n ? "var(--c-ink)" : "var(--c-rule)"}`,
+                        borderRadius:2, fontFamily:"var(--f-mono)", fontSize:12, fontWeight:500, cursor:"pointer",
+                        fontVariantNumeric:"tabular-nums",
+                      }}>{n}</button>
+                  ))}
+                </div>
+              </div>
+            );
+            return (
+              <div style={{ margin:"24px 24px 0", padding:"18px 20px", background:"var(--c-paper)", border:"1px solid var(--c-rule)", borderLeft:"3px solid var(--c-accent)" }}>
+                <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:14 }}>
+                  <Eyebrow style={{ color:"var(--c-accent)" }}>How did it feel?</Eyebrow>
+                  <span className="t-display-italic" style={{ fontSize:13, color:"var(--c-mute)" }}>30 sec check-in</span>
+                </div>
+                <PickRow label="Effort (RPE)"     options={[1,2,3,4,5,6,7,8,9,10]} value={quickRpe}      onChange={setQuickRpe}/>
+                <PickRow label="Soreness · 1–5"   options={[1,2,3,4,5]}            value={quickSoreness} onChange={setQuickSoreness}/>
+                <PickRow label="Mood · 1–5"       options={[1,2,3,4,5]}            value={quickMood}     onChange={setQuickMood}/>
+                <div style={{ marginBottom:14 }}>
+                  <Eyebrow style={{ marginBottom:6 }}>Sleep last night (h)</Eyebrow>
+                  <input type="number" step="0.5" min="0" max="14" placeholder="e.g. 7.5"
+                    value={quickSleep} onChange={e => setQuickSleep(e.target.value)}
+                    style={{ ...S.input, width:120, fontFamily:"var(--f-mono)" }}/>
+                </div>
+                <button onClick={submit}
+                  disabled={quickSaving || (quickRpe == null && !quickSleep && quickSoreness == null && quickMood == null)}
+                  className="fp-btn fp-btn--accent"
+                  style={{ width:"100%", padding:"12px", fontSize:11, opacity:(quickSaving || (quickRpe == null && !quickSleep && quickSoreness == null && quickMood == null)) ? 0.5 : 1 }}>
+                  {quickSaving ? "Saving…" : "Save check-in"}
+                </button>
+              </div>
+            );
+          })()}
+
           {/* ─── Strava unimported note ───────────────────────────── */}
           {todaysStravaUnimported && (
             <div style={{ margin:"24px 24px 0", padding:"16px 18px", background:"var(--c-paper)", border:"1px solid var(--c-rule)", borderLeft:"3px solid var(--c-hot)" }}>
@@ -2865,6 +3031,117 @@ export default function App() {
               })}
             </div>
           </div>
+
+          {/* ─── Weekly recap (last week) — only on Mon/Tue ─────────── */}
+          {(() => {
+            const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+            const dow = todayD.getDay();  // 0=Sun..6=Sat. Show Mon (1) and Tue (2).
+            if (dow !== 1 && dow !== 2) return null;
+
+            // Last full week = the Mon→Sun that ended yesterday-ish.
+            const { monday: lastMon, sunday: lastSun } = getWeekBounds(1);
+            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+            const lastMonStr = fmt(lastMon);
+            const lastSunStr = fmt(lastSun);
+            const inLastWeek = (s) => s >= lastMonStr && s <= lastSunStr;
+
+            // All my activities last week.
+            const lastWeekActs = myActs.filter(a => a.activity_date && inLastWeek(a.activity_date));
+            if (lastWeekActs.length === 0) return null;
+
+            const totalKm = lastWeekActs.reduce((acc, a) => acc + (parseFloat(a.distance_km) || 0), 0);
+            const thr = (() => { try { return null; } catch { return null; } })();
+
+            // Compute rTSS for each + sum
+            const dailyR = dailyRtssFromActivities(lastWeekActs, profile);
+            const totalRtss = dailyR.reduce((a, b) => a + (b.rtss || 0), 0);
+
+            // Top run = the activity with the highest rTSS (or longest distance fallback)
+            let topRun = null, topRtss = -1;
+            for (const a of lastWeekActs) {
+              const distKm = parseFloat(a.distance_km) || 0;
+              const durSec = a.duration_seconds || 0;
+              let r = a.rtss != null ? Number(a.rtss) : null;
+              // Re-derive on the fly when rtss column not yet backfilled.
+              if (r == null && distKm && durSec) {
+                const computed = dailyR.find(x => x.date === a.activity_date);
+                r = computed?.rtss || 0;
+              }
+              if ((r || 0) > topRtss) { topRtss = r || 0; topRun = a; }
+            }
+
+            // Sessions planned vs completed — for compliance %.
+            const sessionsLastWeek = (programEntry?.weeks || []).flatMap(w =>
+              (w.sessions || []).map(s => ({ s, weekStart: w.weekStart, log: logs[s.id] }))
+            ).filter(({ s, weekStart }) => {
+              const sd = sessionDateStr(weekStart, s.day);
+              return sd && inLastWeek(sd) && (s.type || "").toUpperCase() !== "REST";
+            });
+            const planned = sessionsLastWeek.length;
+            let done = 0, missed = 0;
+            for (const { s, weekStart, log } of sessionsLastWeek) {
+              const sd = sessionDateStr(weekStart, s.day);
+              const linkedAct = myActs.find(a => a.activity_date === sd);
+              const grade = effectiveCompliance({ session: s, log, linkedAct, isPastDate: true, profile });
+              if (grade === "completed" || grade === "over") done++;
+              else if (grade === "missed") missed++;
+            }
+            const compliancePct = planned > 0 ? Math.round((done / planned) * 100) : null;
+
+            return (
+              <div style={{ padding:"40px 24px 0" }}>
+                <SectionHead label={`Last week · ${lastMonStr.slice(5)} → ${lastSunStr.slice(5)}`}/>
+                <div style={{ marginTop:14, display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                  <div>
+                    <Eyebrow>Volume</Eyebrow>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
+                      <BigNum size={36}>{totalKm.toFixed(1)}</BigNum>
+                      <span className="t-mono" style={{ fontSize:12, color:"var(--c-mute)" }}>km</span>
+                    </div>
+                  </div>
+                  <div>
+                    <Eyebrow>Load</Eyebrow>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
+                      <BigNum size={36}>{totalRtss}</BigNum>
+                      <span className="t-mono" style={{ fontSize:12, color:"var(--c-mute)" }}>rTSS</span>
+                    </div>
+                  </div>
+                  {compliancePct != null && (
+                    <div>
+                      <Eyebrow>Compliance</Eyebrow>
+                      <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
+                        <BigNum size={36} color={compliancePct > 75 ? "var(--c-accent)" : compliancePct > 40 ? "var(--c-warn)" : "var(--c-hot)"}>{compliancePct}%</BigNum>
+                      </div>
+                      <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}>{done}/{planned} sessions</span>
+                    </div>
+                  )}
+                  <div>
+                    <Eyebrow>Sessions</Eyebrow>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
+                      <BigNum size={36}>{lastWeekActs.length}</BigNum>
+                      <span className="t-mono" style={{ fontSize:12, color:"var(--c-mute)" }}>logged</span>
+                    </div>
+                  </div>
+                </div>
+                {topRun && (
+                  <div style={{ marginTop:16, paddingTop:14, borderTop:"1px solid var(--c-ruleSoft)" }}>
+                    <Eyebrow>Top run</Eyebrow>
+                    <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.4, color:"var(--c-ink)", margin:"6px 0 0" }}>
+                      {topRun.activity_type || "Run"} on {topRun.activity_date} ·{" "}
+                      <span className="t-display-italic" style={{ color:"var(--c-mute)" }}>
+                        {parseFloat(topRun.distance_km).toFixed(1)} km{topRtss > 0 ? `, ${topRtss} rTSS` : ""}
+                      </span>
+                    </p>
+                  </div>
+                )}
+                {missed > 0 && (
+                  <p style={{ fontFamily:"var(--f-display)", fontStyle:"italic", fontSize:14, color:"var(--c-hot)", margin:"10px 0 0" }}>
+                    {missed} session{missed === 1 ? "" : "s"} missed last week.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ─── Goal footer ───────────────────────────────────────── */}
           <div style={{ padding:"40px 24px 0" }}>
@@ -3119,6 +3396,7 @@ export default function App() {
                         });
                       const extrasHere = dayDate ? extraActs.filter(a => a.activity_date === dayDate) : [];
                       const hasItems = sessionsHere.length + extrasHere.length > 0;
+                      const dayMarkers = dayDate ? markersOnDate(markersByEmail[user.email?.toLowerCase()] || [], dayDate) : [];
                       return (
                         <DayRow
                           key={dayLabel}
@@ -3126,6 +3404,7 @@ export default function App() {
                           dayLabel={dayLabel}
                           isToday={isToday}
                           hasItems={hasItems}
+                          markers={dayMarkers}
                           onAddRun={dayDate ? () => {
                             setLogForm({ date: dayDate, distanceKm: "", durationMin: "", type: "Run", notes: "" });
                             setEditingActivityId(null);
@@ -3210,7 +3489,23 @@ export default function App() {
                   const d = await loadStravaDetail(id);
                   if (d) {
                     const actDate = stravaActivities.find(a=>a.id===id)?.start_date_local?.split("T")[0] || logForm.date;
-                    setLogForm(f=>({ ...f, date: actDate, distanceKm: (d.distance_m/1000).toFixed(2), durationMin: Math.round(d.moving_time_s/60).toString() }));
+                    // Auto-classify the run type from splits + threshold pace.
+                    // Map the lib/load.js label to the activityTypes list the
+                    // form picker uses ("Easy Run" etc).
+                    const labelMap = { LONG: "Long Run", SPEED: "Speed", TEMPO: "Tempo", RECOVERY: "Easy Run", EASY: "Easy Run" };
+                    const cls = autoClassifyRunType({
+                      distanceKm: d.distance_m / 1000,
+                      durationSec: d.moving_time_s,
+                      splits: d.splits,
+                      thresholdSecsPerKm: getThresholdPace(profile),
+                    });
+                    setLogForm(f=>({
+                      ...f,
+                      date: actDate,
+                      distanceKm: (d.distance_m/1000).toFixed(2),
+                      durationMin: Math.round(d.moving_time_s/60).toString(),
+                      type: labelMap[cls] || f.type,
+                    }));
                   }
                 } else clearStravaSelection();
               }}
@@ -3297,7 +3592,25 @@ export default function App() {
         style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}
       >
         <SectionCard label="Today's Session">
-          {activeSession.desc.split("\n").filter(l => !/^\w{3} \w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2}/.test(l.trim())).map((l,i)=>(
+          {isStructured(activeSession) && (
+            <ol style={{ listStyle:"none", padding:0, margin:"0 0 12px", borderLeft:`2px solid ${C.rule}` }}>
+              {activeSession.steps.map((step, i) => (
+                <li key={i} style={{ position:"relative", paddingLeft:16, marginLeft:8, marginBottom:10 }}>
+                  <span style={{ position:"absolute", left:-7, top:6, width:10, height:10, borderRadius:999, background:C.accent, border:`2px solid ${C.bg}` }}/>
+                  <div style={{ fontSize:10, letterSpacing:2, color:C.accent, fontWeight:700, textTransform:"uppercase", marginBottom:2 }}>
+                    {step.kind}
+                  </div>
+                  <div style={{ fontFamily:S.displayFont, fontSize:16, color:C.ink, lineHeight:1.35 }}>
+                    {formatStep(step)}
+                  </div>
+                  {step.note && step.kind !== "steady" && (
+                    <div style={{ fontSize:12, color:C.mute, fontStyle:"italic", marginTop:2 }}>{step.note}</div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+          {activeSession.desc && activeSession.desc.split("\n").filter(l => !/^\w{3} \w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2}/.test(l.trim())).map((l,i)=>(
             <div key={i} style={{ fontSize:14, color:i===0?C.navy:C.mid, lineHeight:1.9 }}>{l}</div>
           ))}
           <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
@@ -3453,6 +3766,22 @@ export default function App() {
             </div>
           )}
 
+          {/* Training-load row — rTSS pill + Z1–Z5 stacked bar */}
+          {an?.distance_km && an?.duration_min && (
+            <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:18, flexWrap:"wrap" }}>
+              <RtssPillFor durationMin={an.duration_min} distanceKm={an.distance_km} profile={profile}/>
+              <div style={{ flex:"1 1 200px", minWidth:160 }}>
+                <ZoneBar
+                  splits={log?.strava_data?.splits}
+                  durationMin={an.duration_min}
+                  distanceKm={an.distance_km}
+                  profile={profile}
+                  showLabels
+                />
+              </div>
+            </div>
+          )}
+
           {/* Pace strip */}
           <div className="fp-pace-strip" style={{ marginBottom:24 }}>
             <div>
@@ -3501,16 +3830,29 @@ export default function App() {
             </div>
           )}
 
-          {(log?.coach_reply || resultLinkedAct?.coach_reply) && (
-            <div style={{ marginBottom:24 }}>
-              <SectionHead label="From your coach"/>
-              <div style={{ marginTop:18, padding:"22px 22px", background:"var(--c-paper)", border:"1px solid var(--c-rule)" }}>
-                <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.55, margin:0, color:"var(--c-ink)" }}>
-                  {log?.coach_reply || resultLinkedAct?.coach_reply}
-                </p>
-              </div>
-            </div>
-          )}
+          {(() => {
+            // Pick the canonical thread source: prefer the session log,
+            // fall back to the linked activity (older athletes have replies
+            // attached to activities not session logs).
+            const threadSource = log?.messages?.length || log?.coach_reply ? log : (resultLinkedAct || null);
+            const thread = threadSource ? getThread(threadSource) : [];
+            if (!thread.length && !threadSource) return null;
+            return (
+              <ThreadPanel
+                thread={thread}
+                viewerRole="athlete"
+                onSend={async (body) => {
+                  const next = appendMessage(threadSource?.messages || [], { author: "athlete", body });
+                  if (!next) return;
+                  if (threadSource === log) {
+                    await saveLog(activeSession.id, { messages: next });
+                  } else if (resultLinkedAct?.id) {
+                    await supabase.from("activities").update({ messages: next }).eq("id", resultLinkedAct.id);
+                  }
+                }}
+              />
+            );
+          })()}
           <button onClick={() => {
             const an = log?.analysis;
             const w = an?.wellness || {};
@@ -3700,6 +4042,7 @@ export default function App() {
                     const distKm = an?.distance_km ?? linkedAct?.distance_km;
                     const ts = typeStyle(s.type);
                     const dayLabel = new Date(onDate + "T00:00:00").toLocaleDateString(undefined, { weekday:"short", day:"numeric" });
+                    const compHist = effectiveCompliance({ session: s, log, linkedAct, isPastDate: onDate < todayStr(), profile });
                     return (
                       <div key={s.id}
                         onClick={() => { setActiveSession({ ...s, weekStart }); setScreen(isLogged ? "result" : "session"); }}
@@ -3713,8 +4056,8 @@ export default function App() {
                             </div>
                           )}
                         </div>
-                        <div style={{ fontSize:10, color: isLogged ? COMPLY_COLOR[an?.compliance || "completed"] : C.mid, fontWeight:700, letterSpacing:1 }}>
-                          {isLogged ? COMPLY_LABEL[an?.compliance || "completed"] : "PLANNED"}
+                        <div style={{ fontSize:10, color: isLogged ? COMPLY_COLOR[compHist] || C.mid : C.mid, fontWeight:700, letterSpacing:1 }}>
+                          {isLogged ? COMPLY_LABEL[compHist] || compHist?.toUpperCase() : "PLANNED"}
                         </div>
                       </div>
                     );

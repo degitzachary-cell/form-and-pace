@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { C, S } from './styles.js';
 import { newId, snapToMonday } from './lib/helpers.js';
 import { DAY_LABELS } from './lib/constants.js';
+import { formatStep } from './lib/load.js';
 
 // ─── EXCEL PARSER ────────────────────────────────────────────
 function inferSessionType(desc) {
@@ -201,6 +202,122 @@ function StatusBanner({ status, onDismiss }) {
   );
 }
 
+// Inline structured-step editor. Lives next to the freeform desc on each
+// session card. Coaches can mix-and-match — type a desc, build steps, or
+// both. When steps are present the athlete view will render them as a
+// checkable list.
+function StepsEditor({ session, onChange }) {
+  const steps = Array.isArray(session?.steps) ? session.steps : [];
+  const setStep = (i, patch) => {
+    const next = steps.map((s, idx) => idx === i ? { ...s, ...patch } : s);
+    onChange(next);
+  };
+  const setNested = (i, group, patch) => {
+    const next = steps.map((s, idx) => idx === i ? { ...s, [group]: { ...(s[group] || {}), ...patch } } : s);
+    onChange(next);
+  };
+  const remove = (i) => onChange(steps.filter((_, idx) => idx !== i));
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= steps.length) return;
+    const next = steps.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  const add = (kind) => {
+    const blank = (() => {
+      switch (kind) {
+        case 'warmup':   return { kind: 'warmup',   duration_min: 15, pace: '' };
+        case 'cooldown': return { kind: 'cooldown', duration_min: 10, pace: '' };
+        case 'steady':   return { kind: 'steady',   duration_min: '', distance_km: '', pace: '', note: '' };
+        case 'interval': return { kind: 'interval', reps: 6,
+                                  work:     { distance_m: 800, pace: '' },
+                                  recovery: { duration_s: 90, pace: '' } };
+        default: return null;
+      }
+    })();
+    if (blank) onChange([...steps, blank]);
+  };
+
+  const inp = { background: C.white, border: `1px solid ${C.rule}`, borderRadius: 2, padding: '5px 8px', fontSize: 12, fontFamily: S.bodyFont, color: C.ink };
+  const lbl = { fontSize: 9, letterSpacing: 1.5, color: C.mid, textTransform: 'uppercase', marginRight: 6 };
+  const stepBox = { background: C.white, border: `1px solid ${C.rule}`, borderLeft: `3px solid ${C.accent}`, borderRadius: 2, padding: '8px 10px', marginBottom: 6 };
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 6 }}>Structured steps (optional)</div>
+      {steps.map((step, i) => (
+        <div key={i} style={stepBox}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 10, letterSpacing: 1.5, color: C.accent, fontWeight: 700, textTransform: 'uppercase' }}>{step.kind}</span>
+            <span style={{ fontSize: 12, color: C.mute, fontStyle: 'italic', flex: 1, fontFamily: S.displayFont }}>{formatStep(step)}</span>
+            <button type="button" onClick={() => move(i, -1)} disabled={i === 0} style={{ background: 'transparent', border: 'none', color: i === 0 ? C.rule : C.mute, cursor: i === 0 ? 'default' : 'pointer', fontSize: 14 }}>↑</button>
+            <button type="button" onClick={() => move(i, 1)} disabled={i === steps.length - 1} style={{ background: 'transparent', border: 'none', color: i === steps.length - 1 ? C.rule : C.mute, cursor: i === steps.length - 1 ? 'default' : 'pointer', fontSize: 14 }}>↓</button>
+            <button type="button" onClick={() => remove(i)} style={{ background: 'transparent', border: 'none', color: C.hot, cursor: 'pointer', fontSize: 11 }}>×</button>
+          </div>
+          {step.kind === 'warmup' || step.kind === 'cooldown' ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={lbl}>min</span>
+              <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>pace</span>
+              <input style={{ ...inp, width: 80 }} placeholder="5:30" value={step.pace || ''} onChange={e => setStep(i, { pace: e.target.value })}/>
+            </div>
+          ) : step.kind === 'steady' ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={lbl}>km</span>
+              <input style={{ ...inp, width: 60 }} type="number" step="0.1" value={step.distance_km ?? ''} onChange={e => setStep(i, { distance_km: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>min</span>
+              <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>pace</span>
+              <input style={{ ...inp, width: 80 }} placeholder="4:35" value={step.pace || ''} onChange={e => setStep(i, { pace: e.target.value })}/>
+              <input style={{ ...inp, width: 140 }} placeholder="note (e.g. at MP)" value={step.note || ''} onChange={e => setStep(i, { note: e.target.value })}/>
+            </div>
+          ) : step.kind === 'interval' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={lbl}>reps</span>
+                <input style={{ ...inp, width: 50 }} type="number" min="1" value={step.reps ?? 1} onChange={e => setStep(i, { reps: Math.max(1, Number(e.target.value) || 1) })}/>
+              </div>
+              <div/>
+              <div style={{ background: C.bgDeep, padding: 6, borderRadius: 2 }}>
+                <div style={{ ...lbl, marginBottom: 4 }}>Work</div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input style={{ ...inp, width: 70 }} type="number" placeholder="m" value={step.work?.distance_m ?? ''} onChange={e => setNested(i, 'work', { distance_m: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <span style={{ fontSize: 10, color: C.mid }}>or</span>
+                  <input style={{ ...inp, width: 60 }} type="number" placeholder="s" value={step.work?.duration_s ?? ''} onChange={e => setNested(i, 'work', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <input style={{ ...inp, width: 70 }} placeholder="pace" value={step.work?.pace || ''} onChange={e => setNested(i, 'work', { pace: e.target.value })}/>
+                </div>
+              </div>
+              <div style={{ background: C.bgDeep, padding: 6, borderRadius: 2 }}>
+                <div style={{ ...lbl, marginBottom: 4 }}>Recovery</div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input style={{ ...inp, width: 70 }} type="number" placeholder="m" value={step.recovery?.distance_m ?? ''} onChange={e => setNested(i, 'recovery', { distance_m: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <span style={{ fontSize: 10, color: C.mid }}>or</span>
+                  <input style={{ ...inp, width: 60 }} type="number" placeholder="s" value={step.recovery?.duration_s ?? ''} onChange={e => setNested(i, 'recovery', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <input style={{ ...inp, width: 70 }} placeholder="pace" value={step.recovery?.pace || ''} onChange={e => setNested(i, 'recovery', { pace: e.target.value })}/>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {[
+          { k: 'warmup',   label: '+ Warm-up'  },
+          { k: 'steady',   label: '+ Steady'   },
+          { k: 'interval', label: '+ Interval' },
+          { k: 'cooldown', label: '+ Cool-down' },
+        ].map(({ k, label }) => (
+          <button key={k} type="button" onClick={() => add(k)} style={{
+            background: 'transparent', color: C.accent, border: `1px solid ${C.rule}`,
+            borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600, letterSpacing: 0.5,
+          }}>{label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CoachPlanBuilder({ athletes, onSave }) {
   const [selectedEmail, setSelectedEmail] = useState('');
   const [weeks, setWeeks] = useState([]);
@@ -217,6 +334,24 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [saving, setSaving] = useState(false);
   const [baseline, setBaseline] = useState('');
   const fileInputRef = useRef(null);
+
+  // Cross-athlete copy/paste — survives switching the selected athlete.
+  // Persisted in localStorage so it also survives a tab refresh: the coach
+  // can copy on Monday morning and paste later in the day. Stores the week's
+  // sessions stripped of IDs (regenerated on paste).
+  const [clipboardWeek, setClipboardWeek] = useState(() => {
+    try {
+      const raw = localStorage.getItem('fp.planBuilder.clipboardWeek');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+  const writeClipboard = (week) => {
+    setClipboardWeek(week);
+    try {
+      if (week) localStorage.setItem('fp.planBuilder.clipboardWeek', JSON.stringify(week));
+      else      localStorage.removeItem('fp.planBuilder.clipboardWeek');
+    } catch { /* quota / private mode — ignore */ }
+  };
 
   // Dirty = current state differs from last loaded/saved snapshot.
   const currentSnapshot = JSON.stringify({ weeks, athleteName, athleteGoal, athletePb });
@@ -311,6 +446,52 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const todayMondayFallback = () => {
     const t = new Date();
     return snapToMonday(t.toISOString().slice(0, 10));
+  };
+
+  // Copy a week to the cross-athlete clipboard. Strips IDs and dates — the
+  // skeleton (label, sessions with their day/type/pace/desc) is what travels.
+  const handleCopyWeek = (weekId) => {
+    const src = weeks.find(w => w.id === weekId);
+    if (!src) return;
+    writeClipboard({
+      weekLabel: src.weekLabel || 'Copied week',
+      sessions: src.sessions.map(({ id, ...rest }) => ({ ...rest })),
+      _copiedFrom: athleteName || selectedEmail || '',
+      _copiedAt: new Date().toISOString(),
+    });
+    setStatus({ kind: 'success', message: 'Week copied — paste into any athlete.' });
+  };
+
+  // Paste the clipboard into the currently selected athlete. Picks the
+  // Monday after the latest existing week as the weekStart (or this Monday
+  // if the athlete has no weeks yet). New IDs are minted for each session.
+  const handlePasteWeek = () => {
+    if (!clipboardWeek || !selectedEmail) return;
+    let weekStart;
+    if (weeks.length > 0) {
+      const latest = [...weeks]
+        .map(w => w.weekStart)
+        .filter(Boolean)
+        .sort()
+        .pop();
+      if (latest) {
+        const next = new Date(latest + 'T00:00:00');
+        next.setDate(next.getDate() + 7);
+        const y = next.getFullYear();
+        const m = String(next.getMonth() + 1).padStart(2, '0');
+        const dy = String(next.getDate()).padStart(2, '0');
+        weekStart = `${y}-${m}-${dy}`;
+      }
+    }
+    if (!weekStart) weekStart = todayMondayFallback();
+    const newWeek = {
+      id: newId(),
+      weekLabel: clipboardWeek.weekLabel || 'Pasted week',
+      weekStart,
+      sessions: (clipboardWeek.sessions || []).map(s => ({ ...s, id: newId() })),
+    };
+    setWeeks([...weeks, newWeek]);
+    setStatus({ kind: 'success', message: `Pasted week (${newWeek.sessions.length} sessions) into ${athleteName || selectedEmail}.` });
   };
 
   const handleDeleteWeek = (weekId) => {
@@ -429,6 +610,34 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
             </div>
           </div>
 
+          {clipboardWeek && selectedEmail && (
+            <div style={{
+              ...cardStyle,
+              background: C.bgDeep, borderColor: C.accent, borderLeft: `3px solid ${C.accent}`,
+              marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+            }}>
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: 2, color: C.accent, textTransform: 'uppercase', fontWeight: 700 }}>Clipboard</div>
+                <div style={{ fontFamily: S.displayFont, fontSize: 16, color: C.ink, marginTop: 2 }}>
+                  {clipboardWeek.weekLabel || 'Copied week'}
+                  <span style={{ fontStyle: 'italic', color: C.mute, fontSize: 13, marginLeft: 8 }}>
+                    · {clipboardWeek.sessions?.length || 0} sessions{clipboardWeek._copiedFrom ? ` from ${clipboardWeek._copiedFrom}` : ''}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={handlePasteWeek} style={{
+                  background: C.accent, color: C.accentInk, border: 'none', borderRadius: 2,
+                  padding: '8px 16px', fontSize: 11, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
+                }}>Paste here →</button>
+                <button type="button" onClick={() => writeClipboard(null)} style={{
+                  background: 'transparent', color: C.mute, border: `1px solid ${C.rule}`,
+                  borderRadius: 2, padding: '8px 12px', fontSize: 11, cursor: 'pointer',
+                }}>Clear</button>
+              </div>
+            </div>
+          )}
+
           {weeks.map(week => (
             <div key={week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -437,6 +646,10 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                   <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{week.weekStart}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" onClick={() => handleCopyWeek(week.id)} style={{
+                    background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
+                    borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                  }} title="Copy this week to clipboard — paste into any athlete">Copy</button>
                   <button type="button" onClick={() => handleDuplicateWeek(week.id)} style={{
                     background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
@@ -492,6 +705,12 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       value={session.desc}
                       onChange={e => handleSessionChange(week.id, session.id, 'desc', e.target.value)}
                     />
+
+                    <StepsEditor
+                      session={session}
+                      onChange={(steps) => handleSessionChange(week.id, session.id, 'steps', steps)}
+                    />
+
                     <button type="button" onClick={() => handleDeleteSession(week.id, session.id)} style={{
                       background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
                       borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',

@@ -1,6 +1,289 @@
 import { useState } from "react";
 import { C, S } from "./styles.js";
 import { fmtPace, fmtTime } from "./lib/helpers.js";
+import {
+  computeRtss, getThresholdPace, rtssColor,
+  timeInZone, ZONE_LABELS, ZONE_COLORS, ZONE_NAMES,
+  paceStrToSecsPerKm, computePMC, densifyDailyRtss,
+} from "./lib/load.js";
+
+// ─── TRAINING-LOAD PILLS ─────────────────────────────────────────────────────
+
+// Renders a small "rTSS 64" pill colored by load band. Pure presentational —
+// callers pass a precomputed rtss number, or use <RtssPillFor /> below to
+// derive it from a run + profile.
+export function RtssPill({ rtss, size = 11 }) {
+  if (rtss == null) return null;
+  return (
+    <span style={{
+      display:"inline-flex", alignItems:"center", gap:6,
+      padding:"3px 9px", borderRadius:999,
+      border:`1px solid ${rtssColor(rtss)}`,
+      color: rtssColor(rtss),
+      fontFamily:"var(--f-mono)", fontSize:size, letterSpacing:"0.04em",
+      fontVariantNumeric:"tabular-nums",
+    }}>
+      <span style={{ opacity:0.7 }}>rTSS</span>
+      <span style={{ fontWeight:600 }}>{rtss}</span>
+    </span>
+  );
+}
+
+// Convenience: derive rTSS from a run + the athlete's profile (for the
+// threshold pace) and render the pill. Returns null if not enough data.
+export function RtssPillFor({ durationMin, distanceKm, profile, size = 11 }) {
+  const thr = getThresholdPace(profile);
+  if (!thr || !durationMin || !distanceKm) return null;
+  const rtss = computeRtss({
+    durationSec: durationMin * 60,
+    distanceKm,
+    thresholdSecsPerKm: thr,
+  });
+  return <RtssPill rtss={rtss} size={size}/>;
+}
+
+// ─── THREAD PANEL ────────────────────────────────────────────────────────────
+// Renders a chronological thread of athlete↔coach messages plus an inline
+// reply box. Pure presentational — owner provides the thread array (already
+// blended via lib/messages.js getThread) and an onSend(body) callback.
+//
+// `viewerRole` flips alignment + highlight: messages from the OTHER party
+// sit on the paper-card side, the viewer's own messages float in plain text
+// on the right.
+export function ThreadPanel({ thread = [], viewerRole = "athlete", onSend }) {
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const otherAuthor = viewerRole === "coach" ? "athlete" : "coach";
+  const sectionLabel = viewerRole === "coach" ? "Reply to athlete" : "Coach thread";
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ padding: "0 0 12px", borderBottom: "1px solid var(--c-rule)", display:"flex", alignItems:"baseline", justifyContent:"space-between" }}>
+        <span className="t-eyebrow" style={{ color:"var(--c-ink)" }}>{sectionLabel}</span>
+        {thread.length > 0 && <span className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.08em" }}>{thread.length} MESSAGE{thread.length === 1 ? "" : "S"}</span>}
+      </div>
+      <div style={{ marginTop: 14, display:"flex", flexDirection:"column", gap:12 }}>
+        {thread.map(m => {
+          const isOther = m.author === otherAuthor;
+          return (
+            <div key={m.id} style={{
+              display:"flex",
+              flexDirection: isOther ? "row" : "row-reverse",
+              alignItems:"flex-start",
+              gap:10,
+            }}>
+              <div style={{
+                maxWidth: "85%",
+                padding: isOther ? "14px 16px" : "10px 14px",
+                background: isOther ? "var(--c-paper)" : "transparent",
+                border: isOther ? "1px solid var(--c-rule)" : "none",
+                borderLeft: isOther ? "2px solid var(--c-accent)" : "none",
+              }}>
+                <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:"var(--c-mute)", marginBottom:6 }}>
+                  {m.author === "coach" ? "COACH" : "ATHLETE"}
+                  {m.created_at && ` · ${new Date(m.created_at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}`}
+                </div>
+                <div style={{
+                  fontFamily: isOther ? "var(--f-display)" : "var(--f-body)",
+                  fontSize: isOther ? 17 : 15,
+                  lineHeight: 1.55,
+                  color:"var(--c-ink)",
+                  whiteSpace:"pre-wrap",
+                }}>
+                  {m.body}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <textarea
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder={viewerRole === "coach" ? "Reply to your athlete…" : "Write back to your coach…"}
+          style={{
+            width:"100%", minHeight:80, padding:"12px 14px",
+            background:"var(--c-paper)", border:"1px solid var(--c-rule)", borderRadius:2,
+            color:"var(--c-ink)", fontFamily:"var(--f-display)", fontSize:16, lineHeight:1.5,
+            resize:"vertical", outline:"none",
+          }}
+        />
+        <button
+          onClick={async () => {
+            if (!draft.trim() || sending) return;
+            setSending(true);
+            try { await onSend(draft); setDraft(""); }
+            catch (e) { console.error("send message failed", e); }
+            finally { setSending(false); }
+          }}
+          disabled={!draft.trim() || sending}
+          className="fp-btn fp-btn--accent"
+          style={{ marginTop:10, padding:"10px 20px", fontSize:11, opacity: !draft.trim() || sending ? 0.5 : 1 }}>
+          {sending ? "Sending…" : "Send"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── PMC CHART (CTL / ATL / TSB) ─────────────────────────────────────────────
+//
+// Minimal hand-rolled SVG line chart — keeps the bundle lean (no recharts).
+// Three lines: CTL (fitness, dusty olive, thick), ATL (fatigue, terracotta,
+// thinner), TSB (form, shown as filled bars beneath the zero line so
+// over-/under-training is visually obvious). Daily rTSS shown as faint
+// vertical bars in the background.
+//
+// `dailyRtss` is an array of { date: 'YYYY-MM-DD', rtss }. The chart
+// densifies to daily, computes PMC, and renders.
+export function PMCChart({ dailyRtss, fromDate, toDate, height = 200 }) {
+  const dense = densifyDailyRtss(dailyRtss || [], fromDate, toDate);
+  const pmc = computePMC(dense);
+  if (pmc.length < 2) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "var(--c-mute)", fontFamily: "var(--f-display)", fontStyle: "italic", fontSize: 14 }}>
+        Not enough data yet — log a few weeks of runs and CTL/ATL will start to draw.
+      </div>
+    );
+  }
+  const VB_W = 600, VB_H = height;
+  const PAD_L = 40, PAD_R = 12, PAD_T = 14, PAD_B = 22;
+  const innerW = VB_W - PAD_L - PAD_R;
+  const innerH = VB_H - PAD_T - PAD_B;
+
+  const N = pmc.length;
+  const maxLoad = Math.max(40, ...pmc.map(p => p.ctl), ...pmc.map(p => p.atl));
+  const yLoad = (v) => PAD_T + (1 - v / maxLoad) * innerH;
+  const x = (i) => PAD_L + (i * innerW) / Math.max(1, N - 1);
+
+  const ctlPath = pmc.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yLoad(p.ctl).toFixed(1)}`).join(" ");
+  const atlPath = pmc.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yLoad(p.atl).toFixed(1)}`).join(" ");
+
+  // TSB drawn against zero-axis at the bottom band (below load lines).
+  // We map TSB to the bottom 30% of the chart, with zero in the middle of
+  // that band so positive (fresh) goes up and negative (fatigued) goes down.
+  const tsbBandTop = PAD_T + innerH * 0.7;
+  const tsbBandH = innerH * 0.28;
+  const tsbZeroY = tsbBandTop + tsbBandH / 2;
+  const maxTsb = Math.max(10, ...pmc.map(p => Math.abs(p.tsb)));
+  const yTsb = (v) => tsbZeroY - (v / maxTsb) * (tsbBandH / 2);
+
+  const last = pmc[pmc.length - 1];
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 18, marginBottom: 8, flexWrap: "wrap" }}>
+        <div>
+          <div className="t-eyebrow">Fitness · CTL</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: "var(--c-accent)", fontWeight: 600 }}>{last.ctl.toFixed(1)}</div>
+        </div>
+        <div>
+          <div className="t-eyebrow">Fatigue · ATL</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: "var(--c-hot)", fontWeight: 600 }}>{last.atl.toFixed(1)}</div>
+        </div>
+        <div>
+          <div className="t-eyebrow">Form · TSB</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: last.tsb >= 0 ? "var(--c-cool)" : "var(--c-warn)", fontWeight: 600 }}>
+            {last.tsb >= 0 ? "+" : ""}{last.tsb.toFixed(1)}
+          </div>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} preserveAspectRatio="none" style={{ width: "100%", height: "auto", display: "block" }}>
+        {/* axis lines */}
+        <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={VB_H - PAD_B} stroke="var(--c-rule)" strokeWidth="0.5"/>
+        <line x1={PAD_L} y1={VB_H - PAD_B} x2={VB_W - PAD_R} y2={VB_H - PAD_B} stroke="var(--c-rule)" strokeWidth="0.5"/>
+        {/* y-axis ticks */}
+        {[0, 0.5, 1].map(t => {
+          const v = Math.round(maxLoad * t);
+          return (
+            <g key={t}>
+              <line x1={PAD_L} y1={yLoad(v)} x2={VB_W - PAD_R} y2={yLoad(v)} stroke="var(--c-ruleSoft)" strokeWidth="0.4" strokeDasharray="2 3"/>
+              <text x={PAD_L - 6} y={yLoad(v) + 3} textAnchor="end" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">{v}</text>
+            </g>
+          );
+        })}
+        {/* daily rTSS as faint background bars */}
+        {pmc.map((p, i) => p.rtss > 0 && (
+          <rect key={i}
+            x={x(i) - 0.8} y={yLoad(p.rtss)}
+            width="1.6" height={Math.max(0.5, (VB_H - PAD_B) - yLoad(p.rtss))}
+            fill="var(--c-ruleSoft)"/>
+        ))}
+        {/* TSB filled area */}
+        <line x1={PAD_L} y1={tsbZeroY} x2={VB_W - PAD_R} y2={tsbZeroY} stroke="var(--c-rule)" strokeWidth="0.4"/>
+        {pmc.map((p, i) => {
+          const yp = yTsb(p.tsb);
+          const h = Math.abs(yp - tsbZeroY);
+          const top = Math.min(yp, tsbZeroY);
+          const fill = p.tsb >= 0 ? "var(--c-cool)" : "var(--c-warn)";
+          return (
+            <rect key={i} x={x(i) - 1} y={top} width="2" height={Math.max(0.5, h)} fill={fill} fillOpacity="0.45"/>
+          );
+        })}
+        {/* CTL line */}
+        <path d={ctlPath} fill="none" stroke="var(--c-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        {/* ATL line */}
+        <path d={atlPath} fill="none" stroke="var(--c-hot)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        {/* date ticks: first / midpoint / last */}
+        {[0, Math.floor(N/2), N - 1].map(i => (
+          <text key={i} x={x(i)} y={VB_H - 6} textAnchor="middle" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">
+            {pmc[i].date.slice(5)}
+          </text>
+        ))}
+      </svg>
+      <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 10, color: "var(--c-mute)", fontFamily: "var(--f-mono)" }}>
+        <span><span style={{ display: "inline-block", width: 10, height: 2, background: "var(--c-accent)", verticalAlign: "middle", marginRight: 5 }}/>CTL fitness</span>
+        <span><span style={{ display: "inline-block", width: 10, height: 2, background: "var(--c-hot)", verticalAlign: "middle", marginRight: 5 }}/>ATL fatigue</span>
+        <span><span style={{ display: "inline-block", width: 6, height: 8, background: "var(--c-cool)", opacity: 0.45, verticalAlign: "middle", marginRight: 5 }}/>TSB form</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── TIME-IN-ZONE BAR ────────────────────────────────────────────────────────
+// A short stacked bar showing how the run was spent across Z1–Z5. Shows up
+// best on activities with split data — for manual logs without splits, falls
+// back to "all time in the zone the average pace lands in," which is
+// approximate but useful at a glance.
+export function ZoneBar({ splits, durationMin, distanceKm, profile, height = 6, showLabels = false }) {
+  const thr = getThresholdPace(profile);
+  if (!thr || !durationMin) return null;
+  const tiz = timeInZone({
+    splits,
+    durationSec: durationMin * 60,
+    distanceKm,
+    thresholdSecsPerKm: thr,
+  });
+  if (!tiz.total) return null;
+  return (
+    <div>
+      <div style={{ display:"flex", height, width:"100%", overflow:"hidden", borderRadius:1 }}>
+        {ZONE_LABELS.map(z => {
+          const pct = (tiz[z] / tiz.total) * 100;
+          if (pct < 0.5) return null;
+          return (
+            <div key={z}
+              title={`${ZONE_NAMES[z]} · ${Math.round(tiz[z]/60)}min (${Math.round(pct)}%)`}
+              style={{ width:`${pct}%`, background: ZONE_COLORS[z] }}/>
+          );
+        })}
+      </div>
+      {showLabels && (
+        <div style={{ display:"flex", marginTop:4, gap:8, flexWrap:"wrap" }}>
+          {ZONE_LABELS.filter(z => tiz[z] > 0).map(z => {
+            const pct = Math.round((tiz[z] / tiz.total) * 100);
+            return (
+              <span key={z} className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.06em" }}>
+                <span style={{ display:"inline-block", width:6, height:6, borderRadius:999, background:ZONE_COLORS[z], marginRight:5, verticalAlign:"middle" }}/>
+                {z} {pct}%
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── EDITORIAL ATOMS (Form & Pace redesign) ──────────────────────────────────
 // Shared low-level building blocks used by every redesigned screen. Pure
