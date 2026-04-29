@@ -1,33 +1,37 @@
-// ─── DESIGN TOKENS — "Bone" theme (editorial / soft & human) ─────────────────
-// Palette + type system from the redesign. Old export names (C, S, TYPE_STYLE,
-// typeStyle, COMPLY_*, TAG_*) are preserved so existing screens keep working
-// without a refactor; their values just shift to the new design language.
+// ─── DESIGN TOKENS — "Sport" theme (locked default) ──────────────────────────
+// Terracotta does the heavy lifting. Olive is gone. Cool blue + amber stay
+// quiet — accents only, never decoration.
+//
+// Old export names (C, S, TYPE_STYLE, typeStyle, COMPLY_*, TAG_*) are
+// preserved so existing screens keep working without a refactor; their
+// values just shift to the Sport tokens. Never hardcode hex outside this
+// file or index.html :root.
 export const C = {
-  // legacy keys — repointed to new "bone" palette
+  // Legacy aliases — repointed to Sport palette.
   cream:     "#F4EFE6",   // bg
   white:     "#FBF8F1",   // paper
   navy:      "#1A1814",   // ink
-  crimson:   "#B5482A",   // hot (terracotta) — used sparingly
-  green:     "#5C6B3D",   // accent (dusty olive — calm "go" signal)
+  crimson:   "#B5482A",   // accent (terracotta — primary, the heavy lifter)
+  green:     "#B5482A",   // legacy "completed" color now uses accent terracotta
   amber:     "#A87B2E",   // warn
   mid:       "#8C857A",   // mute
   rule:      "#D9D0BE",
   lightRule: "#E8E1D2",
 
-  // new tokens (preferred)
+  // Canonical tokens (preferred).
   bg:        "#F4EFE6",
-  bgDeep:    "#EDE6D9",
+  bgDeep:    "#1A1814",   // sport: heavy ink panels (coach left rail)
   paper:     "#FBF8F1",
   ink:       "#1A1814",
   inkSoft:   "#4A4540",
   mute:      "#8C857A",
   ruleSoft:  "#E8E1D2",
-  accent:    "#5C6B3D",
+  accent:    "#B5482A",   // PRIMARY — buttons, CTAs, "today" markers, key data
   accentInk: "#FBF8F1",
-  hot:       "#B5482A",
+  hot:       "#E0511C",   // race countdown, RPE, "off plan" alerts
   hotInk:    "#FBF8F1",
-  cool:      "#3F5A6B",
-  warn:      "#A87B2E",
+  cool:      "#3F5A6B",   // recovery / soreness / cooldown
+  warn:      "#A87B2E",   // tempo / partial / amber
 };
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
