@@ -153,8 +153,9 @@ function ExtraActivityCard({ act, onClick }) {
 }
 
 function DayRow({ dateStr, dayLabel, isToday, children, hasItems }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr}` });
-  const dayHeader = `${dayLabel.toUpperCase()} · ${dateStr.slice(5).replace("-", "/")}`;
+  const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr || dayLabel}` });
+  const datePart = dateStr ? dateStr.slice(5).replace("-", "/") : "";
+  const dayHeader = datePart ? `${dayLabel.toUpperCase()} · ${datePart}` : dayLabel.toUpperCase();
   return (
     <div ref={setNodeRef} style={{
       marginBottom: 8,
@@ -701,6 +702,7 @@ export default function App() {
 
   // Persist a session's actual_date when dragged to a new day in the same week.
   const handleSessionDrop = async (sessionId, newDate, weekStart) => {
+    if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return;
     const session = (weeks.find(w => w.weekStart === weekStart)?.sessions || []).find(s => s.id === sessionId);
     if (!session) return;
     const scheduledDate = sessionDateStr(weekStart, session.day);
