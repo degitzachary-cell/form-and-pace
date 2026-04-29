@@ -32,6 +32,32 @@ export const TAG_STYLE = {
   speed: { bg:"#e2eaf5", accent:"#14365f", border:"#b0c8e8" },
   tempo: { bg:"#f5e4e4", accent:"#7a1a1a", border:"#e0b8b8" },
 };
+
+// Per-TYPE styling. Used everywhere a workout is rendered. Each entry has:
+//   accent  — solid colour for labels/borders
+//   bg      — soft tint for card background (when logged)
+//   pattern — optional CSS background for special types (Hyrox, Race Day)
+export const TYPE_STYLE = {
+  EASY:       { accent:"#2a6e27", bg:"#e6f0e3", border:"#b8d4b4" },
+  RECOVERY:   { accent:"#3a7ca8", bg:"#e3eef5", border:"#b8d0e0" },
+  "LONG RUN": { accent:"#5b3a7a", bg:"#ece2f0", border:"#cdb8d8" },
+  TEMPO:      { accent:"#c2691f", bg:"#f5e9d8", border:"#e6c8a0" },
+  SPEED:      { accent:"#8a2a2a", bg:"#f5e0e0", border:"#e0b8b8" },
+  HYROX:      { accent:"#c79541", bg:"#fff4d4", border:"#1c1d22",
+                pattern:"linear-gradient(135deg, #f5c542 0 50%, #1c1d22 50% 100%)" },
+  "RACE DAY": { accent:"#1c1d22", bg:"#fafafa", border:"#1c1d22",
+                pattern:"conic-gradient(#1c1d22 25%, #fff 25% 50%, #1c1d22 50% 75%, #fff 75%) 0 0 / 12px 12px" },
+  REST:       { accent:"#d63384", bg:"#fde6f0", border:"#f0b8d0" },
+};
+
+// Look up TYPE_STYLE for any type string. Falls back to EASY if unknown,
+// and case-insensitive.
+export function typeStyle(type) {
+  if (!type) return TYPE_STYLE.EASY;
+  const key = String(type).toUpperCase().trim();
+  return TYPE_STYLE[key] || TYPE_STYLE.EASY;
+}
+
 export const COMPLY_COLOR = { completed:"#2a6e27", missed:"#8b1c1c", partial:"#8b6914", pending:"#9a8a7a" };
 export const COMPLY_LABEL = { completed:"✓ Done", missed:"✗ Missed", partial:"~ Partial", pending:"Pending" };
 export const TAG_EMOJI    = { speed:"⚡", tempo:"🎯", easy:"🏃", long:"🏃" };
