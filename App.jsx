@@ -247,6 +247,14 @@ export default function App() {
   const [sessionSleepHrs,  setSessionSleepHrs]  = useState("");    // free number
   const [sessionSoreness,  setSessionSoreness]  = useState(null);  // 1–5
   const [sessionMood,      setSessionMood]      = useState(null);  // 1–5
+
+  // Quick-prompt wellness on Today — only used by the inline check-in card.
+  // Independent state so it doesn't clobber the full session-log form.
+  const [quickRpe,      setQuickRpe]      = useState(null);
+  const [quickSleep,    setQuickSleep]    = useState("");
+  const [quickSoreness, setQuickSoreness] = useState(null);
+  const [quickMood,     setQuickMood]     = useState(null);
+  const [quickSaving,   setQuickSaving]   = useState(false);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
 
@@ -2800,6 +2808,76 @@ export default function App() {
               </button>
             </div>
           )}
+
+          {/* ─── Wellness quick check-in ─────────────────────────── */}
+          {(() => {
+            // Show only when there's a logged run today AND wellness hasn't
+            // been recorded yet. Once any field is set, the prompt disappears
+            // (the athlete can still edit via the full form).
+            const log = todaysSession?.log;
+            const w = log?.analysis?.wellness || {};
+            const hasAny = w.rpe != null || w.sleep_hours != null || w.soreness != null || w.mood != null;
+            const loggedToday = !!log?.analysis?.distance_km || !!todaysActivity;
+            if (!loggedToday || hasAny) return null;
+            const submit = async () => {
+              if (!todaysSession?.s?.id) return;
+              setQuickSaving(true);
+              try {
+                const wellness = {
+                  ...(quickRpe       != null    ? { rpe: quickRpe }                      : {}),
+                  ...(quickSleep      !== ""    ? { sleep_hours: parseFloat(quickSleep) } : {}),
+                  ...(quickSoreness  != null    ? { soreness: quickSoreness }            : {}),
+                  ...(quickMood      != null    ? { mood: quickMood }                    : {}),
+                };
+                if (Object.keys(wellness).length === 0) { setQuickSaving(false); return; }
+                const nextAnalysis = { ...(log?.analysis || {}), wellness };
+                await saveLog(todaysSession.s.id, { analysis: nextAnalysis });
+                setQuickRpe(null); setQuickSleep(""); setQuickSoreness(null); setQuickMood(null);
+              } catch (e) { console.error("quick wellness save failed", e); }
+              finally { setQuickSaving(false); }
+            };
+            const PickRow = ({ label, options, value, onChange }) => (
+              <div style={{ marginBottom:12 }}>
+                <Eyebrow style={{ marginBottom:6 }}>{label}</Eyebrow>
+                <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                  {options.map(n => (
+                    <button key={n} type="button" onClick={() => onChange(value === n ? null : n)}
+                      style={{
+                        flex:`1 0 ${100 / options.length - 1}%`, minWidth:30, padding:"8px 4px",
+                        background: value === n ? "var(--c-ink)" : "transparent",
+                        color:      value === n ? "var(--c-paper)" : "var(--c-ink)",
+                        border:`1px solid ${value === n ? "var(--c-ink)" : "var(--c-rule)"}`,
+                        borderRadius:2, fontFamily:"var(--f-mono)", fontSize:12, fontWeight:500, cursor:"pointer",
+                        fontVariantNumeric:"tabular-nums",
+                      }}>{n}</button>
+                  ))}
+                </div>
+              </div>
+            );
+            return (
+              <div style={{ margin:"24px 24px 0", padding:"18px 20px", background:"var(--c-paper)", border:"1px solid var(--c-rule)", borderLeft:"3px solid var(--c-accent)" }}>
+                <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:14 }}>
+                  <Eyebrow style={{ color:"var(--c-accent)" }}>How did it feel?</Eyebrow>
+                  <span className="t-display-italic" style={{ fontSize:13, color:"var(--c-mute)" }}>30 sec check-in</span>
+                </div>
+                <PickRow label="Effort (RPE)"     options={[1,2,3,4,5,6,7,8,9,10]} value={quickRpe}      onChange={setQuickRpe}/>
+                <PickRow label="Soreness · 1–5"   options={[1,2,3,4,5]}            value={quickSoreness} onChange={setQuickSoreness}/>
+                <PickRow label="Mood · 1–5"       options={[1,2,3,4,5]}            value={quickMood}     onChange={setQuickMood}/>
+                <div style={{ marginBottom:14 }}>
+                  <Eyebrow style={{ marginBottom:6 }}>Sleep last night (h)</Eyebrow>
+                  <input type="number" step="0.5" min="0" max="14" placeholder="e.g. 7.5"
+                    value={quickSleep} onChange={e => setQuickSleep(e.target.value)}
+                    style={{ ...S.input, width:120, fontFamily:"var(--f-mono)" }}/>
+                </div>
+                <button onClick={submit}
+                  disabled={quickSaving || (quickRpe == null && !quickSleep && quickSoreness == null && quickMood == null)}
+                  className="fp-btn fp-btn--accent"
+                  style={{ width:"100%", padding:"12px", fontSize:11, opacity:(quickSaving || (quickRpe == null && !quickSleep && quickSoreness == null && quickMood == null)) ? 0.5 : 1 }}>
+                  {quickSaving ? "Saving…" : "Save check-in"}
+                </button>
+              </div>
+            );
+          })()}
 
           {/* ─── Strava unimported note ───────────────────────────── */}
           {todaysStravaUnimported && (
