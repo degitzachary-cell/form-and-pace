@@ -515,6 +515,20 @@ export default function App() {
       if (!row?.id) return;
       setActivities(prev => prev.filter(a => a.id !== row.id));
     };
+    const applyPlan = (row) => {
+      if (!row?.athlete_email) return;
+      const key = row.athlete_email.toLowerCase();
+      if (role === "athlete" && key !== email) return;
+      const { weeks, meta } = normalizePlan(row.plan_json);
+      setAthletePrograms(prev => ({
+        ...prev,
+        [key]: {
+          ...(prev[key] || {}),
+          ...Object.fromEntries(Object.entries(meta).filter(([,v]) => v)),
+          weeks,
+        },
+      }));
+    };
     const ch = supabase
       .channel("form-pace-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "session_logs" }, payload => {
@@ -524,6 +538,9 @@ export default function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "activities" }, payload => {
         if (payload.eventType === "DELETE") removeAct(payload.old);
         else applyAct(payload.new);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "coach_plans" }, payload => {
+        if (payload.eventType !== "DELETE") applyPlan(payload.new);
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -1136,9 +1153,12 @@ export default function App() {
     // Compute per-athlete: 7-day dot strip, replies-needed count, status flag.
     const athleteRows = athletes.map(([email, data]) => {
       const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
+      // Index planned sessions by date — skip REST entries (they shouldn't
+      // count as a workout-to-do).
       const sessionsByDate = new Map();
       for (const w of weeksList) {
         for (const s of (w.sessions || [])) {
+          if ((s.type || "").toUpperCase() === "REST") continue;
           const log = logs[s.id];
           const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
           if (onDate) sessionsByDate.set(onDate, { s, log });
@@ -1148,6 +1168,25 @@ export default function App() {
       const actsByDate = new Map();
       for (const a of myActs) actsByDate.set(a.activity_date, a);
 
+      // Index session_logs by their effective date for athletes who logged a
+      // run without a matching activity row. Falls back to updated_at when
+      // analysis.actual_date is missing AND no activity was created.
+      const orphanLogsByDate = new Map();
+      for (const w of weeksList) {
+        for (const s of (w.sessions || [])) {
+          const log = logs[s.id];
+          if (!log?.analysis?.distance_km) continue;
+          const planDate = sessionDateStr(w.weekStart, s.day);
+          const onDate = log.analysis.actual_date || planDate;
+          if (actsByDate.has(onDate)) continue;
+          // Use updated_at if the scheduled date predates the log by >2 days
+          // (athlete logged catch-up well after the planned day).
+          const upd = log.updated_at?.split("T")[0];
+          const effective = upd && upd !== onDate ? upd : onDate;
+          if (!orphanLogsByDate.has(effective)) orphanLogsByDate.set(effective, log);
+        }
+      }
+
       const days = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - i);
@@ -1155,7 +1194,8 @@ export default function App() {
         const isToday = dStr === today;
         const planned = sessionsByDate.get(dStr);
         const act = actsByDate.get(dStr);
-        const isLogged = !!act || !!planned?.log?.analysis?.distance_km;
+        const orphanLog = orphanLogsByDate.get(dStr);
+        const isLogged = !!act || !!orphanLog || !!planned?.log?.analysis?.distance_km;
         let color = C.lightRule;
         if (isLogged && planned) color = C.green;
         else if (isLogged) color = "#7a96b8";
@@ -2093,7 +2133,7 @@ export default function App() {
       const onDate = overrideDate || sessionDateStr(monStr, s.day);
       return { s, log, onDate };
     });
-    const todaysSession = allWithMoves.find(x => x.onDate === today);
+    const todaysSession = allWithMoves.find(x => x.onDate === today && (x.s.type || "").toUpperCase() !== "REST");
     const todaysActivity = myActs.find(a => a.activity_date === today);
     const todaysStrava = stravaActivities.find(a => a.start_date_local?.split("T")[0] === today);
     const todaysStravaUnimported = todaysStrava && !myActs.some(a => a.strava_data?.id === todaysStrava.id);
@@ -2144,7 +2184,12 @@ export default function App() {
                   {todaysSession.s.type}
                 </div>
                 {todaysSession.s.pace && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{todaysSession.s.pace}</div>}
-                {todaysSession.s.description && <div style={{ fontSize:13, color:C.mid, marginTop:8, lineHeight:1.5 }}>{todaysSession.s.description}</div>}
+                {(todaysSession.s.desc || todaysSession.s.description) && (
+                  <div style={{ fontSize:13, color:C.mid, marginTop:8, lineHeight:1.5, whiteSpace:"pre-wrap" }}>
+                    {todaysSession.s.desc || todaysSession.s.description}
+                  </div>
+                )}
+                {todaysSession.s.terrain && <div style={{ fontSize:11, color:C.mid, marginTop:6, letterSpacing:1 }}>{todaysSession.s.terrain}</div>}
                 {(todaysSession.log || todaysActivity) && (
                   <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${C.rule}`, fontSize:11, color:C.green, letterSpacing:1, fontWeight:700 }}>
                     ✓ LOGGED · {todaysActivity?.distance_km ?? todaysSession.log?.analysis?.distance_km}KM
