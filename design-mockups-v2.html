@@ -15,6 +15,12 @@
     --rule: #e7e4dc;
     --accent: #b85a3c;       /* warm terracotta — only used for today */
     --accent-soft: #f1d9cf;
+
+    --type-easy:     #2f5d3a;  /* dark green */
+    --type-speed:    #8a2a2a;  /* dark red */
+    --type-tempo:    #c2691f;  /* orange */
+    --type-recovery: #335f86;  /* recovery blue */
+    --type-long:     #5b3a7a;  /* purple */
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #ece9e2; font-family: 'Inter', system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
@@ -108,22 +114,35 @@
     color: var(--muted);
   }
 
-  /* Rail dot */
+  /* Rail indicator — small coloured rectangle sitting on the hairline */
   .day::after {
     content: "";
     position: absolute;
-    left: -8px; top: 32px;
-    width: 6px; height: 6px;
-    border-radius: 50%;
+    left: -3px; top: 28px;
+    width: 7px; height: 14px;
+    border-radius: 1.5px;
     background: var(--paper);
     box-shadow: 0 0 0 1px var(--rule);
   }
+  .day[data-type="easy"]::after     { background: var(--type-easy);     box-shadow: none; }
+  .day[data-type="speed"]::after    { background: var(--type-speed);    box-shadow: none; }
+  .day[data-type="tempo"]::after    { background: var(--type-tempo);    box-shadow: none; }
+  .day[data-type="recovery"]::after { background: var(--type-recovery); box-shadow: none; }
+  .day[data-type="long"]::after     { background: var(--type-long);     box-shadow: none; }
+
+  /* Today: keep the type colour, add a soft halo */
   .day.today::after {
-    background: var(--accent);
     box-shadow: 0 0 0 4px var(--accent-soft);
   }
   .day.today .num { color: var(--accent); }
   .day.today .dow { color: var(--accent); }
+
+  /* Type-coloured uppercase label, matched to indicator */
+  .day[data-type="easy"]     .workout-type { color: var(--type-easy); }
+  .day[data-type="speed"]    .workout-type { color: var(--type-speed); }
+  .day[data-type="tempo"]    .workout-type { color: var(--type-tempo); }
+  .day[data-type="recovery"] .workout-type { color: var(--type-recovery); }
+  .day[data-type="long"]     .workout-type { color: var(--type-long); }
 
   /* Workout content */
   .workout-type {
@@ -212,7 +231,7 @@
 
       <div class="timeline">
 
-        <div class="day">
+        <div class="day" data-type="easy">
           <div class="stamp">
             <div class="num">28</div>
             <div class="dow">Mon</div>
@@ -223,7 +242,7 @@
           <div class="logged">Logged · 6.1 km @ 5:24</div>
         </div>
 
-        <div class="day today">
+        <div class="day today" data-type="tempo">
           <div class="stamp">
             <div class="num">29</div>
             <div class="dow">Tue</div>
@@ -233,7 +252,7 @@
           <div class="workout-meta"><b>10 km</b> total · 4:15/km · 90s float</div>
         </div>
 
-        <div class="day">
+        <div class="day" data-type="recovery">
           <div class="stamp">
             <div class="num">30</div>
             <div class="dow">Wed</div>
@@ -252,7 +271,7 @@
           <button class="add">+ add run</button>
         </div>
 
-        <div class="day">
+        <div class="day" data-type="speed">
           <div class="stamp">
             <div class="num">02</div>
             <div class="dow">Fri</div>
@@ -262,7 +281,7 @@
           <div class="workout-meta">@ 5K pace · 200m jog · track</div>
         </div>
 
-        <div class="day">
+        <div class="day" data-type="long">
           <div class="stamp">
             <div class="num">03</div>
             <div class="dow">Sat</div>
