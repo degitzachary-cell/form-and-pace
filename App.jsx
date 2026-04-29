@@ -30,6 +30,7 @@ export default function App() {
   const [feedbackText,  setFeedbackText]  = useState("");
   const [sessionDistKm, setSessionDistKm] = useState("");
   const [sessionDurMin, setSessionDurMin] = useState("");
+  const [sessionDateOverride, setSessionDateOverride] = useState(null);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
 
@@ -381,7 +382,7 @@ export default function App() {
     setActiveSession(null); setActiveExtraActivity(null);
     setActiveWeekIdx(null); setCoachWeekIdx(null); setHoveredWeekIdx(null);
     setCoachReply(""); setFeedbackText("");
-    setSessionDistKm(""); setSessionDurMin("");
+    setSessionDistKm(""); setSessionDurMin(""); setSessionDateOverride(null);
     setScreen("home"); setCoachScreen("dashboard");
     setDashAthlete(null);
   };
@@ -501,19 +502,25 @@ export default function App() {
     const s = activeSession;
     try {
       const TAG_EMOJI = { speed:"⚡", tempo:"🎯", easy:"🏃", long:"🏃" };
+      const scheduledDate = s.weekStart ? sessionDateStr(s.weekStart, s.day) : null;
+      const sessionDate = sessionDateOverride || scheduledDate
+        || (() => { const d = new Date(); const y = d.getFullYear(); const mo = String(d.getMonth()+1).padStart(2,"0"); const dy = String(d.getDate()).padStart(2,"0"); return `${y}-${mo}-${dy}`; })();
       const analysis = {
         compliance: "completed",
         emoji: TAG_EMOJI[s.tag] || "🏃",
         distance_km: parseFloat(sessionDistKm),
         duration_min: sessionDurMin ? parseFloat(sessionDurMin) : null,
+        ...(sessionDate !== scheduledDate ? { actual_date: sessionDate } : {}),
       };
       await saveLog(s.id, { feedback: feedbackText, analysis, ...(stravaDetail ? { strava_data: stravaDetail } : {}) });
 
-      // Save to activities so distance counts toward weekly total
-      const sessionDate = s.weekStart
-        ? sessionDateStr(s.weekStart, s.day)
-        : (() => { const d = new Date(); const y = d.getFullYear(); const mo = String(d.getMonth()+1).padStart(2,"0"); const dy = String(d.getDate()).padStart(2,"0"); return `${y}-${mo}-${dy}`; })();
-      const existing = findAthAct(user.email, sessionDate);
+      // Save to activities so distance counts toward weekly total.
+      // Check the overridden date first, then the scheduled date, then the
+      // previously-saved actual_date so re-edits find the right row.
+      const prevActualDate = logs[s.id]?.analysis?.actual_date;
+      const existing = findAthAct(user.email, sessionDate)
+        || findAthAct(user.email, scheduledDate)
+        || (prevActualDate ? findAthAct(user.email, prevActualDate) : null);
       if (!existing) {
         const payload = {
           athlete_email: user.email?.toLowerCase(),
@@ -530,6 +537,7 @@ export default function App() {
         if (actData) setActivities(prev => [actData, ...prev]);
       } else {
         const { data: updAct } = await supabase.from("activities").update({
+          activity_date: sessionDate,
           distance_km: parseFloat(sessionDistKm),
           duration_seconds: sessionDurMin ? Math.round(parseFloat(sessionDurMin) * 60) : null,
           notes: feedbackText || null,
@@ -1350,7 +1358,7 @@ export default function App() {
                     const hasFullFeedback = log?.feedback && log.feedback.trim().length > 0;
                     return (
                       <div key={s.id}
-                        onClick={()=>{ setActiveSession({...s, weekStart: w.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
+                        onClick={()=>{ setActiveSession({...s, weekStart: w.weekStart}); setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionDateOverride(log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day)); setScreen((log && hasFullFeedback) ? "result" : "session"); }}
                         style={{ background:isLogged?"#f0f7ee":C.white, border:`1px solid ${isLogged?"#b8d4b4":C.rule}`, borderRadius:2, padding:"14px 16px", marginBottom:8, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
                         <div style={{ width:40, height:40, borderRadius:"50%", background:ts.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
                           {log?.analysis?.emoji || (s.tag==="speed"?"⚡":s.tag==="tempo"?"🎯":"🏃")}
@@ -1538,12 +1546,24 @@ export default function App() {
                 if (d) {
                   setSessionDistKm((d.distance_m / 1000).toFixed(2));
                   setSessionDurMin(Math.round(d.moving_time_s / 60).toString());
+                  const actDate = stravaActivities.find(a => a.id === id)?.start_date_local?.split("T")[0];
+                  if (actDate) setSessionDateOverride(actDate);
                 }
               } else clearStravaSelection();
             }}
             onClear={() => { clearStravaSelection(); }}
           />
         )}
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: "uppercase", marginBottom: 6 }}>Session date</div>
+          <input
+            type="date"
+            value={sessionDateOverride || ""}
+            onChange={e => setSessionDateOverride(e.target.value)}
+            style={{ ...S.input, width: "auto" }}
+          />
+        </div>
 
         {!stravaDetail && (
           <div style={{ display:"flex", gap:12, marginBottom:14 }}>
@@ -1610,6 +1630,7 @@ export default function App() {
             setFeedbackText(log?.feedback || "");
             setSessionDistKm(an?.distance_km?.toString() || "");
             setSessionDurMin(an?.duration_min?.toString() || "");
+            setSessionDateOverride(an?.actual_date || resultLinkedAct?.activity_date || sessionDateStr(activeSession.weekStart, activeSession.day));
             if (log?.strava_data) setStravaDetail(log.strava_data);
             setScreen("session");
           }} style={{ ...S.ghostBtn, marginBottom: 8 }}>Edit session →</button>
