@@ -4,7 +4,7 @@ import CoachPlanBuilder from "./CoachPlanBuilder";
 import { supabase, exchangeStravaCode } from "./lib/supabase.js";
 import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail } from "./lib/strava.js";
 import {
-  weekKm, stravaWeekKm, sessionDateStr, weekEndStr,
+  weekKm, stravaWeekKm, sessionDateStr, weekEndStr, getWeekBounds,
   prettyEmailName, todayStr, newId,
   snapToMonday, thisMonday,
 } from "./lib/helpers.js";
@@ -3031,6 +3031,117 @@ export default function App() {
               })}
             </div>
           </div>
+
+          {/* ─── Weekly recap (last week) — only on Mon/Tue ─────────── */}
+          {(() => {
+            const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+            const dow = todayD.getDay();  // 0=Sun..6=Sat. Show Mon (1) and Tue (2).
+            if (dow !== 1 && dow !== 2) return null;
+
+            // Last full week = the Mon→Sun that ended yesterday-ish.
+            const { monday: lastMon, sunday: lastSun } = getWeekBounds(1);
+            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+            const lastMonStr = fmt(lastMon);
+            const lastSunStr = fmt(lastSun);
+            const inLastWeek = (s) => s >= lastMonStr && s <= lastSunStr;
+
+            // All my activities last week.
+            const lastWeekActs = myActs.filter(a => a.activity_date && inLastWeek(a.activity_date));
+            if (lastWeekActs.length === 0) return null;
+
+            const totalKm = lastWeekActs.reduce((acc, a) => acc + (parseFloat(a.distance_km) || 0), 0);
+            const thr = (() => { try { return null; } catch { return null; } })();
+
+            // Compute rTSS for each + sum
+            const dailyR = dailyRtssFromActivities(lastWeekActs, profile);
+            const totalRtss = dailyR.reduce((a, b) => a + (b.rtss || 0), 0);
+
+            // Top run = the activity with the highest rTSS (or longest distance fallback)
+            let topRun = null, topRtss = -1;
+            for (const a of lastWeekActs) {
+              const distKm = parseFloat(a.distance_km) || 0;
+              const durSec = a.duration_seconds || 0;
+              let r = a.rtss != null ? Number(a.rtss) : null;
+              // Re-derive on the fly when rtss column not yet backfilled.
+              if (r == null && distKm && durSec) {
+                const computed = dailyR.find(x => x.date === a.activity_date);
+                r = computed?.rtss || 0;
+              }
+              if ((r || 0) > topRtss) { topRtss = r || 0; topRun = a; }
+            }
+
+            // Sessions planned vs completed — for compliance %.
+            const sessionsLastWeek = (programEntry?.weeks || []).flatMap(w =>
+              (w.sessions || []).map(s => ({ s, weekStart: w.weekStart, log: logs[s.id] }))
+            ).filter(({ s, weekStart }) => {
+              const sd = sessionDateStr(weekStart, s.day);
+              return sd && inLastWeek(sd) && (s.type || "").toUpperCase() !== "REST";
+            });
+            const planned = sessionsLastWeek.length;
+            let done = 0, missed = 0;
+            for (const { s, weekStart, log } of sessionsLastWeek) {
+              const sd = sessionDateStr(weekStart, s.day);
+              const linkedAct = myActs.find(a => a.activity_date === sd);
+              const grade = effectiveCompliance({ session: s, log, linkedAct, isPastDate: true, profile });
+              if (grade === "completed" || grade === "over") done++;
+              else if (grade === "missed") missed++;
+            }
+            const compliancePct = planned > 0 ? Math.round((done / planned) * 100) : null;
+
+            return (
+              <div style={{ padding:"40px 24px 0" }}>
+                <SectionHead label={`Last week · ${lastMonStr.slice(5)} → ${lastSunStr.slice(5)}`}/>
+                <div style={{ marginTop:14, display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                  <div>
+                    <Eyebrow>Volume</Eyebrow>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
+                      <BigNum size={36}>{totalKm.toFixed(1)}</BigNum>
+                      <span className="t-mono" style={{ fontSize:12, color:"var(--c-mute)" }}>km</span>
+                    </div>
+                  </div>
+                  <div>
+                    <Eyebrow>Load</Eyebrow>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
+                      <BigNum size={36}>{totalRtss}</BigNum>
+                      <span className="t-mono" style={{ fontSize:12, color:"var(--c-mute)" }}>rTSS</span>
+                    </div>
+                  </div>
+                  {compliancePct != null && (
+                    <div>
+                      <Eyebrow>Compliance</Eyebrow>
+                      <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
+                        <BigNum size={36} color={compliancePct > 75 ? "var(--c-accent)" : compliancePct > 40 ? "var(--c-warn)" : "var(--c-hot)"}>{compliancePct}%</BigNum>
+                      </div>
+                      <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}>{done}/{planned} sessions</span>
+                    </div>
+                  )}
+                  <div>
+                    <Eyebrow>Sessions</Eyebrow>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
+                      <BigNum size={36}>{lastWeekActs.length}</BigNum>
+                      <span className="t-mono" style={{ fontSize:12, color:"var(--c-mute)" }}>logged</span>
+                    </div>
+                  </div>
+                </div>
+                {topRun && (
+                  <div style={{ marginTop:16, paddingTop:14, borderTop:"1px solid var(--c-ruleSoft)" }}>
+                    <Eyebrow>Top run</Eyebrow>
+                    <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.4, color:"var(--c-ink)", margin:"6px 0 0" }}>
+                      {topRun.activity_type || "Run"} on {topRun.activity_date} ·{" "}
+                      <span className="t-display-italic" style={{ color:"var(--c-mute)" }}>
+                        {parseFloat(topRun.distance_km).toFixed(1)} km{topRtss > 0 ? `, ${topRtss} rTSS` : ""}
+                      </span>
+                    </p>
+                  </div>
+                )}
+                {missed > 0 && (
+                  <p style={{ fontFamily:"var(--f-display)", fontStyle:"italic", fontSize:14, color:"var(--c-hot)", margin:"10px 0 0" }}>
+                    {missed} session{missed === 1 ? "" : "s"} missed last week.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ─── Goal footer ───────────────────────────────────────── */}
           <div style={{ padding:"40px 24px 0" }}>
