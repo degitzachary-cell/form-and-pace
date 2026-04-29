@@ -3426,19 +3426,71 @@ export default function App() {
   //  ATHLETE — HISTORY
   // ────────────────────────────────────────────────────────────
   if (role === "athlete" && screen === "history") {
-    const logged     = allSessions.filter(s=>logs[s.id]);
-    const compliance = allSessions.length ? Math.round((logged.length/allSessions.length)*100) : 0;
-    const totalKm    = weekKm(activities, user.email, 0) + weekKm(activities, user.email, 1) + weekKm(activities, user.email, 2) + weekKm(activities, user.email, 3);
+    const myActsHist = activitiesByEmail.get(user.email?.toLowerCase()) || [];
+    const today = todayStr();
+
+    // Group everything by Monday of its date.
+    const byMonday = new Map();
+    const ensureWk = (mon) => {
+      if (!byMonday.has(mon)) byMonday.set(mon, { weekStart: mon, plannedTotal: 0, plannedDone: 0, sessions: [], extras: [] });
+      return byMonday.get(mon);
+    };
+    // Plan weeks (count planned totals + assign sessions to their week).
+    for (const w of (programEntry?.weeks || [])) {
+      const bucket = ensureWk(w.weekStart);
+      for (const s of w.sessions) {
+        if ((s.type || "").toUpperCase() === "REST") continue;
+        bucket.plannedTotal++;
+        const log = logs[s.id];
+        const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
+        const linkedAct = myActsHist.find(a => a.activity_date === onDate && a.source === "session");
+        const isLogged = !!log || !!linkedAct;
+        if (isLogged) bucket.plannedDone++;
+        bucket.sessions.push({ s, log, linkedAct, onDate, weekStart: w.weekStart });
+      }
+    }
+    // Extras (manual or strava runs not tied to a session).
+    for (const a of myActsHist) {
+      if (a.source === "session") continue;
+      const mon = snapToMonday(a.activity_date);
+      if (!mon) continue;
+      ensureWk(mon).extras.push(a);
+    }
+    // Compute km per week from activities.
+    for (const [mon, bucket] of byMonday.entries()) {
+      const wkEnd = weekEndStr(mon);
+      const acts = myActsHist.filter(a => a.activity_date >= mon && a.activity_date <= wkEnd);
+      bucket.kmTotal = acts.reduce((sum, a) => sum + (a.distance_km || 0), 0);
+    }
+
+    const orderedWeeks = [...byMonday.values()]
+      .filter(b => b.weekStart <= today || b.plannedDone > 0 || b.extras.length > 0)
+      .sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+
+    const fmtRange = (mon) => {
+      const m = new Date(mon + "T00:00:00");
+      const sun = new Date(m); sun.setDate(m.getDate() + 6);
+      const fm = (d) => d.toLocaleDateString(undefined, { month:"short", day:"numeric" });
+      return `${fm(m)} – ${fm(sun)}`;
+    };
+
+    // Headline stats: rolling 4 weeks.
+    const last4Km = [0,1,2,3].reduce((sum, w) => sum + weekKm(activities, user.email, w), 0);
+    const last4Plan = orderedWeeks.slice(0, 4);
+    const last4Done = last4Plan.reduce((s, w) => s + w.plannedDone, 0);
+    const last4Total = last4Plan.reduce((s, w) => s + w.plannedTotal, 0);
+    const last4Compl = last4Total ? Math.round((last4Done / last4Total) * 100) : 0;
+
     return (
       <div style={S.page}>
         <div style={S.grain}/>
-        <Header title="My Progress" subtitle="Block 4" onBack={()=>setScreen("home")}/>
+        <Header title="My Progress" subtitle="Last 4 weeks" onBack={()=>setScreen("home")}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
           <div style={{ display:"flex", gap:10, marginBottom:24 }}>
             {[
-              { label:"Compliance", val:`${compliance}%`, color: compliance>75?"#4ade80":"#fbbf24" },
-              { label:"Sessions",   val:`${logged.length}/${allSessions.length}` },
-              { label:"Block Km",   val:`${totalKm.toFixed(0)}`, color:C.navy },
+              { label:"Compliance", val:`${last4Compl}%`, color: last4Compl>75?"#4ade80":"#fbbf24" },
+              { label:"Sessions",   val:`${last4Done}/${last4Total}` },
+              { label:"Total Km",   val:`${last4Km.toFixed(0)}`, color:C.navy },
             ].map((s,i)=>(
               <div key={i} style={S.statBox}>
                 <div style={{ fontSize:20, fontWeight:900, color:s.color||C.navy }}>{s.val}</div>
@@ -3446,43 +3498,78 @@ export default function App() {
               </div>
             ))}
           </div>
-          <SectionCard label="Weekly Compliance">
-            {weeks.map((w,i)=>{
-              const done = w.sessions.filter(s=>logs[s.id]).length;
-              const pct  = Math.round((done/w.sessions.length)*100);
-              return (
-                <div key={i} style={{ marginBottom:10 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:5 }}>
-                    <span style={{ color:C.mid }}>{w.weekLabel}</span>
-                    <span style={{ color: pct>75?"#4ade80":pct>40?"#fbbf24":"#f87171" }}>{done}/{w.sessions.length}</span>
-                  </div>
-                  <div style={{ background:C.cream, borderRadius:2, height:4 }}>
-                    <div style={{ width:`${pct}%`, height:4, borderRadius:2, background: pct>75?"#4ade80":pct>40?"#fbbf24":"#f87171" }}/>
-                  </div>
-                </div>
-              );
-            })}
-          </SectionCard>
-          <div style={{ fontSize:11, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:12 }}>Session Log</div>
-          {logged.length===0 && <div style={{ color:C.mid, fontSize:14, textAlign:"center", padding:"20px 0" }}>No sessions logged yet.</div>}
-          {logged.map(s=>{
-            const log = logs[s.id];
-            const an  = log?.analysis;
-            const TAG_EMOJI = { speed:"⚡", tempo:"🎯", easy:"🏃", long:"🏃" };
+
+          {orderedWeeks.length === 0 && (
+            <div style={{ color:C.mid, fontSize:14, textAlign:"center", padding:"40px 0" }}>No history yet — log a session to start your record.</div>
+          )}
+
+          {orderedWeeks.map(wk => {
+            const pct = wk.plannedTotal ? Math.round((wk.plannedDone / wk.plannedTotal) * 100) : null;
+            const isCurrent = wk.weekStart === thisMonday();
             return (
-              <div key={s.id} onClick={()=>{ setActiveSession({...s}); setScreen("result"); }}
-                style={{ ...S.card, display:"flex", gap:12, alignItems:"center", marginBottom:8, cursor:"pointer" }}>
-                <div style={{ fontSize:22 }}>{an?.emoji || TAG_EMOJI[s.tag] || "🏃"}</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:700, fontSize:13 }}>{s.day} · {s.type}</div>
-                  {an?.distance_km && (
-                    <div style={{ fontSize:12, color:C.mid, marginTop:2 }}>
-                      {an.distance_km}km{an.duration_min ? ` · ${an.duration_min}min` : ""}
+              <div key={wk.weekStart} style={{ ...S.card, marginBottom:14, padding:0, overflow:"hidden" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 14px", background: isCurrent ? "#fff5f5" : C.white, borderBottom:`1px solid ${C.lightRule}` }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>
+                      {fmtRange(wk.weekStart)}{isCurrent && <span style={{ color:C.crimson, marginLeft:8, fontSize:10, letterSpacing:1 }}>THIS WEEK</span>}
                     </div>
+                    <div style={{ fontSize:11, color:C.mid, marginTop:2 }}>
+                      {wk.kmTotal.toFixed(1)} km
+                      {wk.plannedTotal > 0 && <> · {wk.plannedDone}/{wk.plannedTotal} sessions</>}
+                      {wk.extras.length > 0 && <> · {wk.extras.length} extra</>}
+                    </div>
+                  </div>
+                  {pct !== null && (
+                    <div style={{ fontSize:13, fontWeight:700, color: pct>75?"#4ade80":pct>40?"#fbbf24":"#f87171" }}>{pct}%</div>
                   )}
                 </div>
-                <div style={{ fontSize:11, color: COMPLY_COLOR[an?.compliance||"completed"] }}>
-                  {COMPLY_LABEL[an?.compliance||"completed"]}
+                <div style={{ padding:"4px 0" }}>
+                  {wk.sessions.length === 0 && wk.extras.length === 0 && (
+                    <div style={{ fontSize:12, color:C.mid, padding:"10px 14px" }}>No activity this week.</div>
+                  )}
+                  {wk.sessions.map(({ s, log, linkedAct, onDate, weekStart }) => {
+                    const an = log?.analysis;
+                    const isLogged = !!log || !!linkedAct;
+                    const distKm = an?.distance_km ?? linkedAct?.distance_km;
+                    const ts = typeStyle(s.type);
+                    const dayLabel = new Date(onDate + "T00:00:00").toLocaleDateString(undefined, { weekday:"short", day:"numeric" });
+                    return (
+                      <div key={s.id}
+                        onClick={() => { setActiveSession({ ...s, weekStart }); setScreen(isLogged ? "result" : "session"); }}
+                        style={{ display:"flex", gap:10, alignItems:"center", padding:"8px 14px", cursor:"pointer", borderLeft:`3px solid ${ts.accent}`, marginBottom:1 }}>
+                        <div style={{ flex:"0 0 56px", fontSize:11, color:C.mid }}>{dayLabel}</div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:C.navy }}>{s.type}</div>
+                          {distKm != null && (
+                            <div style={{ fontSize:11, color:C.mid }}>
+                              {distKm}km{(an?.duration_min || (linkedAct?.duration_seconds && Math.round(linkedAct.duration_seconds/60))) ? ` · ${an?.duration_min || Math.round(linkedAct.duration_seconds/60)}min` : ""}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ fontSize:10, color: isLogged ? COMPLY_COLOR[an?.compliance || "completed"] : C.mid, fontWeight:700, letterSpacing:1 }}>
+                          {isLogged ? COMPLY_LABEL[an?.compliance || "completed"] : "PLANNED"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {wk.extras.map(a => {
+                    const dayLabel = new Date(a.activity_date + "T00:00:00").toLocaleDateString(undefined, { weekday:"short", day:"numeric" });
+                    const durMin = a.duration_seconds ? Math.round(a.duration_seconds / 60) : null;
+                    return (
+                      <div key={a.id}
+                        onClick={() => { setActiveExtraActivity(a); setScreen("extra-activity"); }}
+                        style={{ display:"flex", gap:10, alignItems:"center", padding:"8px 14px", cursor:"pointer", borderLeft:`3px solid ${C.mid}`, marginBottom:1 }}>
+                        <div style={{ flex:"0 0 56px", fontSize:11, color:C.mid }}>{dayLabel}</div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:C.navy }}>+ {a.activity_type || "Run"}</div>
+                          <div style={{ fontSize:11, color:C.mid }}>
+                            {a.distance_km}km{durMin ? ` · ${durMin}min` : ""}
+                          </div>
+                        </div>
+                        <div style={{ fontSize:10, color:C.mid, fontWeight:700, letterSpacing:1 }}>EXTRA</div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
