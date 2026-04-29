@@ -682,7 +682,7 @@ export default function App() {
     setStravaActivitiesLoading(true);
     try {
       const data = await fetchStravaActivities();
-      setStravaActivities(data);
+      if (data) setStravaActivities(data);
     } catch(e) { console.error("strava list error", e); }
     setStravaActivitiesLoading(false);
   };
