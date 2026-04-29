@@ -61,16 +61,19 @@ export const TAG_STYLE = {
   tempo: { bg:"#F0E2C5", accent:C.warn,   border:"#E0CCA0" },
 };
 
-// Per-TYPE styling. Editorial palette — desaturated dots + soft tints.
-//   accent / dot — solid color used for the dot + label
-//   bg           — soft tint behind cards (when logged)
-//   border       — card border tint
+// Per-TYPE styling. Visual differentiation by hue + intensity:
+//   SPEED  — solid deep red (the hottest, scariest workout)
+//   TEMPO  — solid bright orange (next-most-intense)
+//   EASY   — half-opacity terracotta (visible but quiet — most days are easy)
+//
+//   accent / dot — used for the dot + label + day-row left border.
+//   bg / border  — soft tint behind logged cards.
 export const TYPE_STYLE = {
-  EASY:       { accent:C.accent,  dot:C.accent,  bg:"#EAEFD9", border:"#CFD9B0" },
+  EASY:       { accent:"rgba(181, 72, 42, 0.5)", dot:"rgba(181, 72, 42, 0.5)", bg:"#F5E8DF", border:"#E5C9B5" },
   RECOVERY:   { accent:C.cool,    dot:C.cool,    bg:"#DDE6EC", border:"#B7C9D5" },
   "LONG RUN": { accent:"#7B5A8C", dot:"#7B5A8C", bg:"#E9DEF0", border:"#C9B8D5" },
-  TEMPO:      { accent:C.warn,    dot:C.warn,    bg:"#F0E2C5", border:"#E0CCA0" },
-  SPEED:      { accent:C.hot,     dot:C.hot,     bg:"#F2D9CF", border:"#E2BAA8" },
+  TEMPO:      { accent:"#D97706", dot:"#D97706", bg:"#FCE7C8", border:"#E8C088" },
+  SPEED:      { accent:"#C8341B", dot:"#C8341B", bg:"#F5D2C8", border:"#E2A99A" },
   HYROX:      { accent:"#C79541", dot:"#C79541", bg:"#FFF4D4", border:"#1C1D22",
                 pattern:"linear-gradient(135deg, #F5C542 0 50%, #1C1D22 50% 100%)" },
   "RACE DAY": { accent:C.ink,     dot:C.ink,     bg:"#FAFAFA", border:C.ink,

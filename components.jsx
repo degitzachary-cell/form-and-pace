@@ -620,18 +620,22 @@ export const SectionHead = ({ index, total, label, action }) => (
 // Workout type → editorial dot color + label. Independent of the legacy
 // TYPE_STYLE map (which handles backgrounds for logged cards). Used wherever
 // we want the desaturated dot palette of the redesign.
+// Differentiation rule (matches styles.js TYPE_STYLE):
+//   SPEED — solid deep red, full strength
+//   TEMPO — solid bright orange
+//   EASY  — half-opacity terracotta (most days are easy; quiet by default)
 export const TYPE_META = {
-  EASY:       { dot: "var(--c-accent)", label: "Easy" },
-  RECOVERY:   { dot: "var(--c-cool)",   label: "Recovery" },
-  LONG:       { dot: "#7B5A8C",         label: "Long" },
-  "LONG RUN": { dot: "#7B5A8C",         label: "Long" },
-  TEMPO:      { dot: "var(--c-warn)",   label: "Tempo" },
-  SPEED:      { dot: "var(--c-hot)",    label: "Speed" },
-  RACE:       { dot: "var(--c-ink)",    label: "Race" },
-  "RACE DAY": { dot: "var(--c-ink)",    label: "Race" },
-  REST:       { dot: "var(--c-mute)",   label: "Rest" },
-  STRENGTH:   { dot: "#5A6B7B",         label: "Strength" },
-  HYROX:      { dot: "#C79541",         label: "Hyrox" },
+  EASY:       { dot: "rgba(181, 72, 42, 0.5)", label: "Easy" },
+  RECOVERY:   { dot: "var(--c-cool)",          label: "Recovery" },
+  LONG:       { dot: "#7B5A8C",                label: "Long" },
+  "LONG RUN": { dot: "#7B5A8C",                label: "Long" },
+  TEMPO:      { dot: "#D97706",                label: "Tempo" },
+  SPEED:      { dot: "#C8341B",                label: "Speed" },
+  RACE:       { dot: "var(--c-ink)",           label: "Race" },
+  "RACE DAY": { dot: "var(--c-ink)",           label: "Race" },
+  REST:       { dot: "var(--c-mute)",          label: "Rest" },
+  STRENGTH:   { dot: "#5A6B7B",                label: "Strength" },
+  HYROX:      { dot: "#C79541",                label: "Hyrox" },
 };
 export const typeMeta = (type) => {
   if (!type) return TYPE_META.EASY;

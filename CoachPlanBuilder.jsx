@@ -206,12 +206,12 @@ function StatusBanner({ status, onDismiss }) {
 // VO2, cool for recovery, plum for long, amber for tempo, mute for rest.
 // Matches the COMPLY/typeStyle palette used elsewhere.
 const SCORE_TYPE_COLOR = {
-  EASY:        C.accent,
+  EASY:        "rgba(181, 72, 42, 0.5)",   // half-opacity terracotta
   RECOVERY:    C.cool,
   "LONG RUN":  "#7B5A8C",
   LONG:        "#7B5A8C",
-  TEMPO:       C.warn,
-  SPEED:       C.hot,
+  TEMPO:       "#D97706",                   // bright orange
+  SPEED:       "#C8341B",                   // deep red
   RACE:        C.ink,
   "RACE DAY":  C.ink,
   REST:        C.mute,
