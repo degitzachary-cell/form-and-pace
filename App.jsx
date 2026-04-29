@@ -6,6 +6,10 @@ import {
   extractStravaData, getStats, prettyEmailName, todayStr, newId,
 } from "./lib/helpers.js";
 import { C, S, TAG_STYLE, TYPE_STYLE, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
+import {
+  PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
+  parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
+} from "./lib/constants.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker } from "./components.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
@@ -13,23 +17,6 @@ import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, use
 // Programs are stored in the coach_plans table; coaches edit via Plan Builder.
 // New athletes get a blank program until their coach creates one.
 const ATHLETE_PROGRAMS = {};
-
-// Distance categories used in the profile form. "other" is free text;
-// the rest are time-based with H:MM:SS dropdowns. All fields are optional.
-const PROFILE_DISTANCES = [
-  { key: "5k",             label: "5km",           withHours: false },
-  { key: "10k",            label: "10km",          withHours: false },
-  { key: "half_marathon",  label: "Half Marathon", withHours: true  },
-  { key: "full_marathon",  label: "Full Marathon", withHours: true  },
-];
-
-// Parse a stored time string like "19:25" or "1:30:14" into its parts.
-function parseTime(value) {
-  const parts = (value || "").split(":").map(p => p.trim());
-  if (parts.length >= 3) return { h: +parts[0] || 0, m: +parts[1] || 0, s: +parts[2] || 0 };
-  if (parts.length === 2) return { h: 0, m: +parts[0] || 0, s: +parts[1] || 0 };
-  return { h: 0, m: 0, s: 0 };
-}
 
 // Three dropdowns (hours optional). Emits a string in MM:SS or H:MM:SS form,
 // or an empty string when all three values are zero.
@@ -58,55 +45,7 @@ function TimeSelect({ value, onChange, withHours }) {
     </div>
   );
 }
-const EMPTY_PB_GOAL = { "5k": "", "10k": "", "half_marathon": "", "full_marathon": "", "other": "" };
-
-// plan_json comes in two shapes: a bare weeks array (legacy) or an object with
-// {athleteName, athleteGoal, athletePb, weeks}. Returns { weeks, meta } regardless.
-function normalizePlan(pj) {
-  if (!pj) return { weeks: [], meta: {} };
-  if (Array.isArray(pj)) return { weeks: pj, meta: {} };
-  if (typeof pj === "object") {
-    return {
-      weeks: Array.isArray(pj.weeks) ? pj.weeks : [],
-      meta: {
-        name:    pj.athleteName || undefined,
-        goal:    pj.athleteGoal || undefined,
-        current: pj.athletePb   || undefined,
-      },
-    };
-  }
-  return { weeks: [], meta: {} };
-}
-
-const PB_GOAL_LABEL = { "5k": "5K", "10k": "10K", "half_marathon": "HM", "full_marathon": "FM" };
-
-// Strip empty fields out of a pbs/goals object. Returns null if nothing's left,
-// so we don't end up with `{}` rows in the DB.
-function cleanPbGoal(obj) {
-  if (!obj || typeof obj !== "object") return null;
-  const cleaned = {};
-  for (const k of Object.keys(obj)) {
-    const v = obj[k];
-    if (typeof v === "string" && v.trim()) cleaned[k] = v.trim();
-  }
-  return Object.keys(cleaned).length ? cleaned : null;
-}
-
-// Render a pbs/goals object as "5K 19:25 · HM 1:30:14 · FM 3:15:42"
-// (plus the free-text "other" appended last).
-function fmtPbGoal(obj) {
-  if (!obj || typeof obj !== "object") return null;
-  const parts = [];
-  for (const k of ["5k", "10k", "half_marathon", "full_marathon"]) {
-    if (obj[k]) parts.push(`${PB_GOAL_LABEL[k]} ${obj[k]}`);
-  }
-  if (obj.other) parts.push(obj.other);
-  return parts.length ? parts.join(" · ") : null;
-}
-
 // ─── ATHLETE WEEK GRID ────────────────────────────────────────────────────────
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const DAY_LONG   = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
 
 function DraggableSession({ session, log, linkedAct, isMissed, onClick }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
