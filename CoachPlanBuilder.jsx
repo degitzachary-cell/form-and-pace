@@ -37,6 +37,50 @@ const getTagFromType = (type) => {
   return 'easy';
 };
 
+// Accepts: Date object, ISO YYYY-MM-DD, "10-apr"/"10 apr"/"10/apr",
+// "apr 10"/"april 10", "10/04"/"04/10"/"10-04" (DD/MM by default; auto-swaps
+// when one part > 12), and "10/04/2026" / "10-04-26". Returns Date or null.
+function parseFlexibleDate(input, fallbackYear) {
+  if (input == null || input === '') return null;
+  if (input instanceof Date) return isNaN(input) ? null : input;
+  const raw = String(input).trim();
+  if (!raw) return null;
+  const s = raw.toLowerCase();
+
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+
+  const months = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11,
+    january: 0, february: 1, march: 2, april: 3, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+  };
+  const yr = (twoOrFour) => twoOrFour ? (twoOrFour.length === 2 ? 2000 + +twoOrFour : +twoOrFour) : (fallbackYear || new Date().getFullYear());
+
+  m = s.match(/^(\d{1,2})[\s\-\/]+([a-z]{3,9})(?:[\s\-\/]+(\d{2,4}))?$/);
+  if (m && months[m[2]] !== undefined) return new Date(yr(m[3]), months[m[2]], +m[1]);
+
+  m = s.match(/^([a-z]{3,9})[\s\-\/]+(\d{1,2})(?:[\s\-\/,]+(\d{2,4}))?$/);
+  if (m && months[m[1]] !== undefined) return new Date(yr(m[3]), months[m[1]], +m[2]);
+
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/);
+  if (m) {
+    const a = +m[1], b = +m[2], y = yr(m[3]);
+    if (a > 12 && b <= 12) return new Date(y, b - 1, a);
+    if (b > 12 && a <= 12) return new Date(y, a - 1, b);
+    return new Date(y, b - 1, a);
+  }
+
+  const d = new Date(raw);
+  return isNaN(d) ? null : d;
+}
+
+const ymdStr = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 function parseExcelToWeeks(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -58,23 +102,11 @@ function parseExcelToWeeks(file) {
           const kmRow      = rows[7];
 
           let weekStart = '';
-          let mondayDate = dateRow ? dateRow[1] : null;
-          if (mondayDate) {
-            const d = mondayDate instanceof Date ? mondayDate : new Date(mondayDate);
-            if (!isNaN(d)) {
-              const y = d.getFullYear();
-              const m = String(d.getMonth() + 1).padStart(2, '0');
-              const day = String(d.getDate()).padStart(2, '0');
-              weekStart = `${y}-${m}-${day}`;
-            }
-          }
+          const mondayParsed = parseFlexibleDate(dateRow ? dateRow[1] : null);
+          if (mondayParsed) weekStart = ymdStr(mondayParsed);
           if (!weekStart) {
-            const dateMatch = sheetName.match(/^(\d{1,2})\s*-\s*(\d{1,2})/);
-            if (dateMatch) {
-              const day = dateMatch[1].padStart(2, '0');
-              const month = dateMatch[2].padStart(2, '0');
-              weekStart = `2026-${month}-${day}`;
-            }
+            const sheetParsed = parseFlexibleDate(sheetName);
+            if (sheetParsed) weekStart = ymdStr(sheetParsed);
           }
 
           const kmLabel = kmRow ? (kmRow[1] || '') : '';
