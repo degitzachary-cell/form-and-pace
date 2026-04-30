@@ -59,7 +59,7 @@ function DraggableSession({ session, log, linkedAct, isMissed, onClick }) {
     id: `session:${session.id}`,
   });
   const ts = typeStyle(session.type);
-  const isLogged = !!log || !!linkedAct;
+  const isLogged = !!linkedAct || !!(log?.analysis?.distance_km || log?.feedback);
   const showMissed = isMissed && !isLogged;
   return (
     <div
@@ -335,6 +335,10 @@ export default function App() {
   const [sessionDistKm, setSessionDistKm] = useState("");
   const [sessionDurMin, setSessionDurMin] = useState("");
   const [sessionDateOverride, setSessionDateOverride] = useState(null);
+  // Require explicit confirmation when logging manually (no Strava activity attached).
+  // Only relevant when stravaConnected=true; if Strava isn't connected at all, manual
+  // is the only path so we skip the gate.
+  const [noStravaConfirmed, setNoStravaConfirmed] = useState(false);
   // Wellness — manually entered each session log. Stored in analysis.wellness.
   const [sessionRpe,       setSessionRpe]       = useState(null);  // 1–10
   const [sessionSleepHrs,  setSessionSleepHrs]  = useState("");    // free number
@@ -749,6 +753,15 @@ export default function App() {
     if (error) { console.error("deleteSessionLog error:", error); return false; }
     setLogs(prev => { const next = { ...prev }; delete next[sessionId]; return next; });
     return true;
+  };
+
+  // A session_log row may exist without real data (e.g. created by a drag-move
+  // to store actual_date). Only treat a session as "logged" when it has a
+  // distance, feedback text, or a linked activity record.
+  const sessionIsLogged = (log, linkedAct) => {
+    if (linkedAct) return true;
+    if (!log) return false;
+    return !!(log.analysis?.distance_km || log.feedback);
   };
 
   const saveLog = async (sessionId, updates) => {
@@ -2738,7 +2751,7 @@ export default function App() {
     const an  = log?.analysis;
     const coachSDate = activeSession.weekStart ? sessionDateStr(activeSession.weekStart, activeSession.day) : null;
     const linkedAthAct = coachSDate ? findAthAct(activeSession.athleteEmail, coachSDate) : null;
-    const sessionLogged = !!log || !!linkedAthAct;
+    const sessionLogged = sessionIsLogged(log, linkedAthAct);
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -3509,7 +3522,7 @@ export default function App() {
       // sessionPlanned = the session whose ORIGINAL scheduled day was here (regardless of move).
       const sessionPlanned = (thisWeek?.sessions || []).find(s => sessionDateStr(monStr, s.day) === dDate);
       const actHere = myActs.find(a => a.activity_date === dDate);
-      const isLogged = !!actHere || !!sessionHere?.log?.analysis?.distance_km;
+      const isLogged = sessionIsLogged(sessionHere?.log, actHere);
       const isToday = dDate === today;
       const isRest = (sessionPlanned?.type || "").toUpperCase() === "REST";
       let dotColor = C.lightRule;
@@ -3557,9 +3570,9 @@ export default function App() {
                     <div onClick={() => {
                         const s = todaysSession.s;
                         setActiveSession({ ...s, weekStart: monStr });
-                        setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+                        setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
                         setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
-                        const isLogged = !!todaysSession.log || !!todaysActivity;
+                        const isLogged = sessionIsLogged(todaysSession.log, todaysActivity);
                         setScreen(isLogged ? "result" : "session");
                       }}
                       style={{ background:C.white, border:`1px solid ${C.rule}`, borderLeft:`4px solid ${typeStyle(todaysSession.s.type).accent}`, borderRadius:2, padding:"18px 20px", cursor:"pointer", position:"relative" }}>
@@ -3604,7 +3617,7 @@ export default function App() {
                         if (todaysSession) {
                           const s = todaysSession.s;
                           setActiveSession({ ...s, weekStart: monStr });
-                          setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+                          setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
                           setSessionDateOverride(today);
                           setSelectedStravaId(todaysStrava.id);
                           setScreen("session");
@@ -3646,7 +3659,7 @@ export default function App() {
                         onClick={() => {
                           if (sessHere && !isRest) {
                             setActiveSession({...sessHere.s, weekStart:monStr});
-                            setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+                            setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
                             setSessionDateOverride(sessHere.log?.analysis?.actual_date || actHere?.activity_date || d.dDate);
                             setScreen(isLogged ? "result" : "session");
                           }
@@ -3697,13 +3710,13 @@ export default function App() {
           {(() => {
             const s = todaysSession?.s;
             const tm = s ? typeMeta(s.type) : null;
-            const isLogged = !!todaysSession?.log || !!todaysActivity;
+            const isLogged = sessionIsLogged(todaysSession?.log, todaysActivity);
             const distFromLog = todaysActivity?.distance_km ?? todaysSession?.log?.analysis?.distance_km;
             const openSession = () => {
               if (!todaysSession) return;
               setActiveSession({ ...s, weekStart: monStr });
               setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-              setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+              setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
               setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
               setScreen(isLogged ? "result" : "session");
             };
@@ -3831,11 +3844,11 @@ export default function App() {
                 const s = todaysSession.s;
                 setActiveSession({ ...s, weekStart: monStr });
                 setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+                setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
                 setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
-                setScreen((todaysSession.log || todaysActivity) ? "result" : "session");
+                setScreen(sessionIsLogged(todaysSession.log, todaysActivity) ? "result" : "session");
               }} className="fp-btn fp-btn--accent" style={{ width:"100%", padding:"18px" }}>
-                {(todaysSession.log || todaysActivity) ? "View this session" : "Log this session"}
+                {sessionIsLogged(todaysSession.log, todaysActivity) ? "View this session" : "Log this session"}
               </button>
             </div>
           )}
@@ -3922,7 +3935,7 @@ export default function App() {
                 if (todaysSession) {
                   setActiveSession({ ...todaysSession.s, weekStart: monStr });
                   setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
                   setSessionDateOverride(today);
                   setSelectedStravaId(todaysStrava.id);
                   setScreen("session");
@@ -3957,7 +3970,7 @@ export default function App() {
                     if (sessHere && (s.type || "").toUpperCase() !== "REST") {
                       setActiveSession({ ...sessHere.s, weekStart: monStr });
                       setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                      setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+                      setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
                       setSessionDateOverride(sessHere.log?.analysis?.actual_date || actHere?.activity_date || d.dDate);
                       setScreen(d.isLogged ? "result" : "session");
                     }
@@ -4302,7 +4315,7 @@ export default function App() {
               a.activity_date >= w.weekStart &&
               a.activity_date <= wkEnd
             );
-            const sessionsDone = w.sessions.filter(s => logs[s.id] || actByDate[sessionDateStr(w.weekStart, s.day)]).length;
+            const sessionsDone = w.sessions.filter(s => sessionIsLogged(logs[s.id], actByDate[sessionDateStr(w.weekStart, s.day)])).length;
 
             const snapAthleteMonday = (dateStr) => {
               const mon = snapToMonday(dateStr);
@@ -4385,7 +4398,7 @@ export default function App() {
                           {sessionsHere.map(({ s, log }) => {
                             const sDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
                             const linkedAct = actByDate[sDate];
-                            const isLogged = !!log || !!linkedAct;
+                            const isLogged = sessionIsLogged(log, linkedAct);
                             const isMissed = !isLogged && sDate && sDate < todayStr() && (s.type || "").toUpperCase() !== "REST";
                             return (
                               <DraggableSession
@@ -4620,7 +4633,23 @@ export default function App() {
         )}
 
 
-        {!stravaDetail && (
+        {!stravaDetail && stravaConnected && (
+          <label style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:16, cursor:"pointer", padding:"14px 16px", background:C.white, border:`1px solid ${noStravaConfirmed ? C.accent : C.rule}`, borderRadius:2 }}>
+            <input
+              type="checkbox"
+              checked={noStravaConfirmed}
+              onChange={e => setNoStravaConfirmed(e.target.checked)}
+              style={{ marginTop:2, accentColor:C.accent, width:16, height:16, flexShrink:0 }}
+            />
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.ink, lineHeight:1.4 }}>Log without Strava</div>
+              <div style={{ fontSize:11, color:C.mute, marginTop:2, lineHeight:1.4 }}>
+                No Strava activity selected. Check this to enter your distance and duration manually.
+              </div>
+            </div>
+          </label>
+        )}
+        {!stravaDetail && (noStravaConfirmed || !stravaConnected) && (
           <div style={{ display:"flex", gap:12, marginBottom:14 }}>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
@@ -4721,11 +4750,15 @@ export default function App() {
           ))}
         </div>
 
-        <button type="submit"
-          disabled={!sessionDistKm||isSaving}
-          style={S.primaryBtn(C.accent, !sessionDistKm||isSaving)}>
-          {isSaving ? "Saving..." : "Save Session →"}
-        </button>
+        {(() => {
+          const needsManualConfirm = stravaConnected && !stravaDetail && !noStravaConfirmed;
+          const isDisabled = isSaving || !sessionDistKm || needsManualConfirm;
+          return (
+            <button type="submit" disabled={isDisabled} style={S.primaryBtn(C.accent, isDisabled)}>
+              {isSaving ? "Saving…" : needsManualConfirm ? "Check 'Log without Strava' above to save" : "Save Session →"}
+            </button>
+          );
+        })()}
       </form>
     </div>
   );
@@ -4947,7 +4980,7 @@ export default function App() {
         const log = logs[s.id];
         const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
         const linkedAct = myActsHist.find(a => a.activity_date === onDate && a.source === "session");
-        const isLogged = !!log || !!linkedAct;
+        const isLogged = sessionIsLogged(log, linkedAct);
         if (isLogged) bucket.plannedDone++;
         bucket.sessions.push({ s, log, linkedAct, onDate, weekStart: w.weekStart });
       }
@@ -5032,7 +5065,7 @@ export default function App() {
                   )}
                   {wk.sessions.map(({ s, log, linkedAct, onDate, weekStart }) => {
                     const an = log?.analysis;
-                    const isLogged = !!log || !!linkedAct;
+                    const isLogged = sessionIsLogged(log, linkedAct);
                     const distKm = an?.distance_km ?? linkedAct?.distance_km;
                     const ts = typeStyle(s.type);
                     const dayLabel = new Date(onDate + "T00:00:00").toLocaleDateString(undefined, { weekday:"short", day:"numeric" });
