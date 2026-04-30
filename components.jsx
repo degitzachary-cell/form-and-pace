@@ -750,7 +750,22 @@ export function StravaCard({ data, onClear }) {
           <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:"var(--c-mute)" }}>STRAVA</span>
           <div>
             <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{data.name}</div>
-            <div style={{ fontSize:10, color:C.green, letterSpacing:2, textTransform:"uppercase" }}>{onClear ? "Strava Imported" : "Strava Data"}</div>
+            {(() => {
+              // When the run actually happened (local time on the athlete's
+              // device), not when it was imported. Falls back to UTC start_date
+              // if local isn't present.
+              const raw = data.start_date_local || data.start_date;
+              if (!raw) return null;
+              const d = new Date(raw);
+              if (isNaN(d)) return null;
+              const dateStr = d.toLocaleDateString(undefined, { weekday:"short", day:"numeric", month:"short" });
+              const timeStr = d.toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit" });
+              return (
+                <div className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.1em", marginTop:2, textTransform:"uppercase" }}>
+                  {dateStr} · {timeStr}
+                </div>
+              );
+            })()}
           </div>
         </div>
         {onClear && <button onClick={onClear} style={{ background:"none", border:`1px solid ${C.rule}`, borderRadius:2, padding:"4px 10px", color:C.mid, fontSize:11, cursor:"pointer" }}>✕ Clear</button>}
