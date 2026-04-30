@@ -3159,11 +3159,64 @@ export default function App() {
                 const durSecs  = linkedAthAct?.duration_seconds;
                 const durMin   = an?.duration_min ?? (durSecs ? Math.round(durSecs / 60) : null);
                 const notes    = log?.feedback || linkedAthAct?.notes;
+                // Derive planned figures for comparison
+                let plannedDist = activeSession.distance_km || activeSession.distance || null;
+                let plannedDur  = activeSession.duration_min || activeSession.duration || null;
+                if ((!plannedDist || !plannedDur) && isStructured(activeSession)) {
+                  const agg = aggregateSteps(activeSession.steps);
+                  if (!plannedDist && agg.distance_km > 0) plannedDist = agg.distance_km;
+                  if (!plannedDur  && agg.duration_min > 0) plannedDur  = agg.duration_min;
+                }
+                const hasPlan = plannedDist || plannedDur;
+                const hasActual = distKm || durMin;
+                const coachGrade = hasPlan && hasActual ? effectiveCompliance({
+                  session: activeSession, log, linkedAct: linkedAthAct, isPastDate: true,
+                  profile: athletePrograms[activeSession?.athleteEmail?.toLowerCase()] || {},
+                }) : null;
+                const coachGradeColor = COMPLY_COLOR[coachGrade] || C.mute;
+                const coachGradeLabel = COMPLY_LABEL[coachGrade] || coachGrade;
+                const coachAxis = (distKm && plannedDist) ? { act: distKm, plan: plannedDist }
+                  : (durMin && plannedDur) ? { act: durMin, plan: plannedDur } : null;
+                const coachPct = coachAxis ? Math.round((coachAxis.act / coachAxis.plan) * 100) : null;
+
                 return (<>
                   <div style={{ display:"flex", gap:10, marginBottom:16 }}>
                     {distKm  && <StatPill label="Distance" val={`${distKm}km`}  color={C.green}/>}
                     {durMin  && <StatPill label="Duration" val={`${durMin}min`}/>}
                   </div>
+
+                  {hasPlan && hasActual && (
+                    <SectionCard label="vs Plan">
+                      <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                        {plannedDist && (
+                          <div style={{ flex:"1 1 100px", background:C.lightRule, borderRadius:3, padding:"8px 12px" }}>
+                            <div style={{ fontSize:10, letterSpacing:2, color:C.mute, textTransform:"uppercase", marginBottom:3 }}>Distance</div>
+                            <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
+                              <span style={{ fontFamily:"var(--f-mono)", fontSize:15, color:C.ink, fontWeight:600 }}>{distKm ?? "—"}</span>
+                              <span style={{ fontSize:11, color:C.mute }}>/ {plannedDist} km</span>
+                            </div>
+                          </div>
+                        )}
+                        {plannedDur && (
+                          <div style={{ flex:"1 1 100px", background:C.lightRule, borderRadius:3, padding:"8px 12px" }}>
+                            <div style={{ fontSize:10, letterSpacing:2, color:C.mute, textTransform:"uppercase", marginBottom:3 }}>Time</div>
+                            <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
+                              <span style={{ fontFamily:"var(--f-mono)", fontSize:15, color:C.ink, fontWeight:600 }}>{durMin ?? "—"}</span>
+                              <span style={{ fontSize:11, color:C.mute }}>/ {plannedDur} min</span>
+                            </div>
+                          </div>
+                        )}
+                        <div style={{ flex:"1 1 100px", background:`${coachGradeColor}18`, border:`1px solid ${coachGradeColor}40`, borderRadius:3, padding:"8px 12px" }}>
+                          <div style={{ fontSize:10, letterSpacing:2, color:C.mute, textTransform:"uppercase", marginBottom:3 }}>Load</div>
+                          <div style={{ display:"flex", alignItems:"baseline", gap:5 }}>
+                            {coachPct != null && <span style={{ fontFamily:"var(--f-mono)", fontSize:15, color:coachGradeColor, fontWeight:700 }}>{coachPct}%</span>}
+                            <span style={{ fontSize:11, color:coachGradeColor, fontWeight:600 }}>{coachGradeLabel}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </SectionCard>
+                  )}
+
                   {(log?.strava_data || linkedAthAct?.strava_data) && <StravaCard data={log?.strava_data || linkedAthAct?.strava_data}/>}
                   {an?.wellness && Object.keys(an.wellness).length > 0 && (
                     <SectionCard label="Wellness">
@@ -5654,6 +5707,60 @@ export default function App() {
               <Num size={17}>{log?.strava_data?.avg_heartrate || "—"}</Num>
             </div>
           </div>
+
+          {/* ── Planned vs Actual ─────────────────────────────── */}
+          {(() => {
+            let plannedDist = activeSession.distance_km || activeSession.distance || null;
+            let plannedDur  = activeSession.duration_min || activeSession.duration || null;
+            if ((!plannedDist || !plannedDur) && isStructured(activeSession)) {
+              const agg = aggregateSteps(activeSession.steps);
+              if (!plannedDist && agg.distance_km > 0) plannedDist = agg.distance_km;
+              if (!plannedDur  && agg.duration_min > 0) plannedDur  = agg.duration_min;
+            }
+            const actualDist = an?.distance_km ?? resultLinkedAct?.distance_km ?? null;
+            const actualDur  = an?.duration_min ?? (resultLinkedAct?.duration_seconds ? Math.round(resultLinkedAct.duration_seconds / 60) : null);
+            if ((!plannedDist && !plannedDur) || (!actualDist && !actualDur)) return null;
+
+            const grade = effectiveCompliance({ session: activeSession, log, linkedAct: resultLinkedAct, isPastDate: true, profile });
+            const gradeColor = COMPLY_COLOR[grade] || C.mute;
+            const gradeLabel = COMPLY_LABEL[grade] || grade;
+            const axis = (actualDist && plannedDist) ? { act: actualDist, plan: plannedDist }
+              : (actualDur && plannedDur) ? { act: actualDur, plan: plannedDur } : null;
+            const pct = axis ? Math.round((axis.act / axis.plan) * 100) : null;
+
+            return (
+              <div style={{ marginBottom:24 }}>
+                <SectionHead label="vs plan"/>
+                <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:14 }}>
+                  {plannedDist && (
+                    <div style={{ flex:"1 1 110px", background:C.lightRule, borderRadius:3, padding:"10px 14px" }}>
+                      <div style={{ fontSize:10, letterSpacing:2, color:C.mute, textTransform:"uppercase", marginBottom:4 }}>Distance</div>
+                      <div style={{ display:"flex", alignItems:"baseline", gap:5 }}>
+                        <span style={{ fontFamily:"var(--f-mono)", fontSize:17, color:C.ink }}>{actualDist ?? "—"}</span>
+                        <span style={{ fontSize:11, color:C.mute }}>/ {plannedDist} km</span>
+                      </div>
+                    </div>
+                  )}
+                  {plannedDur && (
+                    <div style={{ flex:"1 1 110px", background:C.lightRule, borderRadius:3, padding:"10px 14px" }}>
+                      <div style={{ fontSize:10, letterSpacing:2, color:C.mute, textTransform:"uppercase", marginBottom:4 }}>Time</div>
+                      <div style={{ display:"flex", alignItems:"baseline", gap:5 }}>
+                        <span style={{ fontFamily:"var(--f-mono)", fontSize:17, color:C.ink }}>{actualDur ?? "—"}</span>
+                        <span style={{ fontSize:11, color:C.mute }}>/ {plannedDur} min</span>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ flex:"1 1 110px", background:`${gradeColor}18`, border:`1px solid ${gradeColor}40`, borderRadius:3, padding:"10px 14px" }}>
+                    <div style={{ fontSize:10, letterSpacing:2, color:C.mute, textTransform:"uppercase", marginBottom:4 }}>Load</div>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
+                      {pct != null && <span style={{ fontFamily:"var(--f-mono)", fontSize:17, color:gradeColor, fontWeight:700 }}>{pct}%</span>}
+                      <span style={{ fontSize:11, color:gradeColor, fontWeight:600 }}>{gradeLabel}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {log?.strava_data && <div style={{ marginBottom:18 }}><StravaCard data={log.strava_data}/></div>}
 
