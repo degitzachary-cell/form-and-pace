@@ -2576,13 +2576,55 @@ export default function App() {
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
 
           <SectionCard label="Prescribed Session">
-            {activeSession.desc.split("\n").map((l,i)=>(
-              <div key={i} style={{ fontSize:14, color:i===0?C.navy:C.mid, lineHeight:1.9 }}>{l}</div>
-            ))}
-            <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
-              <MiniStat label="Terrain" val={activeSession.terrain}/>
-              <MiniStat label="Target Pace" val={activeSession.pace} color={C.crimson}/>
-            </div>
+            {/* Type pill + ribbon */}
+            {activeSession.type && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ width:8, height:8, borderRadius:999, background: typeStyle(activeSession.type).accent, display:"inline-block" }}/>
+                <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:C.ink, fontWeight:600 }}>
+                  {String(activeSession.type).toUpperCase()}
+                </span>
+              </div>
+            )}
+
+            {/* Structured sections — numbered timeline mirrors the athlete view */}
+            {isStructured(activeSession) && (
+              <ol style={{ listStyle:"none", padding:0, margin:"0 0 12px", borderLeft:`2px solid ${C.rule}` }}>
+                {activeSession.steps.map((step, i) => (
+                  <li key={i} style={{ position:"relative", paddingLeft:16, marginLeft:8, marginBottom:10 }}>
+                    <span style={{ position:"absolute", left:-7, top:6, width:10, height:10, borderRadius:999, background:C.accent, border:`2px solid ${C.bg}` }}/>
+                    <div style={{ fontSize:10, letterSpacing:2, color:C.accent, fontWeight:700, textTransform:"uppercase", marginBottom:2 }}>
+                      {step.kind === "steady" ? "Workout" : step.kind === "warmup" ? "Warm Up" : step.kind === "cooldown" ? "Cool Down" : step.kind === "recovery" ? "Recovery" : step.kind}
+                    </div>
+                    <div style={{ fontFamily:S.displayFont, fontSize:16, color:C.ink, lineHeight:1.35 }}>
+                      {formatStep(step)}
+                    </div>
+                    {step.note && (
+                      <div style={{ fontSize:12, color:C.mute, fontStyle:"italic", marginTop:2 }}>{step.note}</div>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            {/* Coach notes — only render if present */}
+            {activeSession.desc && String(activeSession.desc).trim() && (
+              <div style={{ marginBottom:12 }}>
+                {!isStructured(activeSession) && (
+                  <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Coach notes</div>
+                )}
+                {String(activeSession.desc).split("\n").filter(l => l.trim()).map((l,i)=>(
+                  <div key={i} style={{ fontSize:14, color:i===0 && !isStructured(activeSession) ? C.navy : C.mid, lineHeight:1.7, fontFamily:S.displayFont }}>{l}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Terrain + target pace footer */}
+            {(activeSession.terrain || activeSession.pace) && (
+              <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
+                {activeSession.terrain && <MiniStat label="Terrain" val={activeSession.terrain}/>}
+                {activeSession.pace && <MiniStat label="Target Pace" val={activeSession.pace} color={C.crimson}/>}
+              </div>
+            )}
           </SectionCard>
 
           {!sessionLogged ? (
