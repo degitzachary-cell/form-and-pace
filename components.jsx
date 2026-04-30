@@ -61,18 +61,23 @@ export function PaceInput({ value, onChange, placeholder = "0:00", style, ariaLa
 //   "4:32–4:38"    range (en-dash, no spaces)
 // Either side is optional; if only one is filled, we save just that one.
 export function PaceRangeInput({ value, onChange, label }) {
+  // Lenient split — any en-dash / hyphen separates the two halves, even
+  // mid-typing when one side is still a partial 'M' or 'M:S'. Colons are
+  // never treated as separators.
   const parsed = (() => {
-    const v = String(value || "").trim();
+    const v = String(value || "");
     if (!v) return ["", ""];
-    const m = v.match(/^([0-9]{1,2}:[0-9]{2})\s*[–-]\s*([0-9]{1,2}:[0-9]{2})$/);
-    if (m) return [m[1], m[2]];
+    const parts = v.split(/\s*[–-]\s*/);
+    if (parts.length >= 2) return [parts[0], parts.slice(1).join("")];
     return [v, ""];
   })();
+  // Always join with the en-dash when there's a 'high' component, even if
+  // 'low' is empty — that keeps the second input editable while the first
+  // is being cleared.
   const join = (lo, hi) => {
     if (!lo && !hi) return "";
-    if (!hi) return lo;
-    if (!lo) return hi;
-    return `${lo}–${hi}`;
+    if (!hi)         return lo;
+    return `${lo || ""}–${hi}`;
   };
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
