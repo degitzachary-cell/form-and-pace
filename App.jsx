@@ -25,6 +25,11 @@ import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, use
 // New athletes get a blank program until their coach creates one.
 const ATHLETE_PROGRAMS = {};
 
+// "Extra activity" = a real run worth showing as its own calendar card.
+// Excludes session-bound activities (their session card already represents
+// them) and strava-auto entries (silent analytics rows that double-render).
+const isExtraDisplay = (a) => a?.source !== "session" && a?.source !== "strava-auto";
+
 // Three dropdowns (hours optional). Emits a string in MM:SS or H:MM:SS form,
 // or an empty string when all three values are zero.
 function TimeSelect({ value, onChange, withHours }) {
@@ -747,7 +752,6 @@ export default function App() {
           s => sessionDateStr(s.weekStart, s.day) === effectiveDate
         );
         if (matchedSession && !logs[matchedSession.id]) {
-          const TAG_EMOJI = { speed:"", tempo:"", easy:"" };
           const scheduledDate = sessionDateStr(matchedSession.weekStart, matchedSession.day);
           const autoAnalysis = {
             compliance: "completed",
@@ -783,8 +787,14 @@ export default function App() {
   };
 
   // Wipe a session log + any activity that was created when it was submitted.
+  // Only deletes the linked activity if its source is "session" — auto-synced
+  // Strava runs on the same day represent independent training and should
+  // survive even if the session log is removed.
   const deleteSessionLog = async (sessionId, linkedActivityId) => {
-    if (linkedActivityId) await deleteActivity(linkedActivityId);
+    if (linkedActivityId) {
+      const linkedAct = activities.find(a => a.id === linkedActivityId);
+      if (linkedAct?.source === "session") await deleteActivity(linkedActivityId);
+    }
     const { error } = await supabase.from("session_logs").delete().eq("session_id", sessionId);
     if (error) { console.error("deleteSessionLog error:", error); return false; }
     setLogs(prev => { const next = { ...prev }; delete next[sessionId]; return next; });
@@ -980,14 +990,24 @@ export default function App() {
   useEffect(() => {
     if (role !== "athlete" || !stravaConnected || !stravaActivities.length || !user?.email) return;
     const myEmail = user.email.toLowerCase();
-    const existingStravaIds = new Set(
-      activities
-        .filter(a => a.athlete_email?.toLowerCase() === myEmail)
-        .map(a => a.strava_data?.id)
-        .filter(Boolean)
-    );
+    const myActivities = activities.filter(a => a.athlete_email?.toLowerCase() === myEmail);
+    const existingStravaIds = new Set(myActivities.map(a => a.strava_data?.id).filter(Boolean));
+    // Also index by date+distance so a manually-logged run that wasn't tagged
+    // with strava_data still suppresses a duplicate auto-sync row.
+    const matchesExistingByDateAndDist = (date, distKm) => myActivities.some(a => {
+      if (a.activity_date !== date) return false;
+      const ad = parseFloat(a.distance_km);
+      if (!ad) return false;
+      return Math.abs(ad - distKm) / Math.max(ad, distKm) < 0.1;
+    });
     const rows = stravaActivities
-      .filter(a => !existingStravaIds.has(a.id))
+      .filter(a => {
+        if (existingStravaIds.has(a.id)) return false;
+        const date = a.start_date_local?.split("T")[0];
+        const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
+        if (date && distKm && matchesExistingByDateAndDist(date, distKm)) return false;
+        return true;
+      })
       .map(a => {
         const date = a.start_date_local?.split("T")[0];
         const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
@@ -1192,7 +1212,6 @@ export default function App() {
     setIsSaving(true);
     const s = activeSession;
     try {
-      const TAG_EMOJI = { speed:"", tempo:"", easy:"", long:"" };
       const scheduledDate = s.weekStart ? sessionDateStr(s.weekStart, s.day) : null;
       // Strava-first: when a Strava activity is attached, the run's actual date
       // wins over any user-picked override.
@@ -1636,7 +1655,7 @@ export default function App() {
       ? (dpAthlete.weeks.find(w => w.weekStart === coachActiveMonday) || { weekStart: coachActiveMonday, sessions:[] })
       : null;
     const dpWkEnd  = dpWk ? weekEndStr(dpWk.weekStart) : null;
-    const dpExtras = dpWk ? dpActs.filter(a => a.source !== "session" && a.source !== "strava-auto" && a.activity_date >= dpWk.weekStart && a.activity_date <= dpWkEnd) : [];
+    const dpExtras = dpWk ? dpActs.filter(a => isExtraDisplay(a) && a.activity_date >= dpWk.weekStart && a.activity_date <= dpWkEnd) : [];
     const dpSnapMonday = (dateStr) => {
       if (!dateStr) return;
       const d = new Date(dateStr + "T00:00:00");
@@ -1859,7 +1878,7 @@ export default function App() {
                     }
                   }
                   for (const a of actsForA) {
-                    if (a.source === "session" || a.source === "strava-auto") continue;
+                    if (!isExtraDisplay(a)) continue;
                     previews.push({
                       kind: "act", email, athleteName: data.name || prettyEmailName(email),
                       excerpt: a.notes || `${a.distance_km}km extra activity`,
@@ -2996,7 +3015,7 @@ export default function App() {
             };
             const wk = planned || { weekStart: coachActiveMonday, weekLabel: fmtRange(), sessions: [] };
             const wkEnd = weekEndStr(wk.weekStart);
-            const extraActs = athActs.filter(a => a.source !== "session" && a.source !== "strava-auto" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
+            const extraActs = athActs.filter(a => isExtraDisplay(a) && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
             const actByDate = {};
             for (const a of athActs) if (a.source === "session") actByDate[a.activity_date] = a;
 
@@ -5087,12 +5106,7 @@ export default function App() {
             };
             const w = planned || { weekStart: activeMonday, weekLabel: fmtRange(), sessions: [] };
             const wkEnd = weekEndStr(w.weekStart);
-            const extraActs = myActs.filter(a =>
-              a.source !== "session" &&
-              a.source !== "strava-auto" &&
-              a.activity_date >= w.weekStart &&
-              a.activity_date <= wkEnd
-            );
+            const extraActs = myActs.filter(a => isExtraDisplay(a) && a.activity_date >= w.weekStart && a.activity_date <= wkEnd);
             const sessionsDone = w.sessions.filter(s => sessionIsLogged(logs[s.id], actByDate[sessionDateStr(w.weekStart, s.day)])).length;
 
             const snapAthleteMonday = (dateStr) => {
@@ -6175,7 +6189,7 @@ export default function App() {
     }
     // Extras (manual or strava runs not tied to a session).
     for (const a of myActsHist) {
-      if (a.source === "session" || a.source === "strava-auto") continue;
+      if (!isExtraDisplay(a)) continue;
       const mon = snapToMonday(a.activity_date);
       if (!mon) continue;
       ensureWk(mon).extras.push(a);

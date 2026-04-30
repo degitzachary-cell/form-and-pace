@@ -97,14 +97,29 @@ serve(async (req) => {
 
     const { data: existing } = await supabase
       .from("activities")
-      .select("strava_data")
+      .select("strava_data, activity_date, distance_km")
       .eq("athlete_email", targetEmail);
     const existingIds = new Set(
       (existing || []).map((r: any) => r.strava_data?.id).filter(Boolean),
     );
+    // Also dedupe by date + similar distance so manually-logged runs don't
+    // get a duplicate auto-sync row when the athlete didn't tag strava_data.
+    const matchesExistingByDateAndDist = (date: string, distKm: number) =>
+      (existing || []).some((r: any) => {
+        if (r.activity_date !== date) return false;
+        const ad = parseFloat(r.distance_km);
+        if (!ad) return false;
+        return Math.abs(ad - distKm) / Math.max(ad, distKm) < 0.1;
+      });
 
     const rows = runs
-      .filter(a => !existingIds.has(a.id))
+      .filter(a => {
+        if (existingIds.has(a.id)) return false;
+        const date = a.start_date_local?.split("T")[0];
+        const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
+        if (date && distKm && matchesExistingByDateAndDist(date, distKm)) return false;
+        return true;
+      })
       .map(a => {
         const date = a.start_date_local?.split("T")[0];
         const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
