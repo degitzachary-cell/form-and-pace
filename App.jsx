@@ -959,6 +959,56 @@ export default function App() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [stravaConnected]);
 
+  // Auto-sync every Strava run into the activities table so the coach sees
+  // a complete training picture (PMC, compliance, weekly km). Runs whenever
+  // the Strava list refreshes; dedupes by strava_data.id so it only inserts
+  // newly-synced runs. List-level data is enough for rTSS — splits/details
+  // are still fetched lazily when the athlete opens a specific run.
+  useEffect(() => {
+    if (role !== "athlete" || !stravaConnected || !stravaActivities.length || !user?.email) return;
+    const myEmail = user.email.toLowerCase();
+    const existingStravaIds = new Set(
+      activities
+        .filter(a => a.athlete_email?.toLowerCase() === myEmail)
+        .map(a => a.strava_data?.id)
+        .filter(Boolean)
+    );
+    const rows = stravaActivities
+      .filter(a => !existingStravaIds.has(a.id))
+      .map(a => {
+        const date = a.start_date_local?.split("T")[0];
+        const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
+        const durSec = a.moving_time || null;
+        if (!date || !distKm || !durSec) return null;
+        return {
+          athlete_email: myEmail,
+          athlete_name: athleteData?.name || user.email,
+          activity_date: date,
+          distance_km: distKm,
+          duration_seconds: durSec,
+          activity_type: "Run",
+          source: "strava-auto",
+          strava_data: {
+            id: a.id, name: a.name,
+            start_date_local: a.start_date_local,
+            distance: a.distance, moving_time: a.moving_time,
+            elapsed_time: a.elapsed_time,
+            total_elevation_gain: a.total_elevation_gain,
+            average_speed: a.average_speed,
+            average_heartrate: a.average_heartrate,
+            max_heartrate: a.max_heartrate,
+            sport_type: a.sport_type,
+          },
+        };
+      })
+      .filter(Boolean);
+    if (!rows.length) return;
+    supabase.from("activities").insert(rows).select().then(({ data, error }) => {
+      if (error) { console.error("strava auto-sync error:", error); return; }
+      if (data?.length) setActivities(prev => [...data, ...prev]);
+    });
+  }, [role, stravaConnected, stravaActivities, user?.email]);
+
 
   // Dismiss the bar-chart hover/tap tooltip when the user taps anywhere
   // outside a bar (otherwise the tooltip "sticks" on touch devices).
@@ -1553,7 +1603,7 @@ export default function App() {
       ? (dpAthlete.weeks.find(w => w.weekStart === coachActiveMonday) || { weekStart: coachActiveMonday, sessions:[] })
       : null;
     const dpWkEnd  = dpWk ? weekEndStr(dpWk.weekStart) : null;
-    const dpExtras = dpWk ? dpActs.filter(a => a.source !== "session" && a.activity_date >= dpWk.weekStart && a.activity_date <= dpWkEnd) : [];
+    const dpExtras = dpWk ? dpActs.filter(a => a.source !== "session" && a.source !== "strava-auto" && a.activity_date >= dpWk.weekStart && a.activity_date <= dpWkEnd) : [];
     const dpSnapMonday = (dateStr) => {
       if (!dateStr) return;
       const d = new Date(dateStr + "T00:00:00");
@@ -1733,7 +1783,7 @@ export default function App() {
                     }
                   }
                   for (const a of actsForA) {
-                    if (a.source === "session") continue;
+                    if (a.source === "session" || a.source === "strava-auto") continue;
                     previews.push({
                       kind: "act", email, athleteName: data.name || prettyEmailName(email),
                       excerpt: a.notes || `${a.distance_km}km extra activity`,
@@ -2869,7 +2919,7 @@ export default function App() {
             };
             const wk = planned || { weekStart: coachActiveMonday, weekLabel: fmtRange(), sessions: [] };
             const wkEnd = weekEndStr(wk.weekStart);
-            const extraActs = athActs.filter(a => a.source !== "session" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
+            const extraActs = athActs.filter(a => a.source !== "session" && a.source !== "strava-auto" && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
             const actByDate = {};
             for (const a of athActs) if (a.source === "session") actByDate[a.activity_date] = a;
 
@@ -4962,6 +5012,7 @@ export default function App() {
             const wkEnd = weekEndStr(w.weekStart);
             const extraActs = myActs.filter(a =>
               a.source !== "session" &&
+              a.source !== "strava-auto" &&
               a.activity_date >= w.weekStart &&
               a.activity_date <= wkEnd
             );
@@ -6046,7 +6097,7 @@ export default function App() {
     }
     // Extras (manual or strava runs not tied to a session).
     for (const a of myActsHist) {
-      if (a.source === "session") continue;
+      if (a.source === "session" || a.source === "strava-auto") continue;
       const mon = snapToMonday(a.activity_date);
       if (!mon) continue;
       ensureWk(mon).extras.push(a);
