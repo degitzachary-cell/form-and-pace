@@ -354,6 +354,12 @@ export default function App() {
   const [quickSaving,   setQuickSaving]   = useState(false);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
+  // Calendar (month view): YYYY-MM-01 string anchoring the displayed month.
+  // Initialised to the first day of the current month on first render.
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
 
   // Profile editor state — used by both athlete (self-edit) and coach
   // (edit-on-behalf). The form is populated when entering either profile screen.
@@ -2448,6 +2454,10 @@ export default function App() {
                 style={{ ...S.signOutBtn, flex:1, padding:"10px", fontSize:13, fontWeight:600 }}>
                 Edit profile
               </button>
+              <button onClick={() => setCoachScreen("calendar")}
+                style={{ ...S.signOutBtn, flex:1, padding:"10px", fontSize:13, fontWeight:600 }}>
+                Month view
+              </button>
               <button
                 onClick={async () => {
                   if (!confirm(`Remove ${daName} from your roster?\n\nThis deletes their training plan from your account. Their profile, logs, and activities are preserved.`)) return;
@@ -3018,6 +3028,145 @@ export default function App() {
             });
             setCoachScreen("edit-workout");
           }} style={{ ...S.ghostBtn, marginTop:16 }}>Edit prescribed workout</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  COACH — MONTH CALENDAR (per athlete)
+  //  Same shape as the athlete calendar, but reads from athletePrograms
+  //  for the currently selected dashAthlete.
+  // ────────────────────────────────────────────────────────────
+  if (role === "coach" && coachScreen === "calendar" && dashAthlete) {
+    const ap = athletePrograms[dashAthlete] || { weeks: [], name: prettyEmailName(dashAthlete) };
+    const athActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
+    const sessByDate = new Map();
+    for (const w of (ap.weeks || [])) {
+      for (const s of w.sessions) {
+        const log = logs[s.id];
+        const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
+        if (onDate) sessByDate.set(onDate, { s, log, weekStart: w.weekStart });
+      }
+    }
+    const actByDate = new Map();
+    for (const a of athActs) actByDate.set(a.activity_date, a);
+
+    const monthDate = new Date(calendarMonth + "T00:00:00");
+    const monthLabel = monthDate.toLocaleString(undefined, { month:"long", year:"numeric" });
+    const firstDow = monthDate.getDay() === 0 ? 6 : monthDate.getDay() - 1;
+    const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDow; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      cells.push(`${calendarMonth.slice(0,8)}${String(d).padStart(2,"0")}`);
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const stepMonth = (delta) => {
+      const d = new Date(calendarMonth + "T00:00:00");
+      d.setMonth(d.getMonth() + delta);
+      setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`);
+    };
+    const today = todayStr();
+
+    let monthKm = 0, monthSessions = 0, monthLogged = 0;
+    for (const ds of cells) {
+      if (!ds) continue;
+      if (!ds.startsWith(calendarMonth.slice(0, 7))) continue;
+      const sess = sessByDate.get(ds);
+      const act = actByDate.get(ds);
+      if (sess && (sess.s.type || "").toUpperCase() !== "REST") monthSessions++;
+      const isLogged = sessionIsLogged(sess?.log, act);
+      if (isLogged) {
+        monthLogged++;
+        const km = sess?.log?.analysis?.distance_km || act?.distance_km;
+        if (km) monthKm += parseFloat(km);
+      } else if (act && !sess) {
+        monthKm += parseFloat(act.distance_km || 0);
+      }
+    }
+
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title={ap.name || prettyEmailName(dashAthlete)} subtitle="Month calendar" onBack={() => setCoachScreen("athlete")}/>
+        <div style={{ maxWidth: isDesktop ? 880 : 540, margin:"0 auto", padding:"16px 16px 80px" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+            <button onClick={() => stepMonth(-1)} className="t-mono"
+              style={{ background:"transparent", border:`1px solid ${C.rule}`, padding:"8px 14px", cursor:"pointer", fontSize:11, letterSpacing:"0.14em", color:C.ink, borderRadius:2 }}>← PREV</button>
+            <div style={{ textAlign:"center" }}>
+              <div className="t-display" style={{ fontSize:22, fontWeight:400, color:C.ink, lineHeight:1 }}>{monthLabel}</div>
+              <div className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.14em", marginTop:4 }}>
+                {monthLogged}/{monthSessions} LOGGED · {monthKm.toFixed(1)} KM
+              </div>
+            </div>
+            <button onClick={() => stepMonth(1)} className="t-mono"
+              style={{ background:"transparent", border:`1px solid ${C.rule}`, padding:"8px 14px", cursor:"pointer", fontSize:11, letterSpacing:"0.14em", color:C.ink, borderRadius:2 }}>NEXT →</button>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:4, marginBottom:6 }}>
+            {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
+              <div key={d} className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, textAlign:"center", padding:"4px 0" }}>{d}</div>
+            ))}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:4 }}>
+            {cells.map((ds, i) => {
+              if (!ds) return <div key={i} style={{ aspectRatio:"1 / 1.1", background:"transparent" }}/>;
+              const sess = sessByDate.get(ds);
+              const act = actByDate.get(ds);
+              const s = sess?.s;
+              const log = sess?.log;
+              const ts = s ? typeStyle(s.type) : null;
+              const isToday = ds === today;
+              const isPast = ds < today;
+              const isLogged = sessionIsLogged(log, act);
+              const isMissed = !isLogged && s && isPast && (s.type || "").toUpperCase() !== "REST";
+              const dayNum = parseInt(ds.slice(8), 10);
+              const km = log?.analysis?.distance_km || act?.distance_km;
+              const onClick = () => {
+                if (s) {
+                  setActiveSession({ ...s, weekStart: sess.weekStart, athleteEmail: dashAthlete });
+                  setCoachScreen("session");
+                } else if (act) {
+                  setActiveExtraActivity(act);
+                  setCoachScreen("extra-activity");
+                }
+              };
+              return (
+                <div key={i} onClick={onClick}
+                  style={{
+                    aspectRatio:"1 / 1.1",
+                    background: isLogged && ts ? ts.bg : isMissed ? "#fdf0f0" : C.white,
+                    border: `1px solid ${isToday ? C.accent : isLogged && ts ? ts.border : C.rule}`,
+                    borderLeft: s ? `3px solid ${ts.accent}` : `1px solid ${isToday ? C.accent : C.rule}`,
+                    borderRadius:2, padding:"4px 5px",
+                    cursor: (s || act) ? "pointer" : "default",
+                    display:"flex", flexDirection:"column", position:"relative",
+                    minHeight: isDesktop ? 78 : 60,
+                  }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span className="t-mono" style={{ fontSize:11, fontWeight: isToday ? 700 : 500, color: isToday ? C.accent : C.ink }}>{dayNum}</span>
+                    {isLogged && <span style={{ width:6, height:6, borderRadius:"50%", background:C.accent, flexShrink:0 }}/>}
+                    {isMissed && <span className="t-mono" style={{ fontSize:8, color:C.crimson, fontWeight:700 }}>×</span>}
+                  </div>
+                  {s && (s.type || "").toUpperCase() !== "REST" ? (
+                    <div style={{ marginTop:"auto", overflow:"hidden" }}>
+                      <div style={{ fontSize:9, fontWeight:700, color:ts.accent, textTransform:"uppercase", letterSpacing:0.4, lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.type}</div>
+                      {km && <div className="t-mono" style={{ fontSize:9, color:C.mute, marginTop:1 }}>{Number(km).toFixed(1)}km</div>}
+                    </div>
+                  ) : (s && (s.type || "").toUpperCase() === "REST") ? (
+                    <div style={{ marginTop:"auto", fontSize:9, color:C.mute, fontStyle:"italic" }}>Rest</div>
+                  ) : act ? (
+                    <div style={{ marginTop:"auto", overflow:"hidden" }}>
+                      <div style={{ fontSize:9, fontWeight:700, color:C.cool, textTransform:"uppercase", letterSpacing:0.4, lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{act.activity_type || "Run"}</div>
+                      <div className="t-mono" style={{ fontSize:9, color:C.mute, marginTop:1 }}>{Number(act.distance_km).toFixed(1)}km</div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <button onClick={() => setCoachScreen("athlete")} style={{ ...S.ghostBtn, marginTop:18 }}>← Back to athlete</button>
         </div>
       </div>
     );
@@ -3637,6 +3786,7 @@ export default function App() {
                 {/* Quick links (desktop: vertical nav) */}
                 <div style={{ margin:"16px 16px 0", display:"flex", flexDirection:"column", gap:8 }}>
                   <button onClick={() => setScreen("home")} style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 16px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", textAlign:"left" }}>FULL WEEK VIEW →</button>
+                  <button onClick={() => setScreen("calendar")} style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 16px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", textAlign:"left" }}>MONTH CALENDAR →</button>
                   <button onClick={() => setScreen("history")} style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 16px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", textAlign:"left" }}>HISTORY →</button>
                   <button onClick={() => setScreen("profile")} style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 16px", fontSize:11, letterSpacing:2, color:C.navy, fontWeight:700, cursor:"pointer", textAlign:"left" }}>PROFILE →</button>
                 </div>
@@ -4431,13 +4581,198 @@ export default function App() {
                   </DndContext>
                 </div>
 
-                <button onClick={()=>setScreen("history")} style={{
-                  width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2,
-                  padding:"10px", color:C.mid, fontSize:11, cursor:"pointer", marginBottom:16, letterSpacing:1,
-                }}>HISTORY →</button>
+                <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+                  <button onClick={()=>setScreen("calendar")} style={{
+                    flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2,
+                    padding:"10px", color:C.mid, fontSize:11, cursor:"pointer", letterSpacing:1,
+                  }}>MONTH →</button>
+                  <button onClick={()=>setScreen("history")} style={{
+                    flex:1, background:C.white, border:`1px solid ${C.rule}`, borderRadius:2,
+                    padding:"10px", color:C.mid, fontSize:11, cursor:"pointer", letterSpacing:1,
+                  }}>HISTORY →</button>
+                </div>
               </div>
             );
           })()}
+        </div>
+        <MobileTabBar
+          current="home"
+          isDesktop={isDesktop}
+          onTab={(s) => setScreen(s)}
+          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+        />
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  ATHLETE — MONTH CALENDAR
+  //  Bird's-eye view of training over a full month. Click any day to
+  //  open its session (logged → result, planned → session, none → log).
+  // ────────────────────────────────────────────────────────────
+  if (role === "athlete" && screen === "calendar") {
+    const myActs = activitiesByEmail.get(user.email?.toLowerCase()) || [];
+    // Build a date → { session, log, linkedAct } map across all weeks.
+    const sessByDate = new Map();
+    for (const w of weeks) {
+      for (const s of w.sessions) {
+        const log = logs[s.id];
+        const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
+        if (onDate) sessByDate.set(onDate, { s, log, weekStart: w.weekStart });
+      }
+    }
+    const actByDate = new Map();
+    for (const a of myActs) actByDate.set(a.activity_date, a);
+
+    // Build the visible grid: leading blanks + days of month + trailing blanks
+    // so we always render full weeks (Mon-start).
+    const monthDate = new Date(calendarMonth + "T00:00:00");
+    const monthLabel = monthDate.toLocaleString(undefined, { month:"long", year:"numeric" });
+    const firstDow = monthDate.getDay() === 0 ? 6 : monthDate.getDay() - 1; // Mon=0
+    const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDow; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = `${calendarMonth.slice(0,8)}${String(d).padStart(2,"0")}`;
+      cells.push(ds);
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const stepMonth = (delta) => {
+      const d = new Date(calendarMonth + "T00:00:00");
+      d.setMonth(d.getMonth() + delta);
+      setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`);
+    };
+
+    const today = todayStr();
+
+    // Aggregate stats across the visible month.
+    let monthKm = 0, monthSessions = 0, monthLogged = 0;
+    for (const ds of cells) {
+      if (!ds) continue;
+      if (!ds.startsWith(calendarMonth.slice(0, 7))) continue;
+      const sess = sessByDate.get(ds);
+      const act = actByDate.get(ds);
+      if (sess && (sess.s.type || "").toUpperCase() !== "REST") monthSessions++;
+      const isLogged = sessionIsLogged(sess?.log, act);
+      if (isLogged) {
+        monthLogged++;
+        const km = sess?.log?.analysis?.distance_km || act?.distance_km;
+        if (km) monthKm += parseFloat(km);
+      } else if (act && !sess) {
+        monthKm += parseFloat(act.distance_km || 0);
+      }
+    }
+
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title="Calendar" subtitle={athleteData.name} onBack={() => setScreen("home")}/>
+        <div style={{ maxWidth: isDesktop ? 880 : 540, margin:"0 auto", padding:"16px 16px 80px" }}>
+
+          {/* Month header + nav */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+            <button onClick={() => stepMonth(-1)} className="t-mono"
+              style={{ background:"transparent", border:`1px solid ${C.rule}`, padding:"8px 14px", cursor:"pointer", fontSize:11, letterSpacing:"0.14em", color:C.ink, borderRadius:2 }}>
+              ← PREV
+            </button>
+            <div style={{ textAlign:"center" }}>
+              <div className="t-display" style={{ fontSize:22, fontWeight:400, color:C.ink, lineHeight:1 }}>{monthLabel}</div>
+              <div className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.14em", marginTop:4 }}>
+                {monthLogged}/{monthSessions} LOGGED · {monthKm.toFixed(1)} KM
+              </div>
+            </div>
+            <button onClick={() => stepMonth(1)} className="t-mono"
+              style={{ background:"transparent", border:`1px solid ${C.rule}`, padding:"8px 14px", cursor:"pointer", fontSize:11, letterSpacing:"0.14em", color:C.ink, borderRadius:2 }}>
+              NEXT →
+            </button>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:4, marginBottom:6 }}>
+            {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
+              <div key={d} className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, textAlign:"center", padding:"4px 0" }}>{d}</div>
+            ))}
+          </div>
+
+          {/* Grid */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:4 }}>
+            {cells.map((ds, i) => {
+              if (!ds) return <div key={i} style={{ aspectRatio:"1 / 1.1", background:"transparent" }}/>;
+              const sess = sessByDate.get(ds);
+              const act = actByDate.get(ds);
+              const s = sess?.s;
+              const log = sess?.log;
+              const ts = s ? typeStyle(s.type) : null;
+              const isToday = ds === today;
+              const isPast = ds < today;
+              const isLogged = sessionIsLogged(log, act);
+              const isMissed = !isLogged && s && isPast && (s.type || "").toUpperCase() !== "REST";
+              const dayNum = parseInt(ds.slice(8), 10);
+              const km = log?.analysis?.distance_km || act?.distance_km;
+
+              const onClick = () => {
+                if (s) {
+                  setActiveSession({ ...s, weekStart: sess.weekStart });
+                  setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
+                  setSessionDateOverride(log?.analysis?.actual_date || act?.activity_date || ds);
+                  setScreen(isLogged ? "result" : "session");
+                } else if (act) {
+                  setActiveExtraActivity(act);
+                  setScreen("extra-activity");
+                } else {
+                  setLogForm({ date: ds, distanceKm: "", durationMin: "", type: "Run", notes: "" });
+                  setEditingActivityId(null);
+                  clearStravaSelection();
+                  setScreen("log-activity");
+                }
+              };
+
+              return (
+                <div key={i} onClick={onClick}
+                  style={{
+                    aspectRatio:"1 / 1.1",
+                    background: isLogged && ts ? ts.bg : isMissed ? "#fdf0f0" : C.white,
+                    border: `1px solid ${isToday ? C.accent : isLogged && ts ? ts.border : C.rule}`,
+                    borderLeft: s ? `3px solid ${ts.accent}` : `1px solid ${isToday ? C.accent : C.rule}`,
+                    borderRadius:2,
+                    padding:"4px 5px",
+                    cursor: "pointer",
+                    display:"flex", flexDirection:"column",
+                    position:"relative",
+                    minHeight: isDesktop ? 78 : 60,
+                  }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span className="t-mono" style={{ fontSize:11, fontWeight: isToday ? 700 : 500, color: isToday ? C.accent : C.ink }}>
+                      {dayNum}
+                    </span>
+                    {isLogged && <span style={{ width:6, height:6, borderRadius:"50%", background:C.accent, flexShrink:0 }}/>}
+                    {isMissed && <span className="t-mono" style={{ fontSize:8, color:C.crimson, fontWeight:700 }}>×</span>}
+                  </div>
+                  {s && (s.type || "").toUpperCase() !== "REST" ? (
+                    <div style={{ marginTop:"auto", overflow:"hidden" }}>
+                      <div style={{ fontSize:9, fontWeight:700, color:ts.accent, textTransform:"uppercase", letterSpacing:0.4, lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                        {s.type}
+                      </div>
+                      {km && <div className="t-mono" style={{ fontSize:9, color:C.mute, marginTop:1 }}>{Number(km).toFixed(1)}km</div>}
+                    </div>
+                  ) : (s && (s.type || "").toUpperCase() === "REST") ? (
+                    <div style={{ marginTop:"auto", fontSize:9, color:C.mute, fontStyle:"italic" }}>Rest</div>
+                  ) : act ? (
+                    <div style={{ marginTop:"auto", overflow:"hidden" }}>
+                      <div style={{ fontSize:9, fontWeight:700, color:C.cool, textTransform:"uppercase", letterSpacing:0.4, lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                        {act.activity_type || "Run"}
+                      </div>
+                      <div className="t-mono" style={{ fontSize:9, color:C.mute, marginTop:1 }}>{Number(act.distance_km).toFixed(1)}km</div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+
+          <button onClick={() => setScreen("home")} style={{ ...S.ghostBtn, marginTop:18 }}>← Back to week</button>
         </div>
         <MobileTabBar
           current="home"
