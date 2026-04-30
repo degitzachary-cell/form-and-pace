@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
@@ -3516,6 +3516,30 @@ export default function App() {
                       {s.type}
                       {s.pace && <><br/><span className="t-display-italic" style={{ color:"var(--c-mute)" }}>at {s.pace}</span></>}
                     </h1>
+
+                    {/* Sections timeline — when the coach built structured
+                        steps (warmup / workout / recovery / interval /
+                        cooldown), show them as a numbered list before the
+                        coach notes. Tappable through to the detail screen. */}
+                    {isStructured(s) && (
+                      <ol style={{ listStyle:"none", padding:0, margin:"24px 0 0", borderLeft:"2px solid var(--c-rule)" }}>
+                        {s.steps.map((step, i) => (
+                          <li key={i} style={{ position:"relative", paddingLeft:18, marginLeft:8, marginBottom:14 }}>
+                            <span style={{ position:"absolute", left:-7, top:6, width:10, height:10, borderRadius:999, background:"var(--c-accent)", border:"2px solid var(--c-bg)" }}/>
+                            <div className="t-mono" style={{ fontSize:10, letterSpacing:"0.16em", color:"var(--c-accent)", textTransform:"uppercase", fontWeight:700, marginBottom:3 }}>
+                              {step.kind === "steady" ? "Workout" : step.kind === "warmup" ? "Warm Up" : step.kind === "cooldown" ? "Cool Down" : step.kind === "recovery" ? "Recovery" : step.kind}
+                            </div>
+                            <div style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.4, color:"var(--c-ink)" }}>
+                              {formatStep(step)}
+                            </div>
+                            {step.note && (
+                              <div className="t-display-italic" style={{ fontSize:14, color:"var(--c-mute)", marginTop:2 }}>{step.note}</div>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+
                     {(s.desc || s.description) && (
                       <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.5, color:"var(--c-inkSoft)", margin:"22px 0 0", whiteSpace:"pre-wrap" }}>
                         {s.desc || s.description}
@@ -3546,29 +3570,37 @@ export default function App() {
           })()}
 
           {/* ─── Pace strip — the only data-dense surface ───────────── */}
-          {todaysSession?.s && (
-            <div className="fp-pace-strip">
-              <div>
-                <Eyebrow style={{ marginBottom:6 }}>Pace</Eyebrow>
-                <Num size={17}>{todaysSession.s.pace || "—"}</Num>
+          {todaysSession?.s && (() => {
+            const ps = todaysSession.s;
+            // Roll structured-steps numbers up so the strip isn't blank when
+            // the coach built the workout out of sections only.
+            const agg = isStructured(ps) ? aggregateSteps(ps.steps) : { distance_km: 0, duration_min: 0 };
+            const volKm = ps.distance_km || ps.distance || (agg.distance_km > 0 ? agg.distance_km : null);
+            const timeMin = ps.duration_min || (agg.duration_min > 0 ? agg.duration_min : null);
+            return (
+              <div className="fp-pace-strip">
+                <div>
+                  <Eyebrow style={{ marginBottom:6 }}>Pace</Eyebrow>
+                  <Num size={17}>{ps.pace || "—"}</Num>
+                </div>
+                <div>
+                  <Eyebrow style={{ marginBottom:6 }}>Volume</Eyebrow>
+                  <Num size={17}>{volKm || "—"}</Num>
+                  {volKm && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> km</span>}
+                </div>
+                <div>
+                  <Eyebrow style={{ marginBottom:6 }}>Time</Eyebrow>
+                  <Num size={17}>{timeMin ? `~${timeMin}` : "—"}</Num>
+                  {timeMin && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> min</span>}
+                </div>
+                <div>
+                  <Eyebrow style={{ marginBottom:6 }}>RPE</Eyebrow>
+                  <Num size={17}>{ps.rpe || "—"}</Num>
+                  {ps.rpe && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> /10</span>}
+                </div>
               </div>
-              <div>
-                <Eyebrow style={{ marginBottom:6 }}>Volume</Eyebrow>
-                <Num size={17}>{todaysSession.s.distance_km || todaysSession.s.distance || "—"}</Num>
-                {(todaysSession.s.distance_km || todaysSession.s.distance) && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> km</span>}
-              </div>
-              <div>
-                <Eyebrow style={{ marginBottom:6 }}>Time</Eyebrow>
-                <Num size={17}>{todaysSession.s.duration_min ? `~${todaysSession.s.duration_min}` : "—"}</Num>
-                {todaysSession.s.duration_min && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> min</span>}
-              </div>
-              <div>
-                <Eyebrow style={{ marginBottom:6 }}>RPE</Eyebrow>
-                <Num size={17}>{todaysSession.s.rpe || "—"}</Num>
-                {todaysSession.s.rpe && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> /10</span>}
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ─── Primary action ───────────────────────────────────── */}
           {todaysSession?.s && (
