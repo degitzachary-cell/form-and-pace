@@ -417,21 +417,37 @@ export function StepsEditor({ session, onChange }) {
           )}
 
           {step.kind === 'steady' && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <UnitToggle step={step} i={i} options={[{ value: 'km', label: 'Distance' }, { value: 'min', label: 'Time' }]}/>
-              {(step.unit || 'km') === 'km' ? (
-                <>
-                  <input style={{ ...inp, width: 60 }} type="number" step="0.1" value={step.distance_km ?? ''} placeholder="km" onChange={e => setStep(i, { distance_km: e.target.value === '' ? '' : Number(e.target.value) })}/>
-                  <span style={lbl}>km</span>
-                </>
-              ) : (
-                <>
-                  <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} placeholder="min" onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
-                  <span style={lbl}>min</span>
-                </>
-              )}
-              <PaceRangeInput value={step.pace || ''} onChange={(v) => setStep(i, { pace: v })} label="Pace"/>
-              <input style={{ ...inp, width: 160 }} placeholder="note (e.g. at MP)" value={step.note || ''} onChange={e => setStep(i, { note: e.target.value })}/>
+            <div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                <UnitToggle step={step} i={i} options={[{ value: 'km', label: 'Distance' }, { value: 'min', label: 'Time' }]}/>
+                {(step.unit || 'km') === 'km' ? (
+                  <>
+                    <input style={{ ...inp, width: 60 }} type="number" step="0.1" value={step.distance_km ?? ''} placeholder="km" onChange={e => setStep(i, { distance_km: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                    <span style={lbl}>km</span>
+                  </>
+                ) : (
+                  <>
+                    <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} placeholder="min" onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                    <span style={lbl}>min</span>
+                  </>
+                )}
+                <PaceRangeInput value={step.pace || ''} onChange={(v) => setStep(i, { pace: v })} label="Pace"/>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={lbl}>reps</span>
+                <input style={{ ...inp, width: 50 }} type="number" min="1" value={step.reps ?? 1} onChange={e => setStep(i, { reps: Math.max(1, Number(e.target.value) || 1) })}/>
+                {(Number(step.reps) || 1) > 1 && (
+                  <>
+                    <span style={lbl}>rest</span>
+                    <input style={{ ...inp, width: 60 }} type="number" placeholder="sec" value={step.rest?.duration_s ?? ''} onChange={e => setNested(i, 'rest', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                    <span style={lbl}>sec</span>
+                    <span style={{ fontSize:10, color:C.mid }}>or</span>
+                    <input style={{ ...inp, width: 50 }} type="number" placeholder="min" value={step.rest?.duration_min ?? ''} onChange={e => setNested(i, 'rest', { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                    <span style={lbl}>min</span>
+                  </>
+                )}
+                <input style={{ ...inp, width: 160, marginLeft:'auto' }} placeholder="note (e.g. at MP)" value={step.note || ''} onChange={e => setStep(i, { note: e.target.value })}/>
+              </div>
             </div>
           )}
 
