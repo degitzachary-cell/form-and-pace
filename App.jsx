@@ -4011,7 +4011,11 @@ export default function App() {
     const todaysSession = allWithMoves.find(x => x.onDate === today && (x.s.type || "").toUpperCase() !== "REST");
     const todaysActivity = myActs.find(a => a.activity_date === today);
     const todaysStrava = stravaActivities.find(a => a.start_date_local?.split("T")[0] === today);
-    const todaysStravaUnimported = todaysStrava && !myActs.some(a => a.strava_data?.id === todaysStrava.id);
+    // Already done if: Strava ID was explicitly imported, OR any activity
+    // (manual or otherwise) already exists for today's date.
+    const todaysStravaUnimported = todaysStrava
+      && !myActs.some(a => a.strava_data?.id === todaysStrava.id)
+      && !myActs.some(a => a.activity_date === today);
     const dateNice = t.toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" });
 
     // Goal race countdown: pull the soonest upcoming race marker. A-races
