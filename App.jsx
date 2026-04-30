@@ -1176,10 +1176,11 @@ export default function App() {
   }, [role, activeMonday]);
 
   // Index activities by athlete + date for O(1) lookups in render loops.
+  // Email is folded to lowercase to match findAthAct's case-insensitive query.
   const actByEmailDate = useMemo(() => {
     const m = new Map();
     for (const a of activities) {
-      const key = `${a.athlete_email}|${a.activity_date}`;
+      const key = `${a.athlete_email?.toLowerCase()}|${a.activity_date}`;
       if (!m.has(key)) m.set(key, a);
     }
     return m;
@@ -3376,7 +3377,7 @@ export default function App() {
                       log: log,
                       linkedAct: linkedAthAct,
                       isPastDate: false,
-                      profile: athletePrograms[activeSession?.athleteEmail] || {},
+                      profile: athletePrograms[activeSession?.athleteEmail?.toLowerCase()] || {},
                     });
                     const active  = current === opt.val;
                     return (
