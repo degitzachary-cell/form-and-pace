@@ -391,6 +391,18 @@ export function MobileTabBar({ current, onTab, onTapLog, isDesktop }) {
       <line x1="3" y1="9" x2="15" y2="9"  stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
     </svg>
   );
+  const Calendar = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="2.5" y="3.5" width="13" height="11" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="2.5" y1="6.5" x2="15.5" y2="6.5" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="6" y1="2.5" x2="6"  y2="4.5" stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
+      <line x1="12" y1="2.5" x2="12" y2="4.5" stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
+      <circle cx="6" cy="9.5" r="0.8" fill="currentColor"/>
+      <circle cx="9" cy="9.5" r="0.8" fill="currentColor"/>
+      <circle cx="12" cy="9.5" r="0.8" fill="currentColor"/>
+      <circle cx="6" cy="12" r="0.8" fill="currentColor"/>
+    </svg>
+  );
   const Profile = (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
       <circle cx="9" cy="6.2" r="2.6" stroke="currentColor" strokeWidth={sw}/>
@@ -408,10 +420,11 @@ export function MobileTabBar({ current, onTab, onTapLog, isDesktop }) {
       zIndex: 50,
     }}>
       <div style={{ maxWidth: 500, margin: "0 auto", display: "flex" }}>
-        <Item name="today"   label="Today"   glyph={Today}   onClick={() => onTab("today")}/>
-        <Item name="home"    label="Week"    glyph={Week}    onClick={() => onTab("home")}/>
-        <Item name="log"     label="Log"     glyph={Log}     onClick={onTapLog}/>
-        <Item name="profile" label="Profile" glyph={Profile} onClick={() => onTab("profile")}/>
+        <Item name="today"    label="Today"    glyph={Today}    onClick={() => onTab("today")}/>
+        <Item name="home"     label="Week"     glyph={Week}     onClick={() => onTab("home")}/>
+        <Item name="calendar" label="Calendar" glyph={Calendar} onClick={() => onTab("calendar")}/>
+        <Item name="log"      label="Log"      glyph={Log}      onClick={onTapLog}/>
+        <Item name="profile"  label="Profile"  glyph={Profile}  onClick={() => onTab("profile")}/>
       </div>
     </div>
   );
@@ -517,99 +530,111 @@ export function PMCChart({ dailyRtss, fromDate, toDate, height = 200 }) {
   if (pmc.length < 2) {
     return (
       <div style={{ padding: 24, textAlign: "center", color: "var(--c-mute)", fontFamily: "var(--f-display)", fontStyle: "italic", fontSize: 14 }}>
-        Not enough data yet — log a few weeks of runs and CTL/ATL will start to draw.
+        Not enough data yet — log a few weeks of runs and your fitness curve will start to draw.
       </div>
     );
   }
   const VB_W = 600, VB_H = height;
-  const PAD_L = 40, PAD_R = 12, PAD_T = 14, PAD_B = 22;
+  const PAD_L = 36, PAD_R = 12, PAD_T = 10, PAD_B = 22;
   const innerW = VB_W - PAD_L - PAD_R;
   const innerH = VB_H - PAD_T - PAD_B;
 
   const N = pmc.length;
+  // Reserve top 70% for CTL/ATL load lines, bottom 25% for TSB band, leaving a small gap.
+  const loadBandH = innerH * 0.70;
+  const tsbBandTop = PAD_T + innerH * 0.75;
+  const tsbBandH = innerH * 0.25;
+  const tsbZeroY = tsbBandTop + tsbBandH / 2;
+
   const maxLoad = Math.max(40, ...pmc.map(p => p.ctl), ...pmc.map(p => p.atl));
-  const yLoad = (v) => PAD_T + (1 - v / maxLoad) * innerH;
+  const yLoad = (v) => PAD_T + (1 - v / maxLoad) * loadBandH;
   const x = (i) => PAD_L + (i * innerW) / Math.max(1, N - 1);
 
   const ctlPath = pmc.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yLoad(p.ctl).toFixed(1)}`).join(" ");
   const atlPath = pmc.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yLoad(p.atl).toFixed(1)}`).join(" ");
 
-  // TSB drawn against zero-axis at the bottom band (below load lines).
-  // We map TSB to the bottom 30% of the chart, with zero in the middle of
-  // that band so positive (fresh) goes up and negative (fatigued) goes down.
-  const tsbBandTop = PAD_T + innerH * 0.7;
-  const tsbBandH = innerH * 0.28;
-  const tsbZeroY = tsbBandTop + tsbBandH / 2;
   const maxTsb = Math.max(10, ...pmc.map(p => Math.abs(p.tsb)));
-  const yTsb = (v) => tsbZeroY - (v / maxTsb) * (tsbBandH / 2);
+  const yTsb = (v) => tsbZeroY - (v / maxTsb) * (tsbBandH / 2 - 2);
 
   const last = pmc[pmc.length - 1];
+  const tsbHint = last.tsb > 5 ? "fresh — good to race" : last.tsb < -20 ? "very fatigued — ease off" : last.tsb < -10 ? "fatigued — training hard" : "balanced";
+  const tsbColor = last.tsb >= 5 ? "var(--c-cool)" : last.tsb < -20 ? "var(--c-hot)" : last.tsb < 0 ? "var(--c-warn)" : "var(--c-ink)";
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 18, marginBottom: 8, flexWrap: "wrap" }}>
-        <div>
-          <div className="t-eyebrow">Fitness · CTL</div>
-          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: "var(--c-accent)", fontWeight: 600 }}>{last.ctl.toFixed(1)}</div>
+      {/* Three headline numbers — plain-language labels with the technical name underneath */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+        <div style={{ borderLeft: "2px solid var(--c-accent)", paddingLeft: 10 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 2 }}>Fitness</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 20, color: "var(--c-accent)", fontWeight: 600, lineHeight: 1 }}>{last.ctl.toFixed(0)}</div>
+          <div style={{ fontSize: 9, color: "var(--c-mute)", marginTop: 3, fontFamily: "var(--f-mono)", letterSpacing: "0.1em" }}>CTL · 42d</div>
         </div>
-        <div>
-          <div className="t-eyebrow">Fatigue · ATL</div>
-          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: "var(--c-hot)", fontWeight: 600 }}>{last.atl.toFixed(1)}</div>
+        <div style={{ borderLeft: "2px solid var(--c-hot)", paddingLeft: 10 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 2 }}>Fatigue</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 20, color: "var(--c-hot)", fontWeight: 600, lineHeight: 1 }}>{last.atl.toFixed(0)}</div>
+          <div style={{ fontSize: 9, color: "var(--c-mute)", marginTop: 3, fontFamily: "var(--f-mono)", letterSpacing: "0.1em" }}>ATL · 7d</div>
         </div>
-        <div>
-          <div className="t-eyebrow">Form · TSB</div>
-          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: last.tsb >= 0 ? "var(--c-cool)" : "var(--c-warn)", fontWeight: 600 }}>
-            {last.tsb >= 0 ? "+" : ""}{last.tsb.toFixed(1)}
+        <div style={{ borderLeft: `2px solid ${tsbColor}`, paddingLeft: 10 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 2 }}>Form</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 20, color: tsbColor, fontWeight: 600, lineHeight: 1 }}>
+            {last.tsb >= 0 ? "+" : ""}{last.tsb.toFixed(0)}
           </div>
+          <div style={{ fontSize: 9, color: "var(--c-mute)", marginTop: 3, fontFamily: "var(--f-mono)", letterSpacing: "0.1em" }}>TSB · {tsbHint}</div>
         </div>
       </div>
+
       <svg viewBox={`0 0 ${VB_W} ${VB_H}`} preserveAspectRatio="none" style={{ width: "100%", height: "auto", display: "block" }}>
-        {/* axis lines */}
-        <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={VB_H - PAD_B} stroke="var(--c-rule)" strokeWidth="0.5"/>
-        <line x1={PAD_L} y1={VB_H - PAD_B} x2={VB_W - PAD_R} y2={VB_H - PAD_B} stroke="var(--c-rule)" strokeWidth="0.5"/>
-        {/* y-axis ticks */}
+        {/* y-axis grid (load band only) */}
         {[0, 0.5, 1].map(t => {
           const v = Math.round(maxLoad * t);
           return (
             <g key={t}>
               <line x1={PAD_L} y1={yLoad(v)} x2={VB_W - PAD_R} y2={yLoad(v)} stroke="var(--c-ruleSoft)" strokeWidth="0.4" strokeDasharray="2 3"/>
-              <text x={PAD_L - 6} y={yLoad(v) + 3} textAnchor="end" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">{v}</text>
+              <text x={PAD_L - 5} y={yLoad(v) + 3} textAnchor="end" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">{v}</text>
             </g>
           );
         })}
-        {/* daily rTSS as faint background bars */}
+
+        {/* daily rTSS as faint background bars in the load band */}
         {pmc.map((p, i) => p.rtss > 0 && (
-          <rect key={i}
+          <rect key={`r${i}`}
             x={x(i) - 0.8} y={yLoad(p.rtss)}
-            width="1.6" height={Math.max(0.5, (VB_H - PAD_B) - yLoad(p.rtss))}
+            width="1.6" height={Math.max(0.5, (PAD_T + loadBandH) - yLoad(p.rtss))}
             fill="var(--c-ruleSoft)"/>
         ))}
-        {/* TSB filled area */}
-        <line x1={PAD_L} y1={tsbZeroY} x2={VB_W - PAD_R} y2={tsbZeroY} stroke="var(--c-rule)" strokeWidth="0.4"/>
+
+        {/* CTL line (fitness) */}
+        <path d={ctlPath} fill="none" stroke="var(--c-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        {/* ATL line (fatigue) */}
+        <path d={atlPath} fill="none" stroke="var(--c-hot)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 2"/>
+
+        {/* TSB band — separated below the load chart with a divider */}
+        <line x1={PAD_L} y1={tsbBandTop - 2} x2={VB_W - PAD_R} y2={tsbBandTop - 2} stroke="var(--c-rule)" strokeWidth="0.5"/>
+        <text x={PAD_L - 5} y={tsbZeroY + 3} textAnchor="end" fontSize="8" fill="var(--c-mute)" fontFamily="var(--f-mono)">TSB</text>
+        <line x1={PAD_L} y1={tsbZeroY} x2={VB_W - PAD_R} y2={tsbZeroY} stroke="var(--c-rule)" strokeWidth="0.4" strokeDasharray="1 2"/>
         {pmc.map((p, i) => {
           const yp = yTsb(p.tsb);
           const h = Math.abs(yp - tsbZeroY);
           const top = Math.min(yp, tsbZeroY);
           const fill = p.tsb >= 0 ? "var(--c-cool)" : "var(--c-warn)";
           return (
-            <rect key={i} x={x(i) - 1} y={top} width="2" height={Math.max(0.5, h)} fill={fill} fillOpacity="0.45"/>
+            <rect key={`t${i}`} x={x(i) - 1} y={top} width="2" height={Math.max(0.5, h)} fill={fill} fillOpacity="0.5"/>
           );
         })}
-        {/* CTL line */}
-        <path d={ctlPath} fill="none" stroke="var(--c-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        {/* ATL line */}
-        <path d={atlPath} fill="none" stroke="var(--c-hot)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-        {/* date ticks: first / midpoint / last */}
+
+        {/* date ticks */}
         {[0, Math.floor(N/2), N - 1].map(i => (
-          <text key={i} x={x(i)} y={VB_H - 6} textAnchor="middle" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">
+          <text key={`d${i}`} x={x(i)} y={VB_H - 6} textAnchor="middle" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">
             {pmc[i].date.slice(5)}
           </text>
         ))}
       </svg>
-      <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 10, color: "var(--c-mute)", fontFamily: "var(--f-mono)" }}>
-        <span><span style={{ display: "inline-block", width: 10, height: 2, background: "var(--c-accent)", verticalAlign: "middle", marginRight: 5 }}/>CTL fitness</span>
-        <span><span style={{ display: "inline-block", width: 10, height: 2, background: "var(--c-hot)", verticalAlign: "middle", marginRight: 5 }}/>ATL fatigue</span>
-        <span><span style={{ display: "inline-block", width: 6, height: 8, background: "var(--c-cool)", opacity: 0.45, verticalAlign: "middle", marginRight: 5 }}/>TSB form</span>
+
+      <div style={{ display: "flex", gap: 14, marginTop: 8, fontSize: 10, color: "var(--c-mute)", fontFamily: "var(--f-mono)", flexWrap: "wrap" }}>
+        <span><span style={{ display: "inline-block", width: 14, height: 2, background: "var(--c-accent)", verticalAlign: "middle", marginRight: 5 }}/>Fitness</span>
+        <span><span style={{ display: "inline-block", width: 14, height: 0, borderTop: "1.5px dashed var(--c-hot)", verticalAlign: "middle", marginRight: 5 }}/>Fatigue</span>
+        <span><span style={{ display: "inline-block", width: 6, height: 8, background: "var(--c-cool)", opacity: 0.5, verticalAlign: "middle", marginRight: 5 }}/>Fresh</span>
+        <span><span style={{ display: "inline-block", width: 6, height: 8, background: "var(--c-warn)", opacity: 0.5, verticalAlign: "middle", marginRight: 5 }}/>Tired</span>
       </div>
     </div>
   );

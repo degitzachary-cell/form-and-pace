@@ -5265,10 +5265,134 @@ export default function App() {
             })}
           </div>
 
+          {/* Markers / Races — athlete can mark their own goal events */}
+          {(() => {
+            const myMarkers = markersByEmail[user.email?.toLowerCase()] || [];
+            const upcoming = myMarkers.filter(m => (m.end_date || m.marker_date) >= todayStr())
+              .sort((a, b) => (a.marker_date || "").localeCompare(b.marker_date || ""))
+              .slice(0, 8);
+            return (
+              <div style={{ ...S.card, marginTop:24 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
+                  <Eyebrow>Races & markers</Eyebrow>
+                  <button type="button" onClick={() => setMarkerForm({ athleteEmail: user.email, kind:"race", label:"", markerDate: todayStr(), endDate:"", isARace: false })}
+                    style={{ background:"transparent", color:C.accent, border:`1px solid ${C.rule}`, borderRadius:2, padding:"4px 10px", fontSize:11, cursor:"pointer", fontWeight:600 }}>
+                    + Add
+                  </button>
+                </div>
+                {markerForm && markerForm.athleteEmail === user.email && (
+                  <div style={{ background:C.bg, border:`1px solid ${C.rule}`, borderRadius:4, padding:14, marginBottom:12 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                      <div>
+                        <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>KIND</div>
+                        <select value={markerForm.kind}
+                          onChange={e => setMarkerForm(f => ({ ...f, kind: e.target.value, isARace: false }))}
+                          style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"6px 8px", fontSize:13, color:C.ink, boxSizing:"border-box" }}>
+                          {MARKER_KINDS.map(k => <option key={k} value={k}>{MARKER_STYLE[k].label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>DATE</div>
+                        <input type="date" value={markerForm.markerDate}
+                          onChange={e => setMarkerForm(f => ({ ...f, markerDate: e.target.value }))}
+                          style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"6px 8px", fontSize:13, color:C.ink, boxSizing:"border-box" }}/>
+                      </div>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                      <div>
+                        <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>LABEL</div>
+                        <input type="text" value={markerForm.label} placeholder="e.g. Berlin Marathon"
+                          onChange={e => setMarkerForm(f => ({ ...f, label: e.target.value }))}
+                          style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"6px 8px", fontSize:13, color:C.ink, boxSizing:"border-box" }}/>
+                      </div>
+                      <div>
+                        <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>END DATE (optional)</div>
+                        <input type="date" value={markerForm.endDate}
+                          onChange={e => setMarkerForm(f => ({ ...f, endDate: e.target.value }))}
+                          style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"6px 8px", fontSize:13, color:C.ink, boxSizing:"border-box" }}/>
+                      </div>
+                    </div>
+                    {markerForm.kind === "race" && (
+                      <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:C.ink, marginBottom:10, cursor:"pointer" }}>
+                        <input type="checkbox" checked={markerForm.isARace}
+                          onChange={e => setMarkerForm(f => ({ ...f, isARace: e.target.checked }))}/>
+                        Mark as A-race (primary goal race)
+                      </label>
+                    )}
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button type="button" onClick={async () => {
+                        if (!markerForm.markerDate) return;
+                        const created = await createMarker({
+                          athleteEmail: markerForm.athleteEmail, kind: markerForm.kind,
+                          markerDate: markerForm.markerDate, endDate: markerForm.endDate || null,
+                          label: markerForm.label || null, isARace: markerForm.isARace,
+                          createdBy: user.email,
+                        });
+                        if (created) { loadMarkers(markerForm.athleteEmail); setMarkerForm(null); }
+                      }} style={{ background:C.accent, color:"#FBF8F1", border:"none", borderRadius:2, padding:"8px 16px", fontSize:11, fontWeight:700, cursor:"pointer", letterSpacing:"0.12em" }}>
+                        SAVE
+                      </button>
+                      <button type="button" onClick={() => setMarkerForm(null)}
+                        style={{ background:"transparent", color:C.mute, border:`1px solid ${C.rule}`, borderRadius:2, padding:"8px 14px", fontSize:11, cursor:"pointer" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {upcoming.length === 0 ? (
+                  <div style={{ fontSize:13, color:C.mute, fontStyle:"italic" }}>None scheduled. Tap + Add to mark a race or rest period.</div>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {upcoming.map(m => {
+                      const ms = MARKER_STYLE[m.kind] || MARKER_STYLE.other;
+                      const dateLabel = m.end_date && m.end_date !== m.marker_date
+                        ? `${m.marker_date.slice(5)} – ${m.end_date.slice(5)}`
+                        : m.marker_date.slice(5);
+                      const daysAway = Math.ceil((new Date(m.marker_date+"T00:00:00") - new Date(todayStr()+"T00:00:00")) / 86400000);
+                      return (
+                        <div key={m.id} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                          <span style={{ width:8, height:8, borderRadius:999, background:ms.dot, flexShrink:0 }}/>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:13, color:C.ink, fontWeight:600 }}>
+                              {m.label || ms.label}
+                              {m.is_a_race && <span style={{ fontSize:10, color:C.accent, marginLeft:6, letterSpacing:"0.1em" }}>· A-RACE</span>}
+                            </div>
+                            <div className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.1em" }}>
+                              {dateLabel}{daysAway >= 0 ? ` · ${daysAway === 0 ? "today" : `${daysAway} day${daysAway === 1 ? "" : "s"} away`}` : ""}
+                            </div>
+                          </div>
+                          <button type="button" onClick={async () => {
+                            if (!confirm(`Remove "${m.label || ms.label}"?`)) return;
+                            const ok = await deleteMarker(m.id);
+                            if (ok) loadMarkers(user.email);
+                          }} style={{ background:"transparent", color:C.mute, border:"none", padding:"4px 8px", fontSize:11, cursor:"pointer" }}>×</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Performance chart — fitness/fatigue/form over 90 days */}
+          {(() => {
+            const dailyRtss = dailyRtssFromActivities(myActs, profile);
+            const t = new Date();
+            const from = new Date(t); from.setDate(t.getDate() - 89);
+            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+            return (
+              <div style={{ ...S.card, marginTop:18 }}>
+                <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
+                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(t)} height={200}/>
+              </div>
+            );
+          })()}
+
           <button onClick={() => setScreen("home")} style={{ ...S.ghostBtn, marginTop:18 }}>← Back to week</button>
         </div>
         <MobileTabBar
-          current="home"
+          current="calendar"
           isDesktop={isDesktop}
           onTab={(s) => setScreen(s)}
           onTapLog={handleTapLog}
