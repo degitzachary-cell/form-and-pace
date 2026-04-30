@@ -113,7 +113,9 @@ function DraggableSession({ session, log, linkedAct, isMissed, onClick }) {
             : showMissed ? <div style={{ fontSize: 9, color: C.crimson, flexShrink: 0, letterSpacing: 1, fontWeight: 700 }}>MISSED</div>
             : null}
         </div>
-        <div style={{ fontSize: 11, color: ts.accent, marginTop: 2, fontFamily: "monospace" }}>{session.pace}</div>
+        <div style={{ fontSize: 11, color: ts.accent, marginTop: 2, fontFamily: "monospace" }}>
+          {[session.duration_min && `${session.duration_min}min`, session.pace].filter(Boolean).join(' · ')}
+        </div>
         {log?.analysis?.actual_date && session.day && (
           <div style={{ fontSize: 9, color: C.crimson, marginTop: 3, letterSpacing: 1, fontWeight: 600 }}>
             ↪ MOVED FROM {session.day.slice(0, 3).toUpperCase()}
@@ -1887,7 +1889,7 @@ export default function App() {
                                             {comply==="completed"?"✓":comply==="missed"?"✗":comply==="partial"?"~":""}
                                           </div>
                                         </div>
-                                        {s.pace && <div style={{ fontSize:10, color:cts.accent, fontFamily:"monospace" }}>{s.pace}</div>}
+                                        {(s.pace || s.duration_min) && <div style={{ fontSize:10, color:cts.accent, fontFamily:"monospace" }}>{[s.duration_min && `${s.duration_min}min`, s.pace].filter(Boolean).join(' · ')}</div>}
                                         {log?.analysis?.distance_km && <div style={{ fontSize:10, color:C.mid }}>{log.analysis.distance_km}km{log.analysis.duration_min ? ` · ${log.analysis.duration_min}min` : ""}</div>}
                                       </div>
                                     </div>
@@ -2902,15 +2904,16 @@ export default function App() {
               </div>
             )}
 
-            {/* Terrain + target pace + target RPE footer */}
+            {/* Terrain + duration + target pace + target RPE footer */}
             {(() => {
               const targetRpe = activeSession.rpe_target || defaultRpeTarget(activeSession.type);
               const paceShown = dominantPace(activeSession);
-              const anyFooter = activeSession.terrain || paceShown || targetRpe;
+              const anyFooter = activeSession.terrain || activeSession.duration_min || paceShown || targetRpe;
               if (!anyFooter) return null;
               return (
                 <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}`, flexWrap:"wrap" }}>
                   {activeSession.terrain && <MiniStat label="Terrain" val={activeSession.terrain}/>}
+                  {activeSession.duration_min && <MiniStat label="Duration" val={`${activeSession.duration_min} min`}/>}
                   {paceShown && <MiniStat label="Target Pace" val={paceShown} color={C.crimson}/>}
                   {targetRpe && <MiniStat label="Target RPE" val={`${targetRpe}/10`}/>}
                 </div>
@@ -3115,7 +3118,7 @@ export default function App() {
               dayLabel: activeSession.day?.slice(0, 3),
               sessionId: activeSession.id,
               athleteEmail: activeSession.athleteEmail || dashAthlete,
-              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain, rpe_target: activeSession.rpe_target || "", steps: activeSession.steps || [] },
+              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain, rpe_target: activeSession.rpe_target || "", steps: activeSession.steps || [], duration_min: activeSession.duration_min || "" },
             });
             setCoachScreen("edit-workout");
           }} style={{ ...S.ghostBtn, marginTop:16 }}>Edit prescribed workout</button>
@@ -3380,13 +3383,15 @@ export default function App() {
     const TYPES = ["EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX", "RACE DAY", "REST"];
     const tagFor = (t) => t === "SPEED" ? "speed" : t === "TEMPO" ? "tempo" : "easy";
     // A valid workout needs a type plus at least ONE of: coach notes,
-    // structured steps, or a pace target. Coaches building structured
-    // workouts shouldn't be forced to also write a paragraph.
+    // structured steps, a pace target, or a duration.
     const canSave = !!(f.type || "EASY") && (
       ((f.desc || "").trim().length > 0) ||
       (Array.isArray(f.steps) && f.steps.length > 0) ||
-      ((f.pace || "").trim().length > 0)
+      ((f.pace || "").trim().length > 0) ||
+      !!(f.duration_min)
     );
+    // Aerobic types that need duration + base pace rather than structured steps.
+    const isAerobicType = ["EASY", "RECOVERY", "LONG RUN"].includes(f.type || "EASY");
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -3449,19 +3454,39 @@ export default function App() {
               })}
             </div>
           </div>
-          {/* Hide top-level Target Pace only when a pace-prescriptive
-              section is present (interval / steady / recovery — sections
-              that carry their own pace). Auxiliary sections (warm-up,
-              cool-down, strides) attach to a generic run, so the easy-run
-              pace at the top level still applies. */}
+          {/* Duration — shown for aerobic types (easy / recovery / long run).
+              Coaches set the total run time; quality sections are added below. */}
+          {isAerobicType && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Duration</div>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <input type="number" min="1" max="480" value={f.duration_min || ""}
+                  onChange={e => setField("duration_min", e.target.value ? Number(e.target.value) : "")}
+                  placeholder="mins"
+                  style={{ ...S.input, width:90, textAlign:"center", fontFamily:S.monoFont }}/>
+                <span style={{ fontSize:13, color:C.mute, fontFamily:S.monoFont }}>min</span>
+              </div>
+              {(f.type === "LONG RUN") && (
+                <div style={{ fontSize:11, color:C.mid, marginTop:6, fontStyle:"italic", fontFamily:S.displayFont }}>
+                  Set the total easy time, then add a quality section below (e.g. tempo finish).
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Target pace — always shown for aerobic types (pace applies to the main body
+              even when quality sections are added). Hidden for structured workouts that
+              define their own pace inside each step. */}
           {(() => {
-            const hasPaceSection = Array.isArray(f.steps) && f.steps.some(s =>
+            const hasPaceSection = !isAerobicType && Array.isArray(f.steps) && f.steps.some(s =>
               s.kind === "interval" || s.kind === "steady" || s.kind === "recovery"
             );
             if (hasPaceSection) return null;
             return (
               <div style={{ marginBottom:14 }}>
-                <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Target pace</div>
+                <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>
+                  {isAerobicType ? "Easy pace" : "Target pace"}
+                </div>
                 <PaceRangeInput value={f.pace || ""} onChange={(v) => setField("pace", v)}/>
                 <div style={{ fontSize:11, color:C.mid, marginTop:6, fontStyle:"italic", fontFamily:S.displayFont }}>
                   Optional. Leave the second value blank for a single pace.
@@ -3521,6 +3546,7 @@ export default function App() {
               pace: (f.pace || "").trim(),
               terrain: (f.terrain || "").trim(),
               rpe_target: (f.rpe_target || "").toString().trim() || null,
+              duration_min: f.duration_min ? Number(f.duration_min) : null,
               ...(Array.isArray(f.steps) && f.steps.length > 0 ? { steps: f.steps } : {}),
             };
             try {
@@ -3876,7 +3902,7 @@ export default function App() {
                       <div style={{ fontSize:22, fontWeight:900, color:C.navy, fontFamily:S.displayFont, lineHeight:1.15, marginBottom:6 }}>
                         {todaysSession.s.type}
                       </div>
-                      {todaysSession.s.pace && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{todaysSession.s.pace}</div>}
+                      {(todaysSession.s.pace || todaysSession.s.duration_min) && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{[todaysSession.s.duration_min && `${todaysSession.s.duration_min}min`, todaysSession.s.pace].filter(Boolean).join(' · ')}</div>}
                       {(todaysSession.s.desc || todaysSession.s.description) && (
                         <div style={{ fontSize:13, color:C.mid, marginTop:8, lineHeight:1.5, whiteSpace:"pre-wrap" }}>
                           {todaysSession.s.desc || todaysSession.s.description}
@@ -3975,7 +4001,7 @@ export default function App() {
                         {s && !isRest ? (
                           <div style={{ marginTop:4 }}>
                             <div style={{ fontWeight:700, fontSize:13, color:C.navy }}>{s.type}</div>
-                            {s.pace && <div style={{ fontSize:11, color:ts.accent, fontFamily:"monospace" }}>{s.pace}</div>}
+                            {(s.pace || s.duration_min) && <div style={{ fontSize:11, color:ts.accent, fontFamily:"monospace" }}>{[s.duration_min && `${s.duration_min}min`, s.pace].filter(Boolean).join(' · ')}</div>}
                             {(actHere?.distance_km || sessHere?.log?.analysis?.distance_km) && (
                               <div style={{ fontSize:11, color:C.mid }}>{actHere?.distance_km || sessHere?.log?.analysis?.distance_km}km</div>
                             )}
@@ -5094,9 +5120,10 @@ export default function App() {
           {activeSession.desc && activeSession.desc.split("\n").filter(l => !/^\w{3} \w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2}/.test(l.trim())).map((l,i)=>(
             <div key={i} style={{ fontSize:14, color:i===0?C.navy:C.mid, lineHeight:1.9 }}>{l}</div>
           ))}
-          <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
-            <MiniStat label="Terrain" val={activeSession.terrain}/>
-            <MiniStat label="Target Pace" val={activeSession.pace} color={C.accent}/>
+          <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}`, flexWrap:"wrap" }}>
+            {activeSession.terrain && <MiniStat label="Terrain" val={activeSession.terrain}/>}
+            {activeSession.duration_min && <MiniStat label="Duration" val={`${activeSession.duration_min} min`}/>}
+            {activeSession.pace && <MiniStat label="Target Pace" val={activeSession.pace} color={C.accent}/>}
           </div>
         </SectionCard>
 
