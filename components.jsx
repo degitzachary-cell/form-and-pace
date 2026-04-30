@@ -524,9 +524,15 @@ export function ThreadPanel({ thread = [], viewerRole = "athlete", onSend }) {
 //
 // `dailyRtss` is an array of { date: 'YYYY-MM-DD', rtss }. The chart
 // densifies to daily, computes PMC, and renders.
-export function PMCChart({ dailyRtss, fromDate, toDate, height = 200 }) {
+// Display window defaults to the last 90 days, but the chart computes PMC
+// over whatever range is supplied via fromDate/toDate. To get an accurate CTL
+// you want at least 4–6 months of data feeding in (CTL has a 42-day time
+// constant and needs ~3× to warm up). Pass a fromDate that's 6 months before
+// the visible window and the chart slices it for display automatically.
+export function PMCChart({ dailyRtss, fromDate, toDate, displayDays = 90, height = 200 }) {
   const dense = densifyDailyRtss(dailyRtss || [], fromDate, toDate);
-  const pmc = computePMC(dense);
+  const pmcAll = computePMC(dense);
+  const pmc = pmcAll.length > displayDays ? pmcAll.slice(-displayDays) : pmcAll;
   if (pmc.length < 2) {
     return (
       <div style={{ padding: 24, textAlign: "center", color: "var(--c-mute)", fontFamily: "var(--f-display)", fontStyle: "italic", fontSize: 14 }}>

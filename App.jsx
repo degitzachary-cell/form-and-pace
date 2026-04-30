@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useWindowWidth, useRealtimeSync, useAthleteStats } from "./lib/hooks.js";
 import CoachPlanBuilder from "./CoachPlanBuilder";
-import { supabase, exchangeStravaCode } from "./lib/supabase.js";
+import { supabase, exchangeStravaCode, syncAthleteStrava } from "./lib/supabase.js";
 import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail } from "./lib/strava.js";
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr, getWeekBounds,
@@ -393,6 +393,7 @@ export default function App() {
   const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
   const [templateSearch, setTemplateSearch] = useState("");
+  const [stravaBackfillState, setStravaBackfillState] = useState(null); // { running, done, total, msg }
   const [templateTypeFilter, setTemplateTypeFilter] = useState("all");
 
   // Coach daily notes: { weekStart, dayLabel, text } while editing inline.
@@ -1649,6 +1650,49 @@ export default function App() {
           </button>
         </div>
 
+        {/* Strava back-fill — pulls every athlete's last 365 days from Strava
+            into the activities table so PMC reflects all training. */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:18, padding:"10px 12px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2 }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:11, letterSpacing:1.5, color:C.mid, fontWeight:700 }}>STRAVA BACK-FILL</div>
+            <div style={{ fontSize:11, color:C.mute, fontStyle:"italic", marginTop:2 }}>
+              {stravaBackfillState?.running
+                ? `Syncing ${stravaBackfillState.done}/${stravaBackfillState.total}…`
+                : stravaBackfillState?.msg || "Pull last 365 days for all athletes — only needed once."}
+            </div>
+          </div>
+          <button
+            disabled={stravaBackfillState?.running}
+            onClick={async () => {
+              const all = Object.keys(athletePrograms);
+              if (!all.length) return;
+              setStravaBackfillState({ running: true, done: 0, total: all.length });
+              let totalNew = 0, errs = 0;
+              for (let i = 0; i < all.length; i++) {
+                const email = all[i];
+                try {
+                  const r = await syncAthleteStrava(email, 365);
+                  if (r?.error) { errs++; }
+                  else if (typeof r?.inserted === "number") totalNew += r.inserted;
+                } catch (e) { errs++; }
+                setStravaBackfillState(prev => ({ ...prev, done: i + 1 }));
+              }
+              setStravaBackfillState({ running: false, msg: `Done · ${totalNew} new run${totalNew === 1 ? "" : "s"} synced${errs ? ` · ${errs} not connected` : ""}` });
+              // Reload activities so the dashboard reflects the new data.
+              const { data } = await supabase.from("activities").select("*");
+              if (data) setActivities(data);
+            }}
+            style={{
+              flexShrink:0, background:C.bgDeep, color:C.paper,
+              border:`1px solid ${C.ink}`, borderRadius:2,
+              padding:"8px 14px", fontSize:11, letterSpacing:1.5, fontWeight:700,
+              cursor: stravaBackfillState?.running ? "not-allowed" : "pointer",
+              opacity: stravaBackfillState?.running ? 0.6 : 1,
+            }}>
+            {stravaBackfillState?.running ? "SYNCING…" : "SYNC ALL"}
+          </button>
+        </div>
+
         {/* Filter chips */}
         <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
           {[
@@ -2663,17 +2707,18 @@ export default function App() {
             })}
           </div>
 
-          {/* Performance Management Chart — 90-day fitness/fatigue/form */}
+          {/* Performance Management Chart — last 90 days visible, computed
+              over the last 180 so CTL is fully warmed up. */}
           {coachAthleteTab === "plan" && (() => {
             const daActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
             const dailyRtss = dailyRtssFromActivities(daActs, da);
             const today = new Date();
-            const from = new Date(today); from.setDate(today.getDate() - 89);
+            const from = new Date(today); from.setDate(today.getDate() - 180);
             const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
             return (
               <div style={{ ...S.card, marginBottom:20 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
-                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(today)} height={220}/>
+                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(today)} height={220} displayDays={90}/>
               </div>
             );
           })()}
@@ -5433,18 +5478,19 @@ export default function App() {
             );
           })()}
 
-          {/* Performance chart — fitness/fatigue/form over 90 days */}
+          {/* Performance chart — fitness/fatigue/form. 90 days visible,
+              computed over the last 180 so CTL is fully warmed up. */}
           {(() => {
             const dailyRtss = stravaConnected && stravaActivities.length
               ? dailyRtssFromStravaList(stravaActivities, profile)
               : dailyRtssFromActivities(myActs, profile);
             const t = new Date();
-            const from = new Date(t); from.setDate(t.getDate() - 89);
+            const from = new Date(t); from.setDate(t.getDate() - 180);
             const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
             return (
               <div style={{ ...S.card, marginTop:18 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
-                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(t)} height={200}/>
+                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(t)} height={200} displayDays={90}/>
               </div>
             );
           })()}
