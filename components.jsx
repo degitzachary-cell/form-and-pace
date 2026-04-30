@@ -7,6 +7,84 @@ import {
   paceStrToSecsPerKm, computePMC, densifyDailyRtss,
 } from "./lib/load.js";
 
+// ─── PACE INPUTS ─────────────────────────────────────────────────────────────
+// Masked text input for paces. Accepts digits only and auto-formats as
+// "M:SS" — typing "435" reads back as "4:35", "1234" as "12:34". The colon
+// inserts itself when the user types the third digit. Backspace removes the
+// last digit; the colon is virtual so it never gets stuck.
+//
+// `value` is the canonical "M:SS" string (or "" when empty). Used inside
+// PaceRangeInput below and exported for reuse anywhere a single pace is
+// captured.
+export function PaceInput({ value, onChange, placeholder = "0:00", style, ariaLabel, autoFocus }) {
+  const handleChange = (raw) => {
+    const digits = String(raw || "").replace(/[^\d]/g, "").slice(0, 4);
+    if (digits.length === 0)      onChange("");
+    else if (digits.length === 1) onChange(digits);
+    else if (digits.length === 2) onChange(digits[0] + ":" + digits[1]);
+    else if (digits.length === 3) onChange(digits[0] + ":" + digits.slice(1));
+    else                          onChange(digits.slice(0, 2) + ":" + digits.slice(2));
+  };
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      autoFocus={autoFocus}
+      aria-label={ariaLabel}
+      value={value || ""}
+      onChange={(e) => handleChange(e.target.value)}
+      placeholder={placeholder}
+      style={{
+        width: 60,
+        background: "var(--c-paper)",
+        border: "1px solid var(--c-rule)",
+        borderRadius: 2,
+        padding: "6px 8px",
+        fontFamily: "var(--f-mono)",
+        fontSize: 13,
+        color: "var(--c-ink)",
+        textAlign: "center",
+        fontVariantNumeric: "tabular-nums",
+        outline: "none",
+        ...style,
+      }}
+    />
+  );
+}
+
+// Range pace picker — two PaceInputs joined by "–". Stores the value as a
+// single string in one of three shapes so existing code that reads
+// `session.pace` keeps working without a schema change:
+//   ""             empty
+//   "4:35"         single pace
+//   "4:32–4:38"    range (en-dash, no spaces)
+// Either side is optional; if only one is filled, we save just that one.
+export function PaceRangeInput({ value, onChange, label }) {
+  const parsed = (() => {
+    const v = String(value || "").trim();
+    if (!v) return ["", ""];
+    const m = v.match(/^([0-9]{1,2}:[0-9]{2})\s*[–-]\s*([0-9]{1,2}:[0-9]{2})$/);
+    if (m) return [m[1], m[2]];
+    return [v, ""];
+  })();
+  const join = (lo, hi) => {
+    if (!lo && !hi) return "";
+    if (!hi) return lo;
+    if (!lo) return hi;
+    return `${lo}–${hi}`;
+  };
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      {label && <span className="t-eyebrow" style={{ color: "var(--c-mute)", marginRight: 2 }}>{label}</span>}
+      <PaceInput value={parsed[0]} onChange={(lo) => onChange(join(lo, parsed[1]))} placeholder="0:00" ariaLabel="Pace low" />
+      <span className="t-mono" style={{ fontSize: 12, color: "var(--c-mute)" }}>–</span>
+      <PaceInput value={parsed[1]} onChange={(hi) => onChange(join(parsed[0], hi))} placeholder="0:00" ariaLabel="Pace high" />
+      <span className="t-mono" style={{ fontSize: 11, color: "var(--c-mute)", letterSpacing: "0.06em" }}>/km</span>
+    </div>
+  );
+}
+
 // ─── TRAINING-LOAD PILLS ─────────────────────────────────────────────────────
 
 // Renders a small "rTSS 64" pill colored by load band. Pure presentational —
