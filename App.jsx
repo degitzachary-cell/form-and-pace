@@ -55,31 +55,48 @@ function TimeSelect({ value, onChange, withHours }) {
 // ─── ATHLETE WEEK GRID ────────────────────────────────────────────────────────
 
 function DraggableSession({ session, log, linkedAct, isMissed, onClick }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable({
     id: `session:${session.id}`,
   });
   const ts = typeStyle(session.type);
   const isLogged = !!log || !!linkedAct;
   const showMissed = isMissed && !isLogged;
-  const style = {
-    background: isLogged ? ts.bg : showMissed ? "#fdf0f0" : C.white,
-    borderTop: `1px solid ${isLogged ? ts.border : showMissed ? "#e6b8b8" : C.rule}`,
-    borderRight: `1px solid ${isLogged ? ts.border : showMissed ? "#e6b8b8" : C.rule}`,
-    borderBottom: `1px solid ${isLogged ? ts.border : showMissed ? "#e6b8b8" : C.rule}`,
-    borderLeft: `4px solid ${ts.accent}`,
-    borderRadius: 2,
-    padding: "10px 12px",
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    cursor: "grab",
-    touchAction: "none",
-    opacity: isDragging ? 0.4 : 1,
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    transition: isDragging ? "none" : "transform 120ms ease",
-  };
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes} onClick={onClick}>
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      onClick={onClick}
+      style={{
+        background: isLogged ? ts.bg : showMissed ? "#fdf0f0" : C.white,
+        borderTop: `1px solid ${isLogged ? ts.border : showMissed ? "#e6b8b8" : C.rule}`,
+        borderRight: `1px solid ${isLogged ? ts.border : showMissed ? "#e6b8b8" : C.rule}`,
+        borderBottom: `1px solid ${isLogged ? ts.border : showMissed ? "#e6b8b8" : C.rule}`,
+        borderLeft: `4px solid ${ts.accent}`,
+        borderRadius: 2,
+        padding: "10px 12px",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        opacity: isDragging ? 0.4 : 1,
+        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+        transition: isDragging ? "none" : "transform 120ms ease",
+      }}>
+      {/* drag handle — only this element activates drag so the rest of the card scrolls freely */}
+      <div
+        ref={setActivatorNodeRef}
+        {...listeners}
+        onClick={e => e.stopPropagation()}
+        style={{
+          display: "flex", flexDirection: "column", gap: 3,
+          padding: "4px 2px", cursor: "grab", touchAction: "none", flexShrink: 0, opacity: 0.35,
+        }}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{ display: "flex", gap: 3 }}>
+            <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.ink }} />
+            <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.ink }} />
+          </div>
+        ))}
+      </div>
       <div style={{
         width: 32, height: 32, borderRadius: "50%",
         background: ts.pattern || ts.bg,
@@ -154,21 +171,35 @@ function CoachDroppableDay({ dateStr, children }) {
 }
 
 function CoachDraggableSession({ session, children }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable({
     id: `session:${session.id}`,
   });
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
       {...attributes}
       style={{
-        cursor: "grab",
-        touchAction: "none",
         opacity: isDragging ? 0.4 : 1,
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
         transition: isDragging ? "none" : "transform 120ms ease",
+        position: "relative",
       }}>
+      {/* drag handle — grip dots in top-right corner; only this triggers drag */}
+      <div
+        ref={setActivatorNodeRef}
+        {...listeners}
+        style={{
+          position: "absolute", top: 8, right: 8,
+          display: "flex", flexDirection: "column", gap: 3,
+          padding: "4px", cursor: "grab", touchAction: "none", zIndex: 2, opacity: 0.3,
+        }}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{ display: "flex", gap: 3 }}>
+            <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.paper }} />
+            <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.paper }} />
+          </div>
+        ))}
+      </div>
       {children}
     </div>
   );
@@ -915,14 +946,12 @@ export default function App() {
 
   // Drag sensors: small distance threshold so taps still register as clicks.
   const dndSensors = useSensors(
-    // Desktop: small move threshold so a click on a session card still opens
-    // the detail; only a deliberate drag (>= 8px) starts the drag overlay.
+    // Desktop: small move threshold so clicking a card still opens detail.
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    // Touch: require a 500ms hold before dragging activates. Below that
-    // delay, finger moves are treated as scrolls. Tolerance lets the user's
-    // finger drift up to 10px during the press without cancelling — phones
-    // wobble — while still cancelling the press if they actually scroll.
-    useSensor(TouchSensor, { activationConstraint: { delay: 500, tolerance: 10 } }),
+    // Touch: drag is initiated only via the grip handle (setActivatorNodeRef),
+    // so the delay here is a safety net — keep it short now that most of the
+    // card surface is scroll-safe. Tolerance 5px cancels on any real scroll.
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
   );
 
   // Persist a session's actual_date when dragged to a new day in the same week.
