@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
@@ -2618,13 +2618,20 @@ export default function App() {
               </div>
             )}
 
-            {/* Terrain + target pace footer */}
-            {(activeSession.terrain || activeSession.pace) && (
-              <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}` }}>
-                {activeSession.terrain && <MiniStat label="Terrain" val={activeSession.terrain}/>}
-                {activeSession.pace && <MiniStat label="Target Pace" val={activeSession.pace} color={C.crimson}/>}
-              </div>
-            )}
+            {/* Terrain + target pace + target RPE footer */}
+            {(() => {
+              const targetRpe = activeSession.rpe_target || defaultRpeTarget(activeSession.type);
+              const paceShown = dominantPace(activeSession);
+              const anyFooter = activeSession.terrain || paceShown || targetRpe;
+              if (!anyFooter) return null;
+              return (
+                <div style={{ display:"flex", gap:20, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.lightRule}`, flexWrap:"wrap" }}>
+                  {activeSession.terrain && <MiniStat label="Terrain" val={activeSession.terrain}/>}
+                  {paceShown && <MiniStat label="Target Pace" val={paceShown} color={C.crimson}/>}
+                  {targetRpe && <MiniStat label="Target RPE" val={`${targetRpe}/10`}/>}
+                </div>
+              );
+            })()}
           </SectionCard>
 
           {!sessionLogged ? (
@@ -2824,7 +2831,7 @@ export default function App() {
               dayLabel: activeSession.day?.slice(0, 3),
               sessionId: activeSession.id,
               athleteEmail: activeSession.athleteEmail || dashAthlete,
-              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain, steps: activeSession.steps || [] },
+              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain, rpe_target: activeSession.rpe_target || "", steps: activeSession.steps || [] },
             });
             setCoachScreen("edit-workout");
           }} style={{ ...S.ghostBtn, marginTop:16 }}>Edit prescribed workout</button>
@@ -3020,13 +3027,43 @@ export default function App() {
               })}
             </div>
           </div>
+          {/* Hide top-level Target Pace once sections exist — each section
+              carries its own pace, so a global pace would be redundant or
+              contradictory. Only shown for unstructured runs (Easy / Long
+              Run / Race Day with no sections). */}
+          {(!Array.isArray(f.steps) || f.steps.length === 0) && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Target pace</div>
+              <PaceRangeInput value={f.pace || ""} onChange={(v) => setField("pace", v)}/>
+              <div style={{ fontSize:11, color:C.mid, marginTop:6, fontStyle:"italic", fontFamily:S.displayFont }}>
+                Optional. Leave the second value blank for a single pace.
+              </div>
+            </div>
+          )}
+
+          {/* Target RPE — auto-defaulted by workout type, coach can override.
+              Stored as a "lo-hi" string (e.g. "6-7") or single number. */}
           <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Target pace</div>
-            <PaceRangeInput value={f.pace || ""} onChange={(v) => setField("pace", v)}/>
+            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase" }}>Target RPE</div>
+              {f.rpe_target == null && (
+                <span className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.06em" }}>
+                  default · {defaultRpeTarget(f.type || "EASY")}
+                </span>
+              )}
+            </div>
+            <input
+              type="text"
+              value={f.rpe_target ?? ""}
+              onChange={e => setField("rpe_target", e.target.value)}
+              placeholder={defaultRpeTarget(f.type || "EASY") || "—"}
+              style={{ ...S.input, width: 140, fontFamily: S.monoFont, textAlign: "center" }}
+            />
             <div style={{ fontSize:11, color:C.mid, marginTop:6, fontStyle:"italic", fontFamily:S.displayFont }}>
-              Optional. Leave the second value blank for a single pace.
+              1–10 Borg scale. Leave blank to use the type default.
             </div>
           </div>
+
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Terrain</div>
             <input type="text" value={f.terrain || ""} onChange={e => setField("terrain", e.target.value)} placeholder="e.g. FLAT/ROAD" style={S.input}/>
@@ -3054,6 +3091,7 @@ export default function App() {
               desc: (f.desc || "").trim(),
               pace: (f.pace || "").trim(),
               terrain: (f.terrain || "").trim(),
+              rpe_target: (f.rpe_target || "").toString().trim() || null,
               ...(Array.isArray(f.steps) && f.steps.length > 0 ? { steps: f.steps } : {}),
             };
             try {
@@ -3514,7 +3552,10 @@ export default function App() {
                     </div>
                     <h1 className="t-display" style={{ fontSize:52, lineHeight:0.95, margin:"4px 0 0", fontWeight:400, letterSpacing:"-0.02em" }}>
                       {s.type}
-                      {s.pace && <><br/><span className="t-display-italic" style={{ color:"var(--c-mute)" }}>at {s.pace}</span></>}
+                      {(() => {
+                        const p = dominantPace(s);
+                        return p ? <><br/><span className="t-display-italic" style={{ color:"var(--c-mute)" }}>at {p}</span></> : null;
+                      })()}
                     </h1>
 
                     {/* Sections timeline — when the coach built structured
@@ -3577,11 +3618,15 @@ export default function App() {
             const agg = isStructured(ps) ? aggregateSteps(ps.steps) : { distance_km: 0, duration_min: 0 };
             const volKm = ps.distance_km || ps.distance || (agg.distance_km > 0 ? agg.distance_km : null);
             const timeMin = ps.duration_min || (agg.duration_min > 0 ? agg.duration_min : null);
+            // Prefer the work-block pace from steps when sections exist;
+            // fall back to the top-level prescribed pace.
+            const paceShown = dominantPace(ps);
+            const rpeShown = ps.rpe_target || ps.rpe || defaultRpeTarget(ps.type);
             return (
               <div className="fp-pace-strip">
                 <div>
                   <Eyebrow style={{ marginBottom:6 }}>Pace</Eyebrow>
-                  <Num size={17}>{ps.pace || "—"}</Num>
+                  <Num size={17}>{paceShown || "—"}</Num>
                 </div>
                 <div>
                   <Eyebrow style={{ marginBottom:6 }}>Volume</Eyebrow>
@@ -3595,8 +3640,8 @@ export default function App() {
                 </div>
                 <div>
                   <Eyebrow style={{ marginBottom:6 }}>RPE</Eyebrow>
-                  <Num size={17}>{ps.rpe || "—"}</Num>
-                  {ps.rpe && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> /10</span>}
+                  <Num size={17}>{rpeShown || "—"}</Num>
+                  {rpeShown && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> /10</span>}
                 </div>
               </div>
             );
