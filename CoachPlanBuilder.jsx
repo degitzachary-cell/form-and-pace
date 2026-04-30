@@ -464,6 +464,21 @@ export function StepsEditor({ session, onChange }) {
                     <span style={{ fontSize:10, color:C.mid }}>or</span>
                     <input style={{ ...inp, width: 50 }} type="number" placeholder="min" value={step.rest?.duration_min ?? ''} onChange={e => setNested(i, 'rest', { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
                     <span style={lbl}>min</span>
+                    {/* Rest type: standing rest, jog, or float */}
+                    <div style={{ display: 'inline-flex', borderRadius: 2, border: `1px solid ${C.rule}`, overflow: 'hidden' }}>
+                      {[{ v: 'rest', label: 'Rest' }, { v: 'jog', label: 'Jog' }, { v: 'float', label: 'Float' }].map((opt, idx) => {
+                        const active = (step.rest?.style || 'rest') === opt.v;
+                        return (
+                          <button key={opt.v} type="button" onClick={() => setNested(i, 'rest', { style: opt.v })}
+                            style={{
+                              background: active ? C.ink : 'transparent', color: active ? C.paper : C.mute,
+                              border: 0, padding: '4px 10px',
+                              fontFamily: S.bodyFont, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+                              cursor: 'pointer', borderLeft: idx === 0 ? 'none' : `1px solid ${C.rule}`,
+                            }}>{opt.label}</button>
+                        );
+                      })}
+                    </div>
                   </>
                 )}
                 <input style={{ ...inp, width: 160, marginLeft:'auto' }} placeholder="note (e.g. at MP)" value={step.note || ''} onChange={e => setStep(i, { note: e.target.value })}/>
