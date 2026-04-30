@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
@@ -207,7 +207,7 @@ function CoachDraggableSession({ session, children }) {
   );
 }
 
-function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun, markers }) {
+function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun, markers, dayNote }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr || dayLabel}` });
   const datePart = dateStr ? dateStr.slice(5).replace("-", "/") : "";
   const dayHeader = datePart ? `${dayLabel.toUpperCase()} · ${datePart}` : dayLabel.toUpperCase();
@@ -241,6 +241,11 @@ function DayRow({ dateStr, dayLabel, isToday, children, hasItems, onAddRun, mark
         fontSize: 10, letterSpacing: 2, color: isToday ? C.crimson : C.mid,
         fontWeight: isToday ? 700 : 500, marginBottom: 4, paddingLeft: 2,
       }}>{dayHeader}{isToday ? " · TODAY" : ""}</div>
+      {dayNote && (
+        <div style={{ fontSize:12, color:C.navy, fontFamily:"var(--f-display)", fontStyle:"italic", background:"rgba(181,72,42,0.05)", border:`1px solid var(--c-rule)`, borderLeft:`3px solid var(--c-accent)`, borderRadius:2, padding:"6px 8px", marginBottom:6, lineHeight:1.4 }}>
+          {dayNote}
+        </div>
+      )}
       {hasItems ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{children}</div>
       ) : (
@@ -387,6 +392,11 @@ export default function App() {
   const [coachEditLog,  setCoachEditLog]  = useState(null);  // { date, distance, duration } draft for active log edit
   const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateTypeFilter, setTemplateTypeFilter] = useState("all");
+
+  // Coach daily notes: { weekStart, dayLabel, text } while editing inline.
+  const [dayNoteEditing, setDayNoteEditing] = useState(null);
 
   const isDesktop = useWindowWidth() >= 960;
 
@@ -1672,11 +1682,12 @@ export default function App() {
             unread={totalRepliesNeeded}
             coachName={user.user_metadata?.full_name || user.email}
             onNav={(k) => {
-              if (k === "dashboard")     setCoachScreen("dashboard");
-              else if (k === "athletes") setCoachScreen("athletes");
-              else if (k === "inbox")    setCoachScreen("inbox");
-              else if (k === "plans")    setCoachScreen("plan-builder");
-              else if (k === "library")  setCoachScreen("templates");
+              if (k === "dashboard")         setCoachScreen("dashboard");
+              else if (k === "athletes")     setCoachScreen("athletes");
+              else if (k === "inbox")        setCoachScreen("inbox");
+              else if (k === "plans")        setCoachScreen("plan-builder");
+              else if (k === "library")      setCoachScreen("templates");
+              else if (k === "compliance")   setCoachScreen("compliance");
             }}
             onSignOut={signOut}
             onSettings={() => alert("Coach settings — coming soon.")}
@@ -1973,6 +1984,26 @@ export default function App() {
     await handleSavePlan(athleteEmail, nextWeeks, { name: meta.name, goal: meta.goal, current: meta.current });
   };
 
+  const saveDayNote = async (athleteEmail, weekStart, dayLabel, text) => {
+    const key = athleteEmail?.toLowerCase();
+    const meta = athletePrograms[key] || {};
+    const existingWeeks = (meta.weeks || []).map(w => ({ ...w, dayNotes: { ...(w.dayNotes || {}) } }));
+    let week = existingWeeks.find(w => w.weekStart === weekStart);
+    if (!week) {
+      const m = new Date(weekStart + "T00:00:00");
+      const sun = new Date(m); sun.setDate(m.getDate() + 6);
+      const ml = m.toLocaleString("en-AU", { month:"short" });
+      const sl = sun.toLocaleString("en-AU", { month:"short" });
+      week = { weekStart, weekLabel: ml === sl ? `Week of ${m.getDate()}–${sun.getDate()} ${ml}` : `Week of ${m.getDate()} ${ml} – ${sun.getDate()} ${sl}`, sessions: [], dayNotes: {} };
+      existingWeeks.push(week);
+      existingWeeks.sort((a,b) => a.weekStart.localeCompare(b.weekStart));
+    }
+    const next = { ...(week.dayNotes || {}) };
+    if (text.trim()) next[dayLabel] = text.trim(); else delete next[dayLabel];
+    week.dayNotes = next;
+    await handleSavePlan(athleteEmail, existingWeeks, { name: meta.name, goal: meta.goal, current: meta.current });
+  };
+
   const handleSavePlan = async (athleteEmail, weeksArray, meta = {}) => {
     const key = athleteEmail?.toLowerCase();
 
@@ -2055,11 +2086,12 @@ export default function App() {
             unread={0}
             coachName={user.user_metadata?.full_name || user.email}
             onNav={(k) => {
-              if (k === "dashboard")     setCoachScreen("dashboard");
-              else if (k === "athletes") setCoachScreen("athletes");
-              else if (k === "inbox")    setCoachScreen("inbox");
-              else if (k === "plans")    setCoachScreen("plan-builder");
-              else if (k === "library")  setCoachScreen("templates");
+              if (k === "dashboard")         setCoachScreen("dashboard");
+              else if (k === "athletes")     setCoachScreen("athletes");
+              else if (k === "inbox")        setCoachScreen("inbox");
+              else if (k === "plans")        setCoachScreen("plan-builder");
+              else if (k === "library")      setCoachScreen("templates");
+              else if (k === "compliance")   setCoachScreen("compliance");
             }}
             onSignOut={signOut}
             onSettings={() => alert("Coach settings — coming soon.")}
@@ -2284,6 +2316,16 @@ export default function App() {
   }
 
   if (role === "coach" && coachScreen === "templates") {
+    const TEMPLATE_TYPES = ["all", "EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX"];
+    const filteredTemplates = workoutTemplates.filter(t => {
+      const matchesType = templateTypeFilter === "all" || (t.type || "").toUpperCase() === templateTypeFilter;
+      const q = templateSearch.toLowerCase();
+      const matchesSearch = !q ||
+        (t.name || "").toLowerCase().includes(q) ||
+        (t.description || "").toLowerCase().includes(q) ||
+        (t.pace || "").toLowerCase().includes(q);
+      return matchesType && matchesSearch;
+    });
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -2294,23 +2336,169 @@ export default function App() {
               <div style={{ fontSize:16, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:6 }}>No templates yet.</div>
               <div style={{ fontSize:12, color:C.mid, lineHeight:1.5 }}>When editing a workout, hit "Save as template" to reuse it on any athlete's plan.</div>
             </div>
-          ) : workoutTemplates.map(t => (
-            <div key={t.id} style={{ ...S.card, marginBottom:10, padding:"14px 16px" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:10, letterSpacing:2, color:typeStyle(t.type).accent, fontWeight:700, marginBottom:4 }}>{(t.type || t.tag || "").toUpperCase()}</div>
-                  <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, marginBottom:4 }}>{t.name}</div>
-                  {t.description && <div style={{ fontSize:12, color:C.mid, lineHeight:1.5, marginBottom:4 }}>{t.description}</div>}
-                  {t.pace && <div style={{ fontSize:11, color:C.mid, fontFamily:"monospace" }}>{t.pace}{t.terrain ? ` · ${t.terrain}` : ""}</div>}
-                </div>
-                <button onClick={async () => {
-                  if (!confirm("Delete this template?")) return;
-                  const { error } = await supabase.from("workout_templates").delete().eq("id", t.id);
-                  if (!error) setWorkoutTemplates(prev => prev.filter(x => x.id !== t.id));
-                }} style={{ background:"transparent", border:0, color:C.crimson, fontSize:11, letterSpacing:1, cursor:"pointer", fontWeight:700 }}>DELETE</button>
+          ) : (
+            <>
+              {/* Search bar */}
+              <input
+                type="search" value={templateSearch} onChange={e => setTemplateSearch(e.target.value)}
+                placeholder="Search templates…"
+                style={{ ...S.input, width:"100%", marginBottom:10, boxSizing:"border-box" }}
+              />
+              {/* Type filter chips */}
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
+                {TEMPLATE_TYPES.map(tp => {
+                  const sel = templateTypeFilter === tp;
+                  const ts = tp === "all" ? null : typeStyle(tp);
+                  return (
+                    <button key={tp} type="button" onClick={() => setTemplateTypeFilter(tp)}
+                      style={{
+                        background: sel ? (ts?.accent || C.ink) : C.white,
+                        color: sel ? "#fffdf8" : ts?.accent || C.mid,
+                        border: `1px solid ${sel ? (ts?.accent || C.ink) : C.rule}`,
+                        borderRadius:2, padding:"5px 11px", fontSize:11, cursor:"pointer",
+                        fontWeight: sel ? 700 : 500, letterSpacing:"0.06em",
+                      }}>
+                      {tp === "all" ? "ALL" : tp}
+                    </button>
+                  );
+                })}
               </div>
-            </div>
-          ))}
+              {filteredTemplates.length === 0 ? (
+                <div style={{ color:C.mute, fontSize:13, fontStyle:"italic", fontFamily:S.displayFont, textAlign:"center", padding:"24px 0" }}>
+                  No templates match.
+                </div>
+              ) : filteredTemplates.map(t => (
+                <div key={t.id} style={{ ...S.card, marginBottom:10, padding:"14px 16px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:10, letterSpacing:2, color:typeStyle(t.type).accent, fontWeight:700, marginBottom:4 }}>{(t.type || t.tag || "").toUpperCase()}</div>
+                      <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, marginBottom:4 }}>{t.name}</div>
+                      {t.description && <div style={{ fontSize:12, color:C.mid, lineHeight:1.5, marginBottom:4 }}>{t.description}</div>}
+                      {(t.pace || t.duration_min) && (
+                        <div style={{ fontSize:11, color:C.mid, fontFamily:"monospace" }}>
+                          {[t.duration_min && `${t.duration_min}min`, t.pace, t.terrain].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={async () => {
+                      if (!confirm("Delete this template?")) return;
+                      const { error } = await supabase.from("workout_templates").delete().eq("id", t.id);
+                      if (!error) setWorkoutTemplates(prev => prev.filter(x => x.id !== t.id));
+                    }} style={{ background:"transparent", border:0, color:C.crimson, fontSize:11, letterSpacing:1, cursor:"pointer", fontWeight:700 }}>DELETE</button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (role === "coach" && coachScreen === "compliance") {
+    // Build per-athlete × last-6-weeks compliance matrix.
+    const NUM_WEEKS = 6;
+    const today = todayStr();
+    // Generate the last NUM_WEEKS Monday dates descending.
+    const weekStarts = (() => {
+      const d = new Date(today + "T00:00:00");
+      const dow = d.getDay(); const off = dow === 0 ? -6 : 1 - dow;
+      const arr = [];
+      for (let i = 0; i < NUM_WEEKS; i++) {
+        const m = new Date(d); m.setDate(d.getDate() + off - i * 7);
+        arr.push(`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,"0")}-${String(m.getDate()).padStart(2,"0")}`);
+      }
+      return arr; // newest first
+    })();
+
+    const athletes = Object.entries(athletePrograms)
+      .map(([email, ap]) => ({ email, name: ap.name || prettyEmailName(email), weeks: ap.weeks || [] }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    // Compute per-week compliance for one athlete.
+    const weekCompliance = (ap, email, wkStart) => {
+      const wk = ap.weeks?.find(w => w.weekStart === wkStart);
+      if (!wk) return null;
+      const actsMap = {};
+      for (const a of activitiesByEmail.get(email.toLowerCase()) || []) actsMap[a.activity_date] = a;
+      let planned = 0, done = 0;
+      const wkEnd = (() => { const d = new Date(wkStart + "T00:00:00"); d.setDate(d.getDate()+6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+      for (const s of wk.sessions) {
+        if ((s.type || "").toUpperCase() === "REST") continue;
+        const sDate = sessionDateStr(wkStart, s.day);
+        if (!sDate || sDate > today) continue;
+        planned++;
+        const log = logs[s.id];
+        const linkedAct = actsMap[log?.analysis?.actual_date || sDate];
+        const g = effectiveCompliance({ session: s, log, linkedAct, isPastDate: true, profile: athletePrograms[email.toLowerCase()] });
+        if (g === "completed" || g === "partial") done++;
+      }
+      return planned > 0 ? Math.round((done / planned) * 100) : null;
+    };
+
+    const cellBg = (pct) => pct == null ? C.white : pct >= 80 ? "#e8f5e9" : pct >= 50 ? "#fff8e1" : "#fdecea";
+    const cellColor = (pct) => pct == null ? C.mute : pct >= 80 ? "#2e7d32" : pct >= 50 ? "#e65100" : C.crimson;
+
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title="Compliance Report" subtitle={`Last ${NUM_WEEKS} weeks`} onBack={() => setCoachScreen("dashboard")}/>
+        <div style={{ maxWidth: isDesktop ? 960 : 520, margin:"0 auto", padding:"24px 16px 80px", overflowX:"auto" }}>
+          {athletes.length === 0 ? (
+            <div style={{ color:C.mute, fontSize:14, fontStyle:"italic", textAlign:"center", padding:"48px 0" }}>No athletes on roster.</div>
+          ) : (
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign:"left", padding:"8px 10px", borderBottom:`2px solid ${C.rule}`, fontSize:10, letterSpacing:2, color:C.mid, fontWeight:700, minWidth:140 }}>ATHLETE</th>
+                  {weekStarts.map(ws => {
+                    const d = new Date(ws + "T00:00:00");
+                    const label = d.toLocaleDateString(undefined, { month:"short", day:"numeric" });
+                    return (
+                      <th key={ws} style={{ textAlign:"center", padding:"8px 6px", borderBottom:`2px solid ${C.rule}`, fontSize:10, letterSpacing:1.5, color:C.mid, fontWeight:700, minWidth:64 }}>{label}</th>
+                    );
+                  })}
+                  <th style={{ textAlign:"center", padding:"8px 6px", borderBottom:`2px solid ${C.rule}`, fontSize:10, letterSpacing:1.5, color:C.mid, fontWeight:700, minWidth:64 }}>AVG</th>
+                </tr>
+              </thead>
+              <tbody>
+                {athletes.map(({ email, name, weeks: _ }) => {
+                  const ap = athletePrograms[email.toLowerCase()] || {};
+                  const pcts = weekStarts.map(ws => weekCompliance(ap, email, ws));
+                  const valid = pcts.filter(p => p != null);
+                  const avg = valid.length > 0 ? Math.round(valid.reduce((a,b) => a+b, 0) / valid.length) : null;
+                  return (
+                    <tr key={email}
+                      onClick={() => { setDashAthlete(email.toLowerCase()); setCoachAthleteTab("plan"); setCoachScreen("athlete"); }}
+                      onMouseEnter={e => e.currentTarget.style.background = C.bg}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                      style={{ borderBottom:`1px solid ${C.rule}`, cursor:"pointer" }}>
+                      <td style={{ padding:"10px 10px", fontFamily:S.displayFont, fontWeight:600, color:C.navy, fontSize:13 }}>{name}</td>
+                      {pcts.map((pct, i) => (
+                        <td key={i} style={{ textAlign:"center", padding:"10px 6px", background: cellBg(pct) }}>
+                          {pct != null ? (
+                            <span style={{ fontFamily:S.monoFont, fontSize:12, fontWeight:700, color: cellColor(pct) }}>{pct}%</span>
+                          ) : (
+                            <span style={{ color:C.rule, fontSize:14 }}>–</span>
+                          )}
+                        </td>
+                      ))}
+                      <td style={{ textAlign:"center", padding:"10px 6px", background: cellBg(avg), borderLeft:`1px solid ${C.rule}` }}>
+                        {avg != null ? (
+                          <span style={{ fontFamily:S.monoFont, fontSize:13, fontWeight:900, color: cellColor(avg) }}>{avg}%</span>
+                        ) : (
+                          <span style={{ color:C.rule, fontSize:14 }}>–</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          <div style={{ marginTop:16, fontSize:11, color:C.mute, fontStyle:"italic", fontFamily:S.displayFont }}>
+            Tap a row to open the athlete. Green ≥ 80%, amber ≥ 50%, red &lt; 50%.
+          </div>
         </div>
       </div>
     );
@@ -2766,9 +2954,50 @@ export default function App() {
                             })}
                           </div>
                         )}
-                        <div style={{ fontSize:10, letterSpacing:2, color: isToday ? C.crimson : C.mid, fontWeight: isToday ? 700 : 500, marginBottom:4, paddingLeft:2 }}>
-                          {dayLabel.toUpperCase()}{datePart ? ` · ${datePart}` : ""}{isToday ? " · TODAY" : ""}
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4, paddingLeft:2 }}>
+                          <div style={{ fontSize:10, letterSpacing:2, color: isToday ? C.crimson : C.mid, fontWeight: isToday ? 700 : 500 }}>
+                            {dayLabel.toUpperCase()}{datePart ? ` · ${datePart}` : ""}{isToday ? " · TODAY" : ""}
+                          </div>
+                          {/* Add/edit coach day note */}
+                          {dayNoteEditing?.weekStart === wk.weekStart && dayNoteEditing?.dayLabel === dayLabel ? null : (
+                            <button type="button" title="Add day note"
+                              onClick={() => setDayNoteEditing({ weekStart: wk.weekStart, dayLabel, text: wk.dayNotes?.[dayLabel] || "" })}
+                              style={{ background:"transparent", border:"none", color:wk.dayNotes?.[dayLabel] ? C.accent : C.rule, cursor:"pointer", fontSize:12, padding:"0 2px", lineHeight:1 }}>
+                              ✎
+                            </button>
+                          )}
                         </div>
+                        {/* Inline day note: editing state */}
+                        {dayNoteEditing?.weekStart === wk.weekStart && dayNoteEditing?.dayLabel === dayLabel ? (
+                          <div style={{ marginBottom:6 }}>
+                            <textarea
+                              autoFocus
+                              rows={2}
+                              value={dayNoteEditing.text}
+                              onChange={e => setDayNoteEditing(d => ({ ...d, text: e.target.value }))}
+                              placeholder="e.g. Easy walk only today — keep off the legs"
+                              style={{ ...S.input, width:"100%", boxSizing:"border-box", fontSize:12, fontFamily:S.displayFont, lineHeight:1.4, resize:"vertical" }}
+                            />
+                            <div style={{ display:"flex", gap:6, marginTop:4 }}>
+                              <button type="button" onClick={async () => {
+                                await saveDayNote(dashAthlete, wk.weekStart, dayLabel, dayNoteEditing.text);
+                                setDayNoteEditing(null);
+                              }} style={{ background:C.accent, color:"#FBF8F1", border:"none", borderRadius:2, padding:"5px 12px", fontSize:11, fontWeight:700, cursor:"pointer", letterSpacing:"0.1em" }}>SAVE</button>
+                              <button type="button" onClick={() => setDayNoteEditing(null)}
+                                style={{ background:"transparent", color:C.mute, border:`1px solid ${C.rule}`, borderRadius:2, padding:"5px 10px", fontSize:11, cursor:"pointer" }}>Cancel</button>
+                              {wk.dayNotes?.[dayLabel] && (
+                                <button type="button" onClick={async () => {
+                                  await saveDayNote(dashAthlete, wk.weekStart, dayLabel, "");
+                                  setDayNoteEditing(null);
+                                }} style={{ background:"transparent", color:C.crimson, border:"none", fontSize:11, cursor:"pointer", marginLeft:"auto" }}>Delete note</button>
+                              )}
+                            </div>
+                          </div>
+                        ) : wk.dayNotes?.[dayLabel] ? (
+                          <div style={{ fontSize:12, color:C.navy, fontFamily:S.displayFont, fontStyle:"italic", background:C.bgDeep + "0a", border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.accent}`, borderRadius:2, padding:"6px 8px", marginBottom:6, lineHeight:1.4 }}>
+                            {wk.dayNotes[dayLabel]}
+                          </div>
+                        ) : null}
                         {sessionsHere.length === 0 && extrasHere.length === 0 ? (
                           <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"12px", fontSize:11, color:C.mid, textAlign:"center", letterSpacing:1 }}>NO WORKOUT</div>
                         ) : (
@@ -3785,6 +4014,38 @@ export default function App() {
       </div>
     ) : null;
 
+    // Training overload alert: compute PMC from all athlete activities and check
+    // if ATL has exceeded CTL by a meaningful margin for 5+ of the last 7 days.
+    const OverloadAlert = (() => {
+      const dailyRtss = dailyRtssFromActivities(myActs, profile);
+      if (!dailyRtss || dailyRtss.length === 0) return null;
+      const from = new Date(t); from.setDate(t.getDate() - 90);
+      const fmtD = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      const dense = densifyDailyRtss(dailyRtss, fmtD(from), today);
+      const pmc = computePMC(dense);
+      if (pmc.length < 7) return null;
+      const last7 = pmc.slice(-7);
+      const overloadDays = last7.filter(d => d.atl > d.ctl + 10).length;
+      if (overloadDays < 5) return null;
+      const latest = pmc[pmc.length - 1];
+      const tsb = Math.round(latest.ctl - latest.atl);
+      return (
+        <div style={{
+          margin:"12px 16px 0", padding:"12px 14px",
+          background:"#fff8f0", border:`1px solid #f0c080`, borderLeft:`4px solid ${C.warn}`,
+          borderRadius:2, display:"flex", alignItems:"flex-start", gap:10,
+        }}>
+          <div style={{ fontSize:16, lineHeight:1, flexShrink:0 }}>⚠</div>
+          <div>
+            <div className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.warn, fontWeight:700, marginBottom:3 }}>TRAINING LOAD CAUTION</div>
+            <div style={{ fontSize:13, color:C.navy, fontFamily:S.displayFont, lineHeight:1.4 }}>
+              Your acute load has been above chronic for {overloadDays} of the last 7 days (TSB: {tsb}). Consider an easy day or rest.
+            </div>
+          </div>
+        </div>
+      );
+    })();
+
     // Coach replies the athlete hasn't read yet — banner + per-day dot.
     const sessionLogIdsByDate = {};
     for (const log of Object.values(logs)) {
@@ -3873,6 +4134,7 @@ export default function App() {
             </div>
           )}
           {RaceCountdown}
+          {OverloadAlert}
           {isDesktop && (
             <div style={{ display:"flex", gap:0, alignItems:"flex-start" }}>
               {/* ── DESKTOP LEFT: today hero + strava ── */}
@@ -4706,6 +4968,7 @@ export default function App() {
                           isToday={isToday}
                           hasItems={hasItems}
                           markers={dayMarkers}
+                          dayNote={w.dayNotes?.[dayLabel] || null}
                           onAddRun={dayDate ? () => {
                             setLogForm({ date: dayDate, distanceKm: "", durationMin: "", type: "Run", notes: "" });
                             setEditingActivityId(null);

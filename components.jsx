@@ -246,9 +246,10 @@ export function CoachLeftRail({ current, onNav, unread = 0, coachName = "Coach",
   const items = [
     { key: "dashboard", label: "Dashboard" },
     { key: "athletes", label: "Athletes" },
-    { key: "plans",    label: "Plans" },
-    { key: "inbox",    label: "Inbox", badge: unread > 0 ? unread : null },
-    { key: "library",  label: "Library" },
+    { key: "plans",      label: "Plans" },
+    { key: "inbox",      label: "Inbox", badge: unread > 0 ? unread : null },
+    { key: "library",    label: "Library" },
+    { key: "compliance", label: "Compliance" },
   ];
 
   return (
