@@ -2969,7 +2969,22 @@ export default function App() {
               <select onChange={(e) => {
                   const tpl = workoutTemplates.find(t => t.id === e.target.value);
                   if (!tpl) return;
-                  setEditingWorkout(prev => ({ ...prev, prefill: { ...(prev.prefill || {}), type: tpl.type || "EASY", desc: tpl.description || "", pace: tpl.pace || "", terrain: tpl.terrain || "" } }));
+                  // New IDs for the pasted steps so the editor's reorder/
+                  // delete handlers don't collide with the template row.
+                  const stepsCopy = Array.isArray(tpl.steps)
+                    ? tpl.steps.map(s => ({ ...s }))
+                    : [];
+                  setEditingWorkout(prev => ({
+                    ...prev,
+                    prefill: {
+                      ...(prev.prefill || {}),
+                      type: tpl.type || "EASY",
+                      desc: tpl.description || "",
+                      pace: tpl.pace || "",
+                      terrain: tpl.terrain || "",
+                      steps: stepsCopy,
+                    },
+                  }));
                   e.target.value = "";
                 }}
                 defaultValue=""
@@ -3063,6 +3078,7 @@ export default function App() {
               description: (f.desc || "").trim(),
               pace: (f.pace || "").trim(),
               terrain: (f.terrain || "").trim(),
+              steps: Array.isArray(f.steps) && f.steps.length > 0 ? f.steps : null,
             }).select().single();
             if (error) { alert("Save template failed: " + error.message); return; }
             if (data) setWorkoutTemplates(prev => [data, ...prev]);
