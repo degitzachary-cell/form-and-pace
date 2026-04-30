@@ -946,6 +946,16 @@ export function StravaActivityPicker({ activities, loading, selectedId, detail, 
   }
   if (detail) return <StravaCard data={detail} onClear={onClear} />;
 
+  // While fetching detail for a pre-selected ID, show a slim loading row.
+  if (detailLoading) {
+    return (
+      <div style={{ marginBottom:14, padding:"12px 14px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, display:"flex", alignItems:"center", gap:8 }}>
+        <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:C.green }}>STRAVA</span>
+        <span style={{ fontSize:13, color:C.mid, fontStyle:"italic" }}>Importing run…</span>
+      </div>
+    );
+  }
+
   return (
     <div style={{ marginBottom:14 }}>
       {!activities.length && !loading ? (
@@ -975,7 +985,6 @@ export function StravaActivityPicker({ activities, loading, selectedId, detail, 
               );
             })}
           </select>
-          {detailLoading && <div style={{ fontSize:12, color:C.green, marginTop:6, textAlign:"center" }}>Fetching detail…</div>}
         </div>
       )}
     </div>

@@ -4192,18 +4192,24 @@ export default function App() {
                     <div style={{ fontSize:14, fontWeight:700, color:C.navy, marginBottom:2 }}>{todaysStrava.name}</div>
                     <div style={{ fontSize:12, color:C.mid }}>{(todaysStrava.distance/1000).toFixed(1)}km · {Math.round(todaysStrava.moving_time/60)}min</div>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (todaysSession) {
                           const s = todaysSession.s;
                           setActiveSession({ ...s, weekStart: monStr });
-                          setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
+                          setFeedbackText("");
+                          setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
                           setSessionDateOverride(today);
                           setSelectedStravaId(todaysStrava.id);
+                          // Pre-fill from list data immediately so fields aren't blank while detail loads.
+                          setSessionDistKm((todaysStrava.distance / 1000).toFixed(2));
+                          setSessionDurMin(Math.round(todaysStrava.moving_time / 60).toString());
+                          loadStravaDetail(todaysStrava.id); // sets stravaDetail async
                           setScreen("session");
                         } else {
                           setLogForm({ date: today, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
                           setEditingActivityId(null);
                           setSelectedStravaId(todaysStrava.id);
+                          loadStravaDetail(todaysStrava.id); // sets stravaDetail async
                           setScreen("log-activity");
                         }
                       }}
@@ -4511,17 +4517,23 @@ export default function App() {
               <div className="t-mono" style={{ fontSize:12, color:"var(--c-mute)" }}>
                 {(todaysStrava.distance/1000).toFixed(1)} km · {Math.round(todaysStrava.moving_time/60)} min
               </div>
-              <button onClick={() => {
+              <button onClick={async () => {
                 if (todaysSession) {
                   setActiveSession({ ...todaysSession.s, weekStart: monStr });
-                  setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+                  setFeedbackText("");
                   setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
                   setSessionDateOverride(today);
                   setSelectedStravaId(todaysStrava.id);
+                  setSessionDistKm((todaysStrava.distance / 1000).toFixed(2));
+                  setSessionDurMin(Math.round(todaysStrava.moving_time / 60).toString());
+                  loadStravaDetail(todaysStrava.id);
                   setScreen("session");
                 } else {
                   setLogForm({ date: today, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
-                  setEditingActivityId(null); setSelectedStravaId(todaysStrava.id); setScreen("log-activity");
+                  setEditingActivityId(null);
+                  setSelectedStravaId(todaysStrava.id);
+                  loadStravaDetail(todaysStrava.id);
+                  setScreen("log-activity");
                 }
               }} className="fp-btn fp-btn--ghost" style={{ marginTop:12, padding:"10px 14px", fontSize:11 }}>
                 Import &amp; log →
