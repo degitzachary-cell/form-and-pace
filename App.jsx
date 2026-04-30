@@ -454,7 +454,10 @@ export default function App() {
           const key = p.email?.toLowerCase();
           if (!key || key === coachEmail) return;
           if (p.role === 'coach') return;
-          const existing = updated[key] || {};
+          // Only enrich athletes already on this coach's roster (coach_plans row).
+          // Without this guard, every non-coach profile gets re-added after deletion.
+          if (!updated[key]) return;
+          const existing = updated[key];
           updated[key] = {
             ...existing,
             // Profile values overwrite coach-plan placeholders only when
