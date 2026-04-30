@@ -3618,6 +3618,57 @@ export default function App() {
     const todaysStravaUnimported = todaysStrava && !myActs.some(a => a.strava_data?.id === todaysStrava.id);
     const dateNice = t.toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" });
 
+    // Goal race countdown: pull the soonest upcoming race marker. A-races
+    // (is_a_race=true) take priority over regular ones; if both lie ahead,
+    // the closer date wins. Returns null when nothing's on the horizon.
+    const myMarkers = markersByEmail[user.email?.toLowerCase()] || [];
+    const upcomingRaces = myMarkers
+      .filter(m => m.kind === "race" && m.marker_date >= today)
+      .sort((a, b) => {
+        if (a.is_a_race !== b.is_a_race) return a.is_a_race ? -1 : 1;
+        return (a.marker_date || "").localeCompare(b.marker_date || "");
+      });
+    const nextRace = upcomingRaces[0] || null;
+    const raceDaysLeft = nextRace ? (() => {
+      const r = new Date(nextRace.marker_date + "T00:00:00");
+      const ms = r.getTime() - t.getTime();
+      return Math.max(0, Math.round(ms / 86400000));
+    })() : null;
+    const raceDateStr = nextRace ? new Date(nextRace.marker_date + "T00:00:00").toLocaleDateString(undefined, { day:"numeric", month:"short" }) : null;
+
+    // Renders a slim countdown ribbon. Shared between desktop/mobile layouts.
+    const RaceCountdown = nextRace ? (
+      <div style={{
+        margin:"16px 16px 0", padding:"12px 14px",
+        background: nextRace.is_a_race ? C.bgDeep : C.white,
+        color: nextRace.is_a_race ? C.paper : C.ink,
+        border: `1px solid ${nextRace.is_a_race ? C.bgDeep : C.rule}`,
+        borderLeft: `4px solid ${C.hot}`,
+        borderRadius:2,
+        display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
+      }}>
+        <div style={{ minWidth:0 }}>
+          <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.18em", opacity:0.7, marginBottom:2 }}>
+            {nextRace.is_a_race ? "A-RACE" : "RACE DAY"}
+          </div>
+          <div style={{ fontFamily:S.displayFont, fontSize:17, fontWeight:600, lineHeight:1.15, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+            {nextRace.label || "Race day"}
+          </div>
+          <div className="t-mono" style={{ fontSize:10, letterSpacing:"0.1em", opacity:0.7, marginTop:2 }}>
+            {raceDateStr}
+          </div>
+        </div>
+        <div style={{ textAlign:"right", flexShrink:0 }}>
+          <div style={{ fontFamily:S.displayFont, fontSize:30, fontWeight:700, lineHeight:1, color:C.hot }}>
+            {raceDaysLeft}
+          </div>
+          <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.16em", opacity:0.7, marginTop:2 }}>
+            {raceDaysLeft === 1 ? "DAY" : "DAYS"}
+          </div>
+        </div>
+      </div>
+    ) : null;
+
     // Coach replies the athlete hasn't read yet — banner + per-day dot.
     const sessionLogIdsByDate = {};
     for (const log of Object.values(logs)) {
@@ -3705,6 +3756,7 @@ export default function App() {
               <div style={{ fontSize:13, opacity:0.85 }}>›</div>
             </div>
           )}
+          {RaceCountdown}
           {isDesktop && (
             <div style={{ display:"flex", gap:0, alignItems:"flex-start" }}>
               {/* ── DESKTOP LEFT: today hero + strava ── */}
