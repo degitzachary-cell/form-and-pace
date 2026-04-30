@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
@@ -4072,7 +4072,9 @@ export default function App() {
     // Training overload alert: compute PMC from all athlete activities and check
     // if ATL has exceeded CTL by a meaningful margin for 5+ of the last 7 days.
     const OverloadAlert = (() => {
-      const dailyRtss = dailyRtssFromActivities(myActs, profile);
+      const dailyRtss = stravaConnected && stravaActivities.length
+        ? dailyRtssFromStravaList(stravaActivities, profile)
+        : dailyRtssFromActivities(myActs, profile);
       if (!dailyRtss || dailyRtss.length === 0) return null;
       const from = new Date(t); from.setDate(t.getDate() - 90);
       const fmtD = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -5381,7 +5383,9 @@ export default function App() {
 
           {/* Performance chart — fitness/fatigue/form over 90 days */}
           {(() => {
-            const dailyRtss = dailyRtssFromActivities(myActs, profile);
+            const dailyRtss = stravaConnected && stravaActivities.length
+              ? dailyRtssFromStravaList(stravaActivities, profile)
+              : dailyRtssFromActivities(myActs, profile);
             const t = new Date();
             const from = new Date(t); from.setDate(t.getDate() - 89);
             const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
