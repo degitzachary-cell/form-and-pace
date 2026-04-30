@@ -452,12 +452,13 @@ export default function App() {
         if (!roster[key]) return; // not on this coach's roster — skip
         roster[key] = {
           ...roster[key],
-          ...(p.name       ? { name:    p.name       } : {}),
-          ...(p.goal       ? { goal:    p.goal       } : {}),
-          ...(p.current_pb ? { current: p.current_pb } : {}),
-          ...(p.avatar     ? { avatar:  p.avatar     } : {}),
-          ...(p.pbs        ? { pbs:     p.pbs        } : {}),
-          ...(p.goals      ? { goals:   p.goals      } : {}),
+          ...(p.name            ? { name:            p.name            } : {}),
+          ...(p.goal            ? { goal:            p.goal            } : {}),
+          ...(p.current_pb      ? { current:         p.current_pb      } : {}),
+          ...(p.avatar          ? { avatar:           p.avatar          } : {}),
+          ...(p.pbs             ? { pbs:              p.pbs             } : {}),
+          ...(p.goals           ? { goals:            p.goals           } : {}),
+          ...(p.threshold_pace  ? { threshold_pace:   p.threshold_pace  } : {}),
         };
       });
 
