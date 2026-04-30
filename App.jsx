@@ -339,6 +339,10 @@ export default function App() {
   // Only relevant when stravaConnected=true; if Strava isn't connected at all, manual
   // is the only path so we skip the gate.
   const [noStravaConfirmed, setNoStravaConfirmed] = useState(false);
+  // Lets the athlete bypass the future-session read-only gate to log a run
+  // they did earlier than scheduled. Reset whenever they enter the session
+  // screen so it never persists across navigations.
+  const [logEarly, setLogEarly] = useState(false);
   // Wellness — manually entered each session log. Stored in analysis.wellness.
   const [sessionRpe,       setSessionRpe]       = useState(null);  // 1–10
   const [sessionSleepHrs,  setSessionSleepHrs]  = useState("");    // free number
@@ -3771,7 +3775,7 @@ export default function App() {
                     <div onClick={() => {
                         const s = todaysSession.s;
                         setActiveSession({ ...s, weekStart: monStr });
-                        setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
+                        setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
                         setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
                         const isLogged = sessionIsLogged(todaysSession.log, todaysActivity);
                         setScreen(isLogged ? "result" : "session");
@@ -3818,7 +3822,7 @@ export default function App() {
                         if (todaysSession) {
                           const s = todaysSession.s;
                           setActiveSession({ ...s, weekStart: monStr });
-                          setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
+                          setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
                           setSessionDateOverride(today);
                           setSelectedStravaId(todaysStrava.id);
                           setScreen("session");
@@ -3861,7 +3865,7 @@ export default function App() {
                         onClick={() => {
                           if (sessHere && !isRest) {
                             setActiveSession({...sessHere.s, weekStart:monStr});
-                            setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
+                            setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
                             setSessionDateOverride(sessHere.log?.analysis?.actual_date || actHere?.activity_date || d.dDate);
                             setScreen(isLogged ? "result" : "session");
                           }
@@ -3918,7 +3922,7 @@ export default function App() {
               if (!todaysSession) return;
               setActiveSession({ ...s, weekStart: monStr });
               setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-              setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
+              setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
               setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
               setScreen(isLogged ? "result" : "session");
             };
@@ -4046,7 +4050,7 @@ export default function App() {
                 const s = todaysSession.s;
                 setActiveSession({ ...s, weekStart: monStr });
                 setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
+                setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
                 setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
                 setScreen(sessionIsLogged(todaysSession.log, todaysActivity) ? "result" : "session");
               }} className="fp-btn fp-btn--accent" style={{ width:"100%", padding:"18px" }}>
@@ -4137,7 +4141,7 @@ export default function App() {
                 if (todaysSession) {
                   setActiveSession({ ...todaysSession.s, weekStart: monStr });
                   setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
+                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
                   setSessionDateOverride(today);
                   setSelectedStravaId(todaysStrava.id);
                   setScreen("session");
@@ -4172,7 +4176,7 @@ export default function App() {
                     if (sessHere && (s.type || "").toUpperCase() !== "REST") {
                       setActiveSession({ ...sessHere.s, weekStart: monStr });
                       setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                      setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
+                      setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
                       setSessionDateOverride(sessHere.log?.analysis?.actual_date || actHere?.activity_date || d.dDate);
                       setScreen(d.isLogged ? "result" : "session");
                     }
@@ -4767,7 +4771,7 @@ export default function App() {
                 if (s) {
                   setActiveSession({ ...s, weekStart: sess.weekStart });
                   setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false);
+                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
                   setSessionDateOverride(log?.analysis?.actual_date || act?.activity_date || ds);
                   setScreen(isLogged ? "result" : "session");
                 } else if (act) {
@@ -4959,15 +4963,31 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   //  ATHLETE — SESSION LOG
   // ────────────────────────────────────────────────────────────
-  if (role === "athlete" && screen === "session" && activeSession) return (
+  if (role === "athlete" && screen === "session" && activeSession) {
+    // Read-only gate for future sessions. We compare the scheduled date to
+    // today; if it's still ahead, the prescription is shown but the log
+    // form is hidden behind a "Log this anyway" override (for athletes
+    // who ran earlier than scheduled).
+    const scheduledDateStr = activeSession.weekStart
+      ? sessionDateStr(activeSession.weekStart, activeSession.day)
+      : null;
+    const isFutureSession = scheduledDateStr && scheduledDateStr > todayStr();
+    const formHidden = isFutureSession && !logEarly;
+    const daysUntil = isFutureSession ? (() => {
+      const target = new Date(scheduledDateStr + "T00:00:00");
+      const today = new Date(); today.setHours(0,0,0,0);
+      return Math.round((target.getTime() - today.getTime()) / 86400000);
+    })() : 0;
+    const niceDate = scheduledDateStr ? new Date(scheduledDateStr + "T00:00:00").toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" }) : null;
+  return (
     <div style={S.page}>
       <div style={S.grain}/>
       <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setScreen("home"); }}/>
       <form
-        onSubmit={(e) => { e.preventDefault(); if (sessionDistKm && !isSaving) handleSubmitFeedback(); }}
+        onSubmit={(e) => { e.preventDefault(); if (sessionDistKm && !isSaving && !formHidden) handleSubmitFeedback(); }}
         style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}
       >
-        <SectionCard label="Today's Session">
+        <SectionCard label={isFutureSession ? "Upcoming session" : "Today's Session"}>
           {isStructured(activeSession) && (
             <ol style={{ listStyle:"none", padding:0, margin:"0 0 12px", borderLeft:`2px solid ${C.rule}` }}>
               {activeSession.steps.map((step, i) => (
@@ -4995,7 +5015,31 @@ export default function App() {
           </div>
         </SectionCard>
 
-        {stravaConnected && (
+        {formHidden && (
+          <div style={{
+            background:C.white, border:`1px solid ${C.rule}`, borderLeft:`4px solid ${C.cool}`,
+            borderRadius:2, padding:"22px 22px", marginBottom:14, textAlign:"center",
+          }}>
+            <div className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.cool, marginBottom:10 }}>
+              SCHEDULED FOR
+            </div>
+            <div style={{ fontFamily:S.displayFont, fontSize:22, fontWeight:600, color:C.ink, marginBottom:4 }}>
+              {niceDate}
+            </div>
+            <div className="t-mono" style={{ fontSize:11, color:C.mute, letterSpacing:"0.1em", marginBottom:18 }}>
+              IN {daysUntil} {daysUntil === 1 ? "DAY" : "DAYS"}
+            </div>
+            <div style={{ fontSize:13, color:C.inkSoft, fontStyle:"italic", lineHeight:1.55, fontFamily:S.displayFont, marginBottom:16, maxWidth:340, marginInline:"auto" }}>
+              Come back after your run to log it.
+            </div>
+            <button type="button" onClick={() => setLogEarly(true)}
+              style={{ ...S.ghostBtn, marginTop:0, width:"auto", padding:"10px 18px", display:"inline-block" }}>
+              Log this anyway →
+            </button>
+          </div>
+        )}
+
+        {!formHidden && stravaConnected && (
           <StravaActivityPicker
             activities={stravaActivities}
             loading={stravaActivitiesLoading}
@@ -5020,7 +5064,7 @@ export default function App() {
         )}
 
 
-        {!stravaDetail && stravaConnected && (
+        {!formHidden && !stravaDetail && stravaConnected && (
           <label style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:16, cursor:"pointer", padding:"14px 16px", background:C.white, border:`1px solid ${noStravaConfirmed ? C.accent : C.rule}`, borderRadius:2 }}>
             <input
               type="checkbox"
@@ -5036,7 +5080,7 @@ export default function App() {
             </div>
           </label>
         )}
-        {!stravaDetail && (noStravaConfirmed || !stravaConnected) && (
+        {!formHidden && !stravaDetail && (noStravaConfirmed || !stravaConnected) && (
           <div style={{ display:"flex", gap:12, marginBottom:14 }}>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Distance (km)</div>
@@ -5052,6 +5096,7 @@ export default function App() {
             </div>
           </div>
         )}
+        {!formHidden && <>
         <SectionCard label="How it felt">
           {(sessionRpe || sessionSleepHrs || sessionSoreness || sessionMood) && (
             <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.55, color:"var(--c-ink)", margin:"0 0 18px" }}>
@@ -5146,9 +5191,11 @@ export default function App() {
             </button>
           );
         })()}
+        </>}
       </form>
     </div>
   );
+  }
 
   // ────────────────────────────────────────────────────────────
   //  ATHLETE — RESULT
