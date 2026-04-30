@@ -774,6 +774,47 @@ export default function App() {
     return !!(log.analysis?.distance_km || log.feedback);
   };
 
+  // Mobile bottom-tab "Log" handler. If today has a planned non-REST session,
+  // jump straight to it (most athletes tapping Log just want to log today's
+  // workout). If it's already logged, show the result screen so they can
+  // review or edit. If there's no planned session, fall back to the
+  // unplanned log-activity flow.
+  const handleTapLog = () => {
+    if (role !== "athlete" || !user?.email) {
+      setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" });
+      setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity");
+      return;
+    }
+    const today = todayStr();
+    const t = new Date(); t.setHours(0,0,0,0);
+    const dow = t.getDay();
+    const monOff = dow === 0 ? -6 : 1 - dow;
+    const monDate = new Date(t); monDate.setDate(t.getDate() + monOff);
+    const monStr = `${monDate.getFullYear()}-${String(monDate.getMonth()+1).padStart(2,"0")}-${String(monDate.getDate()).padStart(2,"0")}`;
+    const thisWeek = (programEntry?.weeks || []).find(w => w.weekStart === monStr);
+    const todays = (thisWeek?.sessions || [])
+      .map(s => {
+        const log = logs[s.id];
+        const onDate = log?.analysis?.actual_date || sessionDateStr(monStr, s.day);
+        return { s, log, onDate };
+      })
+      .find(x => x.onDate === today && (x.s.type || "").toUpperCase() !== "REST");
+    if (todays) {
+      const myActs = activitiesByEmail.get(user.email?.toLowerCase()) || [];
+      const todaysAct = myActs.find(a => a.activity_date === today);
+      const isLogged = sessionIsLogged(todays.log, todaysAct);
+      setActiveSession({ ...todays.s, weekStart: monStr });
+      setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
+      setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+      setNoStravaConfirmed(false); setLogEarly(false);
+      setSessionDateOverride(todays.log?.analysis?.actual_date || todaysAct?.activity_date || today);
+      setScreen(isLogged ? "result" : "session");
+    } else {
+      setLogForm({ date: today, distanceKm: "", durationMin: "", type: "Run", notes: "" });
+      setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity");
+    }
+  };
+
   const saveLog = async (sessionId, updates) => {
     const existing = logs[sessionId];
     let data, error;
@@ -3593,7 +3634,7 @@ export default function App() {
       headerRight: <button onClick={signOut} style={S.signOutBtn}>Sign out</button>,
       statsBlock: StatTrio,
       settingsBlock: SettingsBlock,
-      tabBar: <MobileTabBar current="profile" isDesktop={isDesktop} onTab={(s) => setScreen(s)} onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}/>,
+      tabBar: <MobileTabBar current="profile" isDesktop={isDesktop} onTab={(s) => setScreen(s)} onTapLog={handleTapLog}/>,
     });
   }
 
@@ -4340,7 +4381,7 @@ export default function App() {
           current="today"
           isDesktop={isDesktop}
           onTab={(s) => setScreen(s)}
-          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+          onTapLog={handleTapLog}
         />
       </div>
     );
@@ -4655,7 +4696,7 @@ export default function App() {
           current="home"
           isDesktop={isDesktop}
           onTab={(s) => setScreen(s)}
-          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+          onTapLog={handleTapLog}
         />
       </div>
     );
@@ -4834,7 +4875,7 @@ export default function App() {
           current="home"
           isDesktop={isDesktop}
           onTab={(s) => setScreen(s)}
-          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+          onTapLog={handleTapLog}
         />
       </div>
     );
@@ -5550,7 +5591,7 @@ export default function App() {
           current="home"
           isDesktop={isDesktop}
           onTab={(s) => setScreen(s)}
-          onTapLog={() => { setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" }); setEditingActivityId(null); clearStravaSelection(); setScreen("log-activity"); }}
+          onTapLog={handleTapLog}
         />
       </div>
     );
