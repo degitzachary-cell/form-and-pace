@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { C, S } from './styles.js';
-import { newId, snapToMonday } from './lib/helpers.js';
+import { newId, snapToMonday, ymd } from './lib/helpers.js';
 import { DAY_LABELS } from './lib/constants.js';
 import { formatStep } from './lib/load.js';
 import { PaceRangeInput, PaceInput } from './components.jsx';
@@ -77,12 +77,7 @@ function parseFlexibleDate(input, fallbackYear) {
   return isNaN(d) ? null : d;
 }
 
-const ymdStr = (d) => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
+const ymdStr = ymd;
 
 function parseExcelToWeeks(file) {
   return new Promise((resolve, reject) => {
@@ -116,9 +111,7 @@ function parseExcelToWeeks(file) {
           const weekLabel = sheetName + (kmLabel ? ` · ${kmLabel}` : '');
 
           const sessions = [];
-          const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
-
-          days.forEach((day, i) => {
+          DAY_LABELS.forEach((day, i) => {
             const colIdx = i + 1;
             const rawDesc = runRow ? (runRow[colIdx] || '') : '';
             const desc = rawDesc instanceof Date ? '' : rawDesc;
@@ -227,7 +220,6 @@ const scoreTypeColor = (t) => SCORE_TYPE_COLOR[String(t || "").toUpperCase()] ||
 // editor below. Renders nothing if no weeks exist yet.
 function PlanScoreGrid({ weeks, blockLabel }) {
   if (!Array.isArray(weeks) || weeks.length === 0) return null;
-  const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
   return (
     <div style={{ marginBottom: 28 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 8px", borderBottom: `1px solid ${C.rule}` }}>
@@ -238,7 +230,7 @@ function PlanScoreGrid({ weeks, blockLabel }) {
       <div style={{ display: "grid", gridTemplateColumns: "100px 80px repeat(7, 1fr)", padding: "10px 0", borderBottom: `1px solid ${C.rule}` }}>
         <span style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.mute }}>Week</span>
         <span style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.mute, textAlign: "right", paddingRight: 8 }}>Km</span>
-        {days.map(d => (
+        {DAY_LABELS.map(d => (
           <span key={d} style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: C.mute, textAlign: "center" }}>{d}</span>
         ))}
       </div>
@@ -273,7 +265,7 @@ function PlanScoreGrid({ weeks, blockLabel }) {
                 {Math.round(totalKm)}
               </span>
             </div>
-            {days.map(dayInitial => {
+            {DAY_LABELS.map(dayInitial => {
               // Find sessions whose day starts with this initial (Mon, Tue, ...).
               const dayKey = dayInitial.charAt(0) + dayInitial.slice(1).toLowerCase();
               const found = sessions.find(s => (s.day || "").slice(0, 3) === dayKey);
@@ -678,13 +670,10 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     // Default the new weekStart to the Monday after the source week.
     const next = new Date((src.weekStart || todayMondayFallback()) + 'T00:00:00');
     next.setDate(next.getDate() + 7);
-    const y = next.getFullYear();
-    const m = String(next.getMonth() + 1).padStart(2, '0');
-    const dy = String(next.getDate()).padStart(2, '0');
     const newWeek = {
       id: newId(),
       weekLabel: `${src.weekLabel || 'Week'} (copy)`,
-      weekStart: `${y}-${m}-${dy}`,
+      weekStart: ymd(next),
       sessions: src.sessions.map(s => ({ ...s, id: newId() })),
     };
     const idx = weeks.findIndex(w => w.id === weekId);
@@ -725,10 +714,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
       if (latest) {
         const next = new Date(latest + 'T00:00:00');
         next.setDate(next.getDate() + 7);
-        const y = next.getFullYear();
-        const m = String(next.getMonth() + 1).padStart(2, '0');
-        const dy = String(next.getDate()).padStart(2, '0');
-        weekStart = `${y}-${m}-${dy}`;
+        weekStart = ymd(next);
       }
     }
     if (!weekStart) weekStart = todayMondayFallback();

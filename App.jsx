@@ -825,7 +825,7 @@ export default function App() {
     const dow = t.getDay();
     const monOff = dow === 0 ? -6 : 1 - dow;
     const monDate = new Date(t); monDate.setDate(t.getDate() + monOff);
-    const monStr = `${monDate.getFullYear()}-${String(monDate.getMonth()+1).padStart(2,"0")}-${String(monDate.getDate()).padStart(2,"0")}`;
+    const monStr = ymd(monDate);
     const thisWeek = (programEntry?.weeks || []).find(w => w.weekStart === monStr);
     const todays = (thisWeek?.sessions || [])
       .map(s => {
@@ -1216,8 +1216,7 @@ export default function App() {
       // Strava-first: when a Strava activity is attached, the run's actual date
       // wins over any user-picked override.
       const stravaDate = stravaDetail?.start_date_local?.slice(0,10) || stravaDetail?.start_date?.slice(0,10);
-      const sessionDate = stravaDate || sessionDateOverride || scheduledDate
-        || (() => { const d = new Date(); const y = d.getFullYear(); const mo = String(d.getMonth()+1).padStart(2,"0"); const dy = String(d.getDate()).padStart(2,"0"); return `${y}-${mo}-${dy}`; })();
+      const sessionDate = stravaDate || sessionDateOverride || scheduledDate || todayStr();
       const wellness = {
         ...(sessionRpe       != null ? { rpe:         sessionRpe       } : {}),
         ...(sessionSleepHrs  !== ""  ? { sleep_hours: parseFloat(sessionSleepHrs) } : {}),
@@ -1523,7 +1522,7 @@ export default function App() {
   if (role === "coach" && coachScreen === "dashboard") {
     const athletes = Object.entries(athletePrograms);
     const today = todayStr();
-    const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    const fmtDate = ymd;
 
     // Compute per-athlete: 7-day dot strip, replies-needed count, status flag.
     const athleteRows = athletes.map(([email, data]) => {
@@ -1662,7 +1661,7 @@ export default function App() {
       if (isNaN(d)) return;
       const dow = d.getDay();
       d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
-      setCoachActiveMonday(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);
+      setCoachActiveMonday(ymd(d));
     };
 
     // Shared roster content — rendered in the left sidebar (desktop) or full page (mobile)
@@ -2321,7 +2320,7 @@ export default function App() {
   }
 
   if (role === "coach" && coachScreen === "inbox") {
-    const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    const fmtDate = ymd;
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
     const cutoffStr = fmtDate(cutoff);
 
@@ -2550,7 +2549,7 @@ export default function App() {
       const arr = [];
       for (let i = 0; i < NUM_WEEKS; i++) {
         const m = new Date(d); m.setDate(d.getDate() + off - i * 7);
-        arr.push(`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,"0")}-${String(m.getDate()).padStart(2,"0")}`);
+        arr.push(ymd(m));
       }
       return arr; // newest first
     })();
@@ -2566,7 +2565,7 @@ export default function App() {
       const actsMap = {};
       for (const a of activitiesByEmail.get(email.toLowerCase()) || []) actsMap[a.activity_date] = a;
       let planned = 0, done = 0;
-      const wkEnd = (() => { const d = new Date(wkStart + "T00:00:00"); d.setDate(d.getDate()+6); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+      const wkEnd = weekEndStr(wkStart);
       for (const s of wk.sessions) {
         if ((s.type || "").toUpperCase() === "REST") continue;
         const sDate = sessionDateStr(wkStart, s.day);
@@ -2765,7 +2764,7 @@ export default function App() {
             const dailyRtss = dailyRtssFromActivities(daActs, da);
             const today = new Date();
             const from = new Date(today); from.setDate(today.getDate() - 180);
-            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+            const fmt = ymd;
             return (
               <div style={{ ...S.card, marginBottom:20 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
@@ -4147,7 +4146,7 @@ export default function App() {
     const dayLabel = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dow];
     const monOff = dow === 0 ? -6 : 1 - dow;
     const monDate = new Date(t); monDate.setDate(t.getDate() + monOff);
-    const monStr = `${monDate.getFullYear()}-${String(monDate.getMonth()+1).padStart(2,"0")}-${String(monDate.getDate()).padStart(2,"0")}`;
+    const monStr = ymd(monDate);
     const thisWeek = (programEntry?.weeks || []).find(w => w.weekStart === monStr);
     const allWithMoves = (thisWeek?.sessions || []).map(s => {
       const log = logs[s.id];
@@ -4224,7 +4223,7 @@ export default function App() {
         : dailyRtssFromActivities(myActs, profile);
       if (!dailyRtss || dailyRtss.length === 0) return null;
       const from = new Date(t); from.setDate(t.getDate() - 90);
-      const fmtD = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      const fmtD = ymd;
       const dense = densifyDailyRtss(dailyRtss, fmtD(from), today);
       const pmc = computePMC(dense);
       if (pmc.length < 7) return null;
@@ -4807,7 +4806,7 @@ export default function App() {
 
             // Last full week = the Mon→Sun that ended yesterday-ish.
             const { monday: lastMon, sunday: lastSun } = getWeekBounds(1);
-            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+            const fmt = ymd;
             const lastMonStr = fmt(lastMon);
             const lastSunStr = fmt(lastSun);
             const inLastWeek = (s) => s >= lastMonStr && s <= lastSunStr;
@@ -5532,7 +5531,7 @@ export default function App() {
               : dailyRtssFromActivities(myActs, profile);
             const t = new Date();
             const from = new Date(t); from.setDate(t.getDate() - 180);
-            const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+            const fmt = ymd;
             return (
               <div style={{ ...S.card, marginTop:18 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
