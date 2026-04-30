@@ -16,7 +16,8 @@ import {
 import { effectiveCompliance, dailyRtssFromActivities, formatStep, isStructured, autoClassifyRunType, getThresholdPace } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal } from "./components.jsx";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
+import { StepsEditor } from "./CoachPlanBuilder.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
 // ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
@@ -2781,7 +2782,7 @@ export default function App() {
               dayLabel: activeSession.day?.slice(0, 3),
               sessionId: activeSession.id,
               athleteEmail: activeSession.athleteEmail || dashAthlete,
-              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain },
+              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain, steps: activeSession.steps || [] },
             });
             setCoachScreen("edit-workout");
           }} style={{ ...S.ghostBtn, marginTop:16 }}>Edit prescribed workout</button>
@@ -2907,7 +2908,14 @@ export default function App() {
     const setField = (k, v) => setEditingWorkout(prev => ({ ...prev, prefill: { ...(prev.prefill || {}), [k]: v } }));
     const TYPES = ["EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX", "RACE DAY", "REST"];
     const tagFor = (t) => t === "SPEED" ? "speed" : t === "TEMPO" ? "tempo" : "easy";
-    const canSave = (f.type || "EASY") && (f.desc || "").trim().length > 0;
+    // A valid workout needs a type plus at least ONE of: coach notes,
+    // structured steps, or a pace target. Coaches building structured
+    // workouts shouldn't be forced to also write a paragraph.
+    const canSave = !!(f.type || "EASY") && (
+      ((f.desc || "").trim().length > 0) ||
+      (Array.isArray(f.steps) && f.steps.length > 0) ||
+      ((f.pace || "").trim().length > 0)
+    );
     return (
       <div style={S.page}>
         <div style={S.grain}/>
@@ -2956,20 +2964,29 @@ export default function App() {
             </div>
           </div>
           <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Description</div>
-            <textarea value={f.desc || ""} onChange={e => setField("desc", e.target.value)} rows={6}
-              placeholder={"e.g. WU 15min\\n5 × 800m @ 3:50/km\\n90sec rest\\nCD 15min"}
-              style={{ ...S.input, width:"100%", fontFamily:"monospace", lineHeight:1.6 }}/>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Target pace</div>
+            <PaceRangeInput value={f.pace || ""} onChange={(v) => setField("pace", v)}/>
+            <div style={{ fontSize:11, color:C.mid, marginTop:6, fontStyle:"italic", fontFamily:S.displayFont }}>
+              Optional. Leave the second value blank for a single pace.
+            </div>
           </div>
-          <div style={{ display:"flex", gap:12, marginBottom:14 }}>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Pace</div>
-              <input type="text" value={f.pace || ""} onChange={e => setField("pace", e.target.value)} placeholder="e.g. 4:30/km" style={S.input}/>
-            </div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Terrain</div>
-              <input type="text" value={f.terrain || ""} onChange={e => setField("terrain", e.target.value)} placeholder="e.g. FLAT/ROAD" style={S.input}/>
-            </div>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Terrain</div>
+            <input type="text" value={f.terrain || ""} onChange={e => setField("terrain", e.target.value)} placeholder="e.g. FLAT/ROAD" style={S.input}/>
+          </div>
+
+          {/* Section-based workout editor — Warm Up / Workout / Recovery /
+              Interval / Cool Down. Stored on session.steps[]. Optional. */}
+          <StepsEditor
+            session={{ steps: f.steps || [] }}
+            onChange={(nextSteps) => setField("steps", nextSteps)}
+          />
+
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Coach notes</div>
+            <textarea value={f.desc || ""} onChange={e => setField("desc", e.target.value)} rows={4}
+              placeholder="Anything the athlete should know — context, focus, cues."
+              style={{ ...S.input, width:"100%", fontFamily:S.displayFont, fontSize:15, lineHeight:1.5 }}/>
           </div>
           <button disabled={!canSave} onClick={async () => {
             const type = f.type || "EASY";
@@ -2980,6 +2997,7 @@ export default function App() {
               desc: (f.desc || "").trim(),
               pace: (f.pace || "").trim(),
               terrain: (f.terrain || "").trim(),
+              ...(Array.isArray(f.steps) && f.steps.length > 0 ? { steps: f.steps } : {}),
             };
             try {
               await saveWorkout(ew.athleteEmail, ew.weekStart, sessionData, ew.sessionId);

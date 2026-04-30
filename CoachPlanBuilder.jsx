@@ -314,7 +314,7 @@ function PlanScoreGrid({ weeks, blockLabel }) {
 // session card. Coaches can mix-and-match — type a desc, build steps, or
 // both. When steps are present the athlete view will render them as a
 // checkable list.
-function StepsEditor({ session, onChange }) {
+export function StepsEditor({ session, onChange }) {
   const steps = Array.isArray(session?.steps) ? session.steps : [];
   const setStep = (i, patch) => {
     const next = steps.map((s, idx) => idx === i ? { ...s, ...patch } : s);
