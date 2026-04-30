@@ -339,6 +339,7 @@ export function StepsEditor({ session, onChange }) {
         case 'cooldown': return { kind: 'cooldown', duration_min: 10, pace: '' };
         case 'steady':   return { kind: 'steady',   unit: 'km',  duration_min: '', distance_km: 5, pace: '', note: '' };
         case 'recovery': return { kind: 'recovery', unit: 'min', duration_min: 5, distance_km: '', pace: '' };
+        case 'strides':  return { kind: 'strides',  reps: 6, stride_s: 20, rest_s: 40 };
         case 'interval': return { kind: 'interval', reps: 6,
                                   work:     { unit: 'm',   distance_m: 800, duration_s: '', pace: '' },
                                   recovery: { unit: 'sec', distance_m: '',  duration_s: 90, pace: '' } };
@@ -361,6 +362,7 @@ export function StepsEditor({ session, onChange }) {
     steady:   'Workout',
     recovery: 'Recovery',
     interval: 'Interval',
+    strides:  'Strides',
   }[kind] || kind);
 
   // Distance/Time mode picker — small two-button toggle that flips the field
@@ -451,6 +453,19 @@ export function StepsEditor({ session, onChange }) {
             </div>
           )}
 
+          {step.kind === 'strides' && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={lbl}>reps</span>
+              <input style={{ ...inp, width: 50 }} type="number" min="1" value={step.reps ?? 6} onChange={e => setStep(i, { reps: Math.max(1, Number(e.target.value) || 1) })}/>
+              <span style={lbl}>stride</span>
+              <input style={{ ...inp, width: 60 }} type="number" min="1" value={step.stride_s ?? 20} onChange={e => setStep(i, { stride_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>sec</span>
+              <span style={lbl}>rest</span>
+              <input style={{ ...inp, width: 60 }} type="number" min="0" value={step.rest_s ?? 40} onChange={e => setStep(i, { rest_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>sec</span>
+            </div>
+          )}
+
           {step.kind === 'interval' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', gridColumn: '1 / -1' }}>
@@ -485,6 +500,7 @@ export function StepsEditor({ session, onChange }) {
           { k: 'steady',   label: '+ Workout'  },
           { k: 'recovery', label: '+ Recovery' },
           { k: 'interval', label: '+ Interval' },
+          { k: 'strides',  label: '+ Strides'  },
           { k: 'cooldown', label: '+ Cool Down' },
         ].map(({ k, label }) => (
           <button key={k} type="button" onClick={() => add(k)} style={{

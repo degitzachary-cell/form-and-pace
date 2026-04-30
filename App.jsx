@@ -3027,19 +3027,26 @@ export default function App() {
               })}
             </div>
           </div>
-          {/* Hide top-level Target Pace once sections exist — each section
-              carries its own pace, so a global pace would be redundant or
-              contradictory. Only shown for unstructured runs (Easy / Long
-              Run / Race Day with no sections). */}
-          {(!Array.isArray(f.steps) || f.steps.length === 0) && (
-            <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Target pace</div>
-              <PaceRangeInput value={f.pace || ""} onChange={(v) => setField("pace", v)}/>
-              <div style={{ fontSize:11, color:C.mid, marginTop:6, fontStyle:"italic", fontFamily:S.displayFont }}>
-                Optional. Leave the second value blank for a single pace.
+          {/* Hide top-level Target Pace only when a pace-prescriptive
+              section is present (interval / steady / recovery — sections
+              that carry their own pace). Auxiliary sections (warm-up,
+              cool-down, strides) attach to a generic run, so the easy-run
+              pace at the top level still applies. */}
+          {(() => {
+            const hasPaceSection = Array.isArray(f.steps) && f.steps.some(s =>
+              s.kind === "interval" || s.kind === "steady" || s.kind === "recovery"
+            );
+            if (hasPaceSection) return null;
+            return (
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Target pace</div>
+                <PaceRangeInput value={f.pace || ""} onChange={(v) => setField("pace", v)}/>
+                <div style={{ fontSize:11, color:C.mid, marginTop:6, fontStyle:"italic", fontFamily:S.displayFont }}>
+                  Optional. Leave the second value blank for a single pace.
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Target RPE — auto-defaulted by workout type, coach can override.
               Stored as a "lo-hi" string (e.g. "6-7") or single number. */}
