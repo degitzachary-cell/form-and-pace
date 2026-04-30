@@ -1576,10 +1576,11 @@ export default function App() {
             unread={totalRepliesNeeded}
             coachName={user.user_metadata?.full_name || user.email}
             onNav={(k) => {
-              if (k === "dashboard" || k === "athletes") setCoachScreen("dashboard");
-              else if (k === "inbox") setCoachScreen("inbox");
-              else if (k === "plans") setCoachScreen("plan-builder");
-              else if (k === "library") setCoachScreen("templates");
+              if (k === "dashboard")     setCoachScreen("dashboard");
+              else if (k === "athletes") setCoachScreen("athletes");
+              else if (k === "inbox")    setCoachScreen("inbox");
+              else if (k === "plans")    setCoachScreen("plan-builder");
+              else if (k === "library")  setCoachScreen("templates");
             }}
             onSignOut={signOut}
             onSettings={() => alert("Coach settings — coming soon.")}
@@ -1917,6 +1918,135 @@ export default function App() {
       },
     }));
   };
+
+  // Remove an athlete from the coach's roster. Deletes the coach_plans row
+  // (which is what populates athletePrograms) — the athlete's profile,
+  // session_logs, and activities are preserved. Caller must confirm.
+  const removeAthleteFromRoster = async (email) => {
+    if (!email) return;
+    const key = email.toLowerCase();
+    const { error } = await supabase.from("coach_plans").delete().eq("athlete_email", key);
+    if (error) { alert("Couldn't remove athlete: " + error.message); return false; }
+    setAthletePrograms(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    if (dashAthlete?.toLowerCase() === key) setDashAthlete(null);
+    return true;
+  };
+
+  // ─── COACH → ATHLETES ROSTER (full-width, alphabetical) ─────────
+  if (role === "coach" && coachScreen === "athletes") {
+    // Group athletes by first letter of their name (or email local-part).
+    const allEntries = Object.entries(athletePrograms).map(([email, data]) => {
+      const name = data?.name?.trim() || prettyEmailName(email);
+      return { email, name, data };
+    });
+    allEntries.sort((a, b) => a.name.localeCompare(b.name));
+    const groups = new Map();
+    for (const e of allEntries) {
+      const letter = (e.name[0] || "?").toUpperCase();
+      if (!groups.has(letter)) groups.set(letter, []);
+      groups.get(letter).push(e);
+    }
+
+    return (
+      <div style={{ ...S.page, ...(isDesktop ? { display:"flex", height:"100vh", overflow:"hidden" } : {}) }}>
+        {isDesktop && (
+          <CoachLeftRail
+            current="athletes" isDesktop={isDesktop}
+            unread={0}
+            coachName={user.user_metadata?.full_name || user.email}
+            onNav={(k) => {
+              if (k === "dashboard")     setCoachScreen("dashboard");
+              else if (k === "athletes") setCoachScreen("athletes");
+              else if (k === "inbox")    setCoachScreen("inbox");
+              else if (k === "plans")    setCoachScreen("plan-builder");
+              else if (k === "library")  setCoachScreen("templates");
+            }}
+            onSignOut={signOut}
+            onSettings={() => alert("Coach settings — coming soon.")}
+          />
+        )}
+        <div style={{ ...(isDesktop ? { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" } : {}) }}>
+          <Header
+            title="Athletes"
+            subtitle={`${allEntries.length} on roster`}
+            onBack={!isDesktop ? () => setCoachScreen("dashboard") : null}
+            right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}
+          />
+          <div style={{ flex: 1, overflowY: "auto", padding: isDesktop ? "32px 40px 80px" : "24px 16px 80px" }}>
+            {allEntries.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"60px 24px", color:C.mute }}>
+                <div className="t-display-italic" style={{ fontSize:18, marginBottom:8 }}>No athletes on your roster yet.</div>
+                <div style={{ fontSize:13 }}>Build a plan in the Plan Builder to enroll an athlete.</div>
+              </div>
+            ) : (
+              <div style={{ maxWidth: 1100, margin:"0 auto" }}>
+                {Array.from(groups.entries()).map(([letter, list]) => (
+                  <section key={letter} style={{ marginBottom: 36 }}>
+                    {/* Section header */}
+                    <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", paddingBottom:10, borderBottom:`1px solid ${C.rule}`, marginBottom:18 }}>
+                      <h2 className="t-display" style={{ fontSize: 36, fontWeight: 400, margin:0, color:C.ink }}>{letter}</h2>
+                      <span className="t-mono" style={{ fontSize:11, color:C.mute, letterSpacing:"0.14em" }}>{list.length} {list.length === 1 ? "ATHLETE" : "ATHLETES"}</span>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns: isDesktop ? "repeat(auto-fill, minmax(260px, 1fr))" : "1fr", gap: 14 }}>
+                      {list.map(({ email, name, data }) => {
+                        const acts = activitiesByEmail.get(email.toLowerCase()) || [];
+                        const lastLog = acts.length > 0 ? acts[0] : null;
+                        const initials = (data?.avatar?.trim() || name).split(/\s+/).map(s => s[0]).slice(0, 2).join("").toUpperCase();
+                        const goal = data?.goal?.trim() && data.goal !== "—" ? data.goal : null;
+                        return (
+                          <button
+                            key={email}
+                            onClick={() => { setDashAthlete(email); setCoachScreen("athlete"); }}
+                            style={{
+                              background: C.paper, border:`1px solid ${C.rule}`, borderRadius:2,
+                              padding:"18px 18px", textAlign:"left", cursor:"pointer",
+                              fontFamily: S.bodyFont,
+                              transition: "border-color 120ms ease, transform 80ms ease",
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.accent; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.rule; }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+                              <div style={{
+                                width:42, height:42, borderRadius:999,
+                                background: C.bg, color: C.ink,
+                                border:`1px solid ${C.rule}`,
+                                display:"flex", alignItems:"center", justifyContent:"center",
+                                fontFamily: S.displayFont, fontSize:16, fontWeight:500,
+                                flexShrink:0,
+                              }}>{initials}</div>
+                              <div style={{ minWidth:0, flex:1 }}>
+                                <div style={{ fontFamily:S.displayFont, fontSize:18, color:C.ink, lineHeight:1.2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+                                <div className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.06em", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{email}</div>
+                              </div>
+                            </div>
+                            {goal && (
+                              <div className="t-display-italic" style={{ fontSize:13, color:C.mute, marginBottom:8, lineHeight:1.4 }}>
+                                {goal}
+                              </div>
+                            )}
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:10, borderTop:`1px solid ${C.ruleSoft}` }}>
+                              <span className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.1em" }}>
+                                {lastLog ? `LAST · ${lastLog.activity_date}` : "NO LOGS YET"}
+                              </span>
+                              <span style={{ fontFamily:S.displayFont, fontSize:16, color:C.accent }}>→</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (role === "coach" && coachScreen === "inbox") {
     const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -2271,10 +2401,21 @@ export default function App() {
           })()}
 
           {coachAthleteTab === "plan" && (
-            <button onClick={() => setCoachScreen("profile")}
-              style={{ ...S.signOutBtn, width:"100%", marginBottom:20, padding:"10px", fontSize:13, fontWeight:600 }}>
-              Edit Profile (name, goal, PB)
-            </button>
+            <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+              <button onClick={() => setCoachScreen("profile")}
+                style={{ ...S.signOutBtn, flex:1, padding:"10px", fontSize:13, fontWeight:600 }}>
+                Edit profile
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm(`Remove ${daName} from your roster?\n\nThis deletes their training plan from your account. Their profile, logs, and activities are preserved.`)) return;
+                  const ok = await removeAthleteFromRoster(dashAthlete);
+                  if (ok) setCoachScreen("athletes");
+                }}
+                style={{ ...S.signOutBtn, padding:"10px 14px", fontSize:13, fontWeight:600, color:C.hot, borderColor:C.hot }}>
+                Remove
+              </button>
+            </div>
           )}
 
           {/* ─── LOGS tab ──────────────────────────────────────────── */}
