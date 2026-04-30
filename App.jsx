@@ -364,6 +364,7 @@ export default function App() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
   });
+  const [markerForm, setMarkerForm] = useState(null); // null=closed | { athleteEmail, kind, label, markerDate, endDate, isARace }
 
   // Profile editor state — used by both athlete (self-edit) and coach
   // (edit-on-behalf). The form is populated when entering either profile screen.
@@ -2442,29 +2443,74 @@ export default function App() {
           {coachAthleteTab === "plan" && (() => {
             const list = markersByEmail[dashAthlete?.toLowerCase()] || [];
             const upcoming = list.filter(m => (m.end_date || m.marker_date) >= todayStr()).slice(0, 5);
-            const addMarker = async () => {
-              const kind = prompt(`Marker kind? One of: ${MARKER_KINDS.join(", ")}`, "race");
-              if (!kind || !MARKER_KINDS.includes(kind)) return;
-              const markerDate = prompt("Date (YYYY-MM-DD)?", todayStr());
-              if (!markerDate || !/^\d{4}-\d{2}-\d{2}$/.test(markerDate)) return;
-              const endDate = prompt("End date (YYYY-MM-DD), blank for single day:", "") || null;
-              const label = prompt("Label (e.g. 'Berlin Marathon')?", "") || null;
-              const isARace = kind === "race" && confirm("Mark as A-race?");
-              const created = await createMarker({
-                athleteEmail: dashAthlete, kind, markerDate, endDate, label, isARace,
-                createdBy: user.email,
-              });
-              if (created) loadMarkers(dashAthlete);
-            };
             return (
               <div style={{ ...S.card, marginBottom:20 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
                   <Eyebrow>Calendar markers</Eyebrow>
-                  <button type="button" onClick={addMarker} style={{
+                  <button type="button" onClick={() => setMarkerForm({ athleteEmail: dashAthlete, kind:"race", label:"", markerDate: todayStr(), endDate:"", isARace: false })} style={{
                     background:"transparent", color:C.accent, border:`1px solid ${C.rule}`,
                     borderRadius:2, padding:"4px 10px", fontSize:11, cursor:"pointer", fontWeight:600,
                   }}>+ Add</button>
                 </div>
+                {markerForm && markerForm.athleteEmail === dashAthlete && (
+                  <div style={{ background:C.bg, border:`1px solid ${C.rule}`, borderRadius:4, padding:14, marginBottom:12 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                      <div>
+                        <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>KIND</div>
+                        <select value={markerForm.kind}
+                          onChange={e => setMarkerForm(f => ({ ...f, kind: e.target.value, isARace: false }))}
+                          style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"6px 8px", fontSize:13, color:C.ink, boxSizing:"border-box" }}>
+                          {MARKER_KINDS.map(k => <option key={k} value={k}>{MARKER_STYLE[k].label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>DATE</div>
+                        <input type="date" value={markerForm.markerDate}
+                          onChange={e => setMarkerForm(f => ({ ...f, markerDate: e.target.value }))}
+                          style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"6px 8px", fontSize:13, color:C.ink, boxSizing:"border-box" }}/>
+                      </div>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                      <div>
+                        <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>LABEL</div>
+                        <input type="text" value={markerForm.label} placeholder="e.g. Berlin Marathon"
+                          onChange={e => setMarkerForm(f => ({ ...f, label: e.target.value }))}
+                          style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"6px 8px", fontSize:13, color:C.ink, boxSizing:"border-box" }}/>
+                      </div>
+                      <div>
+                        <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>END DATE (optional)</div>
+                        <input type="date" value={markerForm.endDate}
+                          onChange={e => setMarkerForm(f => ({ ...f, endDate: e.target.value }))}
+                          style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"6px 8px", fontSize:13, color:C.ink, boxSizing:"border-box" }}/>
+                      </div>
+                    </div>
+                    {markerForm.kind === "race" && (
+                      <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:C.ink, marginBottom:10, cursor:"pointer" }}>
+                        <input type="checkbox" checked={markerForm.isARace}
+                          onChange={e => setMarkerForm(f => ({ ...f, isARace: e.target.checked }))}/>
+                        Mark as A-race (primary goal race)
+                      </label>
+                    )}
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button type="button" onClick={async () => {
+                        if (!markerForm.markerDate) return;
+                        const created = await createMarker({
+                          athleteEmail: markerForm.athleteEmail, kind: markerForm.kind,
+                          markerDate: markerForm.markerDate, endDate: markerForm.endDate || null,
+                          label: markerForm.label || null, isARace: markerForm.isARace,
+                          createdBy: user.email,
+                        });
+                        if (created) { loadMarkers(markerForm.athleteEmail); setMarkerForm(null); }
+                      }} style={{ background:C.accent, color:"#FBF8F1", border:"none", borderRadius:2, padding:"8px 16px", fontSize:11, fontWeight:700, cursor:"pointer", letterSpacing:"0.12em" }}>
+                        SAVE
+                      </button>
+                      <button type="button" onClick={() => setMarkerForm(null)}
+                        style={{ background:"transparent", color:C.mute, border:`1px solid ${C.rule}`, borderRadius:2, padding:"8px 14px", fontSize:11, cursor:"pointer" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {upcoming.length === 0 ? (
                   <div style={{ fontSize:13, color:C.mute, fontStyle:"italic" }}>None scheduled.</div>
                 ) : (
@@ -3154,9 +3200,9 @@ export default function App() {
               <div key={d} className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, textAlign:"center", padding:"4px 0" }}>{d}</div>
             ))}
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:4 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gridAutoRows: isDesktop ? 88 : 66, gap:4 }}>
             {cells.map((ds, i) => {
-              if (!ds) return <div key={i} style={{ aspectRatio:"1 / 1.1", background:"transparent" }}/>;
+              if (!ds) return <div key={i}/>;
               const sess = sessByDate.get(ds);
               const act = actByDate.get(ds);
               const s = sess?.s;
@@ -3180,14 +3226,13 @@ export default function App() {
               return (
                 <div key={i} onClick={onClick}
                   style={{
-                    aspectRatio:"1 / 1.1",
                     background: isLogged && ts ? ts.bg : isMissed ? "#fdf0f0" : C.white,
                     border: `1px solid ${isToday ? C.accent : isLogged && ts ? ts.border : C.rule}`,
                     borderLeft: s ? `3px solid ${ts.accent}` : `1px solid ${isToday ? C.accent : C.rule}`,
                     borderRadius:2, padding:"4px 5px",
                     cursor: (s || act) ? "pointer" : "default",
                     display:"flex", flexDirection:"column", position:"relative",
-                    minHeight: isDesktop ? 78 : 60,
+                    overflow:"hidden",
                   }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <span className="t-mono" style={{ fontSize:11, fontWeight: isToday ? 700 : 500, color: isToday ? C.accent : C.ink }}>{dayNum}</span>
@@ -4793,9 +4838,9 @@ export default function App() {
           </div>
 
           {/* Grid */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:4 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gridAutoRows: isDesktop ? 88 : 66, gap:4 }}>
             {cells.map((ds, i) => {
-              if (!ds) return <div key={i} style={{ aspectRatio:"1 / 1.1", background:"transparent" }}/>;
+              if (!ds) return <div key={i}/>;
               const sess = sessByDate.get(ds);
               const act = actByDate.get(ds);
               const s = sess?.s;
@@ -4829,7 +4874,6 @@ export default function App() {
               return (
                 <div key={i} onClick={onClick}
                   style={{
-                    aspectRatio:"1 / 1.1",
                     background: isLogged && ts ? ts.bg : isMissed ? "#fdf0f0" : C.white,
                     border: `1px solid ${isToday ? C.accent : isLogged && ts ? ts.border : C.rule}`,
                     borderLeft: s ? `3px solid ${ts.accent}` : `1px solid ${isToday ? C.accent : C.rule}`,
@@ -4838,7 +4882,7 @@ export default function App() {
                     cursor: "pointer",
                     display:"flex", flexDirection:"column",
                     position:"relative",
-                    minHeight: isDesktop ? 78 : 60,
+                    overflow:"hidden",
                   }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <span className="t-mono" style={{ fontSize:11, fontWeight: isToday ? 700 : 500, color: isToday ? C.accent : C.ink }}>
