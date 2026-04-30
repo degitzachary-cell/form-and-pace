@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
@@ -715,12 +715,25 @@ export default function App() {
     if (editingActivityId) {
       ({ data, error } = await supabase.from("activities").update(basePayload).eq("id", editingActivityId).select().single());
     } else {
-      ({ data, error } = await supabase.from("activities").insert({
-        ...basePayload,
-        athlete_email: user.email?.toLowerCase(),
-        athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
-        source: stravaDetailData ? "strava" : "manual",
-      }).select().single());
+      // If a Strava activity is being imported, prefer to UPDATE any existing
+      // row for the same Strava ID (e.g. one inserted earlier by auto-sync).
+      // Otherwise we'd end up with duplicate rows pointing to the same run.
+      const stravaId = stravaDetailData?.id;
+      const existingForStrava = stravaId
+        ? activities.find(a => a.athlete_email?.toLowerCase() === user.email?.toLowerCase() && a.strava_data?.id === stravaId)
+        : null;
+      if (existingForStrava) {
+        ({ data, error } = await supabase.from("activities")
+          .update({ ...basePayload, source: "strava" })
+          .eq("id", existingForStrava.id).select().single());
+      } else {
+        ({ data, error } = await supabase.from("activities").insert({
+          ...basePayload,
+          athlete_email: user.email?.toLowerCase(),
+          athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
+          source: stravaDetailData ? "strava" : "manual",
+        }).select().single());
+      }
     }
     if (error) { console.error("saveActivity error:", error); setLogError(error.message); }
     if (!error && data) {
@@ -779,12 +792,11 @@ export default function App() {
   };
 
   // A session_log row may exist without real data (e.g. created by a drag-move
-  // to store actual_date). Only treat a session as "logged" when it has a
-  // distance, feedback text, or a linked activity record.
+  // Only treat a session as "logged" when it has real data, not just a
+  // drag-move stub that wrote actual_date. Linked activity also counts.
   const sessionIsLogged = (log, linkedAct) => {
     if (linkedAct) return true;
-    if (!log) return false;
-    return !!(log.analysis?.distance_km || log.feedback);
+    return isLogReal(log);
   };
 
   // Mobile bottom-tab "Log" handler. If today has a planned non-REST session,
@@ -1100,12 +1112,26 @@ export default function App() {
     const nextAnalysis = { ...existingAnalysis };
     if (newDate === scheduledDate) delete nextAnalysis.actual_date;
     else nextAnalysis.actual_date = newDate;
+
+    // Skip writes that would produce a "stub" row. If there's no existing log
+    // AND we're moving to the scheduled date (no actual_date needed), we'd
+    // be writing analysis: {} — that's a ghost log that makes the day look
+    // logged when it isn't. Just bail.
+    const hasRealData = isLogReal(existing) || existingAnalysis.actual_date !== undefined;
+    if (!existing?.id && !hasRealData && newDate === scheduledDate) return;
+
     try {
-      // saveLog uses the signed-in user as athlete_email when inserting a new
-      // row. For coach-side moves on a session that has no log yet we need to
-      // write directly with the right athlete_email, otherwise the row would
-      // be attributed to the coach.
-      if (athleteEmail && !existing?.id) {
+      // If the move clears the only meaningful field on an existing stub log
+      // (i.e. actual_date back to scheduled, with nothing else there), DELETE
+      // the row instead of writing an empty analysis.
+      const wouldBeEmpty = !isLogReal({ ...existing, analysis: nextAnalysis }) && !nextAnalysis.actual_date;
+      if (existing?.id && wouldBeEmpty) {
+        const { error } = await supabase.from("session_logs").delete().eq("id", existing.id);
+        if (error) throw error;
+        setLogs(prev => { const next = { ...prev }; delete next[sessionId]; return next; });
+      } else if (athleteEmail && !existing?.id) {
+        // Coach-side write needs explicit athlete_email so the row isn't
+        // attributed to the coach.
         const ap = athletePrograms[targetEmail] || {};
         const { data, error } = await supabase
           .from("session_logs")
@@ -1189,10 +1215,15 @@ export default function App() {
       await saveLog(s.id, { feedback: feedbackText, analysis, ...(stravaDetail ? { strava_data: stravaDetail } : {}) });
 
       // Save to activities so distance counts toward weekly total.
-      // Check the overridden date first, then the scheduled date, then the
-      // previously-saved actual_date so re-edits find the right row.
+      // Check by Strava ID first (most reliable when available), then by
+      // overridden date, scheduled date, or previously-saved actual_date.
       const prevActualDate = logs[s.id]?.analysis?.actual_date;
-      const existing = findAthAct(user.email, sessionDate)
+      const stravaId = stravaDetail?.id;
+      const myEmail = user.email?.toLowerCase();
+      const existing = (stravaId
+          ? activities.find(a => a.athlete_email?.toLowerCase() === myEmail && a.strava_data?.id === stravaId)
+          : null)
+        || findAthAct(user.email, sessionDate)
         || findAthAct(user.email, scheduledDate)
         || (prevActualDate ? findAthAct(user.email, prevActualDate) : null);
       if (!existing) {
