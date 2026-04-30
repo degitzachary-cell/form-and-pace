@@ -400,81 +400,76 @@ export default function App() {
 
   const isDesktop = useWindowWidth() >= 960;
 
-  // Load saved plans from Supabase. Athletes only see their own plan;
-  // coaches see every plan.
+  // Load saved plans from Supabase. For athletes: just their own plan.
+  // For coaches: load plans first to establish the roster, then enrich with
+  // profile data — sequential so profiles never re-add a deleted athlete.
   useEffect(() => {
     if (!user || !role) return;
-    const loadPlans = async () => {
-      const email = user.email?.toLowerCase();
-      let q = supabase.from('coach_plans').select('*');
-      if (role === 'athlete') q = q.eq('athlete_email', email);
-      const { data, error } = await q;
-      if (error) {
-        console.error('Failed to load coach plans:', error);
-        return;
-      }
-      setAthletePrograms(prev => {
-        const updated = { ...prev };
-        data.forEach(row => {
-          const key = row.athlete_email?.toLowerCase();
-          if (!key) return;
-          const existing = updated[key] || {};
-          // Coaches may edit name/goal/PB straight into the plan so athletes
-          // who haven't signed in yet still render correctly.
-          const { weeks, meta } = normalizePlan(row.plan_json);
-          updated[key] = {
-            ...existing,
-            ...Object.fromEntries(Object.entries(meta).filter(([,v]) => v)),
-            weeks,
-          };
-        });
-        return updated;
-      });
-    };
-    loadPlans();
-  }, [user, role]);
+    const email = user.email?.toLowerCase();
 
-  // Coaches need every athlete's profile (name / goal / PB / avatar) so the
-  // dashboard cards aren't blank. Athletes only need their own profile, which
-  // resolveUser already loaded.
-  useEffect(() => {
-    if (!user || role !== 'coach') return;
-    const coachEmail = user.email?.toLowerCase();
-    const loadAthleteProfiles = async () => {
-      const { data, error } = await supabase
+    if (role === 'athlete') {
+      supabase.from('coach_plans').select('*').eq('athlete_email', email)
+        .then(({ data, error }) => {
+          if (error) { console.error('Failed to load coach plans:', error); return; }
+          setAthletePrograms(prev => {
+            const updated = { ...prev };
+            (data || []).forEach(row => {
+              const key = row.athlete_email?.toLowerCase();
+              if (!key) return;
+              const existing = updated[key] || {};
+              const { weeks, meta } = normalizePlan(row.plan_json);
+              updated[key] = { ...existing, ...Object.fromEntries(Object.entries(meta).filter(([,v]) => v)), weeks };
+            });
+            return updated;
+          });
+        });
+      return;
+    }
+
+    // Coach path: plans → then profiles, so the roster is known before profiles arrive.
+    const loadAll = async () => {
+      const { data: planRows, error: planErr } = await supabase.from('coach_plans').select('*');
+      if (planErr) { console.error('Failed to load coach plans:', planErr); return; }
+
+      // Build roster from plans first.
+      const roster = {};
+      (planRows || []).forEach(row => {
+        const key = row.athlete_email?.toLowerCase();
+        if (!key) return;
+        const { weeks, meta } = normalizePlan(row.plan_json);
+        roster[key] = { ...Object.fromEntries(Object.entries(meta).filter(([,v]) => v)), weeks };
+      });
+
+      // Now enrich with profile data — only for emails that are in the roster.
+      const { data: profiles, error: profErr } = await supabase
         .from('profiles')
         .select('email, name, goal, current_pb, avatar, role, threshold_pace, pbs, goals');
-      if (error) {
-        console.error('Failed to load athlete profiles:', error);
-        return;
-      }
+      if (profErr) { console.error('Failed to load athlete profiles:', profErr); }
+
+      (profiles || []).forEach(p => {
+        const key = p.email?.toLowerCase();
+        if (!key || key === email || p.role === 'coach') return;
+        if (!roster[key]) return; // not on this coach's roster — skip
+        roster[key] = {
+          ...roster[key],
+          ...(p.name       ? { name:    p.name       } : {}),
+          ...(p.goal       ? { goal:    p.goal       } : {}),
+          ...(p.current_pb ? { current: p.current_pb } : {}),
+          ...(p.avatar     ? { avatar:  p.avatar     } : {}),
+          ...(p.pbs        ? { pbs:     p.pbs        } : {}),
+          ...(p.goals      ? { goals:   p.goals      } : {}),
+        };
+      });
+
       setAthletePrograms(prev => {
         const updated = { ...prev };
-        data.forEach(p => {
-          const key = p.email?.toLowerCase();
-          if (!key || key === coachEmail) return;
-          if (p.role === 'coach') return;
-          // Only enrich athletes already on this coach's roster (coach_plans row).
-          // Without this guard, every non-coach profile gets re-added after deletion.
-          if (!updated[key]) return;
-          const existing = updated[key];
-          updated[key] = {
-            ...existing,
-            // Profile values overwrite coach-plan placeholders only when
-            // the profile actually has a value (athletes who logged in).
-            ...(p.name        ? { name:    p.name        } : {}),
-            ...(p.goal        ? { goal:    p.goal        } : {}),
-            ...(p.current_pb  ? { current: p.current_pb  } : {}),
-            ...(p.avatar      ? { avatar:  p.avatar      } : {}),
-            ...(p.pbs         ? { pbs:     p.pbs         } : {}),
-            ...(p.goals       ? { goals:   p.goals       } : {}),
-            weeks: existing.weeks || [],
-          };
+        Object.entries(roster).forEach(([key, val]) => {
+          updated[key] = { ...(updated[key] || {}), ...val };
         });
         return updated;
       });
     };
-    loadAthleteProfiles();
+    loadAll();
   }, [user, role]);
 
   // Profile (loaded from DB on login — determines role)
