@@ -198,17 +198,57 @@ function CoachDraggableSession({ session, children }) {
         ref={setActivatorNodeRef}
         {...listeners}
         style={{
-          position: "absolute", top: 8, right: 8,
+          position: "absolute", top: 6, right: 6,
           display: "flex", flexDirection: "column", gap: 3,
-          padding: "4px", cursor: "grab", touchAction: "none", zIndex: 2, opacity: 0.3,
+          padding: "6px", cursor: "grab", touchAction: "none", zIndex: 2, opacity: 0.4,
         }}>
         {[0,1,2].map(i => (
           <div key={i} style={{ display: "flex", gap: 3 }}>
-            <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.paper }} />
-            <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.paper }} />
+            <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.ink }} />
+            <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.ink }} />
           </div>
         ))}
       </div>
+      {children}
+    </div>
+  );
+}
+
+// Calendar (month-view) drag wrappers. The cells are tiny (66–88px tall) so
+// there's no room for a separate grip handle — the whole session content area
+// is the drag activator. The shared dndSensors (PointerSensor distance:8,
+// TouchSensor delay:150) keep tap-to-open working.
+function CalendarDroppableCell({ dateStr, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr || "none"}` });
+  return (
+    <div ref={setNodeRef} style={{ position: "relative", height: "100%" }}>
+      {children}
+      {isOver && (
+        <div style={{
+          position: "absolute", inset: 0, border: `2px dashed ${C.crimson}`,
+          borderRadius: 2, pointerEvents: "none",
+        }}/>
+      )}
+    </div>
+  );
+}
+
+function CalendarDraggableSession({ sessionId, children }) {
+  const { setNodeRef, attributes, listeners, transform, isDragging } = useDraggable({
+    id: `session:${sessionId}`,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      style={{
+        opacity: isDragging ? 0.4 : 1,
+        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+        transition: isDragging ? "none" : "transform 120ms ease",
+        touchAction: "none",
+        cursor: "grab",
+      }}>
       {children}
     </div>
   );
@@ -4085,6 +4125,22 @@ export default function App() {
               <div key={d} className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, textAlign:"center", padding:"4px 0" }}>{d}</div>
             ))}
           </div>
+          <DndContext
+            sensors={dndSensors}
+            onDragEnd={({ active, over }) => {
+              if (!over) return;
+              const [aKind, aId] = String(active.id).split(":");
+              const [oKind, oDate] = String(over.id).split(":");
+              if (aKind !== "session" || oKind !== "day" || !oDate) return;
+              // Look up the dragged session's weekStart from the day-indexed map.
+              let weekStart = null;
+              for (const v of sessByDate.values()) {
+                if (v.s.id === aId) { weekStart = v.weekStart; break; }
+              }
+              if (!weekStart) return;
+              handleSessionDrop(aId, oDate, weekStart, dashAthlete);
+            }}
+          >
           <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gridAutoRows: isDesktop ? 88 : 66, gap:4 }}>
             {cells.map((ds, i) => {
               if (!ds) return <div key={i}/>;
@@ -4108,8 +4164,15 @@ export default function App() {
                   setCoachScreen("extra-activity");
                 }
               };
+              const sessionInner = s && (s.type || "").toUpperCase() !== "REST" ? (
+                <div style={{ marginTop:"auto", overflow:"hidden" }}>
+                  <div style={{ fontSize:9, fontWeight:700, color:ts.accent, textTransform:"uppercase", letterSpacing:0.4, lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.type}</div>
+                  {km && <div className="t-mono" style={{ fontSize:9, color:C.mute, marginTop:1 }}>{Number(km).toFixed(1)}km</div>}
+                </div>
+              ) : null;
               return (
-                <div key={i} onClick={onClick}
+                <CalendarDroppableCell key={i} dateStr={ds}>
+                <div onClick={onClick}
                   style={{
                     background: isLogged && ts ? ts.bg : isMissed ? "#fdf0f0" : C.white,
                     border: `1px solid ${isToday ? C.accent : isLogged && ts ? ts.border : C.rule}`,
@@ -4117,18 +4180,15 @@ export default function App() {
                     borderRadius:2, padding:"4px 5px",
                     cursor: (s || act) ? "pointer" : "default",
                     display:"flex", flexDirection:"column", position:"relative",
-                    overflow:"hidden",
+                    overflow:"hidden", height:"100%", boxSizing:"border-box",
                   }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <span className="t-mono" style={{ fontSize:11, fontWeight: isToday ? 700 : 500, color: isToday ? C.accent : C.ink }}>{dayNum}</span>
                     {isLogged && <span style={{ width:6, height:6, borderRadius:"50%", background:C.accent, flexShrink:0 }}/>}
                     {isMissed && <span className="t-mono" style={{ fontSize:8, color:C.crimson, fontWeight:700 }}>×</span>}
                   </div>
-                  {s && (s.type || "").toUpperCase() !== "REST" ? (
-                    <div style={{ marginTop:"auto", overflow:"hidden" }}>
-                      <div style={{ fontSize:9, fontWeight:700, color:ts.accent, textTransform:"uppercase", letterSpacing:0.4, lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.type}</div>
-                      {km && <div className="t-mono" style={{ fontSize:9, color:C.mute, marginTop:1 }}>{Number(km).toFixed(1)}km</div>}
-                    </div>
+                  {sessionInner ? (
+                    <CalendarDraggableSession sessionId={s.id}>{sessionInner}</CalendarDraggableSession>
                   ) : (s && (s.type || "").toUpperCase() === "REST") ? (
                     <div style={{ marginTop:"auto", fontSize:9, color:C.mute, fontStyle:"italic" }}>Rest</div>
                   ) : act ? (
@@ -4138,9 +4198,11 @@ export default function App() {
                     </div>
                   ) : null}
                 </div>
+                </CalendarDroppableCell>
               );
             })}
           </div>
+          </DndContext>
           <button onClick={() => setCoachScreen("athlete")} style={{ ...S.ghostBtn, marginTop:18 }}>← Back to athlete</button>
         </div>
       </div>
