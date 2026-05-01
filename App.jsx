@@ -4697,7 +4697,7 @@ export default function App() {
             }}
           />
           <SettingsRow label="Units" value="Kilometres" onClick={() => flashSoon("Units")} />
-          <SettingsRow label="Help"  onClick={() => { window.location.href = "mailto:hello@formandpace.app?subject=Form%20%26%20Pace%20support"; }} />
+          <SettingsRow label="Help"  onClick={() => { window.location.href = "mailto:degitzachary@gmail.com?subject=Form%20%26%20Pace%20support"; }} />
         </div>
         <button onClick={signOut}
           className="fp-btn fp-btn--ghost"
