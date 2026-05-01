@@ -573,6 +573,9 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [status, setStatus] = useState(null);   // { kind: 'success' | 'error', message }
   const [saving, setSaving] = useState(false);
   const [baseline, setBaseline] = useState('');
+  const [bulkPasteOpen, setBulkPasteOpen] = useState(false);
+  const [bulkPasteTargets, setBulkPasteTargets] = useState({});
+  const [bulkPasteStatus, setBulkPasteStatus] = useState(null);
   const fileInputRef = useRef(null);
 
   // Cross-athlete copy/paste — survives switching the selected athlete.
@@ -852,27 +855,106 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
             <div style={{
               ...cardStyle,
               background: C.bgDeep, borderColor: C.accent, borderLeft: `3px solid ${C.accent}`,
-              marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+              marginBottom: 14,
             }}>
-              <div>
-                <div style={{ fontSize: 10, letterSpacing: 2, color: C.accent, textTransform: 'uppercase', fontWeight: 700 }}>Clipboard</div>
-                <div style={{ fontFamily: S.displayFont, fontSize: 16, color: C.ink, marginTop: 2 }}>
-                  {clipboardWeek.weekLabel || 'Copied week'}
-                  <span style={{ fontStyle: 'italic', color: C.mute, fontSize: 13, marginLeft: 8 }}>
-                    · {clipboardWeek.sessions?.length || 0} sessions{clipboardWeek._copiedFrom ? ` from ${clipboardWeek._copiedFrom}` : ''}
-                  </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 10, letterSpacing: 2, color: C.accent, textTransform: 'uppercase', fontWeight: 700 }}>Clipboard</div>
+                  <div style={{ fontFamily: S.displayFont, fontSize: 16, color: C.ink, marginTop: 2 }}>
+                    {clipboardWeek.weekLabel || 'Copied week'}
+                    <span style={{ fontStyle: 'italic', color: C.mute, fontSize: 13, marginLeft: 8 }}>
+                      · {clipboardWeek.sessions?.length || 0} sessions{clipboardWeek._copiedFrom ? ` from ${clipboardWeek._copiedFrom}` : ''}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={handlePasteWeek} style={{
+                    background: C.accent, color: C.accentInk, border: 'none', borderRadius: 2,
+                    padding: '8px 16px', fontSize: 11, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
+                  }}>Paste here →</button>
+                  <button type="button" onClick={() => { setBulkPasteOpen(v => !v); setBulkPasteTargets({}); setBulkPasteStatus(null); }} style={{
+                    background: 'transparent', color: C.accent, border: `1px solid ${C.accent}`,
+                    borderRadius: 2, padding: '8px 14px', fontSize: 11, cursor: 'pointer', letterSpacing: 1.5, fontWeight: 700, textTransform: 'uppercase',
+                  }}>{bulkPasteOpen ? 'Cancel bulk' : 'Paste to roster…'}</button>
+                  <button type="button" onClick={() => writeClipboard(null)} style={{
+                    background: 'transparent', color: C.mute, border: `1px solid ${C.rule}`,
+                    borderRadius: 2, padding: '8px 12px', fontSize: 11, cursor: 'pointer',
+                  }}>Clear</button>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={handlePasteWeek} style={{
-                  background: C.accent, color: C.accentInk, border: 'none', borderRadius: 2,
-                  padding: '8px 16px', fontSize: 11, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
-                }}>Paste here →</button>
-                <button type="button" onClick={() => writeClipboard(null)} style={{
-                  background: 'transparent', color: C.mute, border: `1px solid ${C.rule}`,
-                  borderRadius: 2, padding: '8px 12px', fontSize: 11, cursor: 'pointer',
-                }}>Clear</button>
-              </div>
+
+              {bulkPasteOpen && (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.rule}` }}>
+                  <div style={{ fontSize: 11, color: C.mute, marginBottom: 8 }}>
+                    Pick athletes to receive this week. Each gets it appended after their latest existing week (or this Monday if their plan is empty).
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 6, marginBottom: 12, maxHeight: 240, overflowY: 'auto' }}>
+                    {Object.entries(athletes || {}).filter(([email]) => email !== selectedEmail).map(([email, ap]) => {
+                      const checked = !!bulkPasteTargets[email];
+                      return (
+                        <label key={email} style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 10px',
+                          background: checked ? C.accent + '14' : C.white,
+                          border: `1px solid ${checked ? C.accent : C.rule}`,
+                          borderRadius: 2, cursor: 'pointer', fontSize: 13, color: C.ink,
+                        }}>
+                          <input type="checkbox" checked={checked}
+                            onChange={e => setBulkPasteTargets(prev => ({ ...prev, [email]: e.target.checked }))}/>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ap?.name || email}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button type="button" disabled={!Object.values(bulkPasteTargets).some(Boolean) || bulkPasteStatus?.kind === 'running'}
+                      onClick={async () => {
+                        const targets = Object.entries(bulkPasteTargets).filter(([, v]) => v).map(([k]) => k);
+                        if (!targets.length) return;
+                        setBulkPasteStatus({ kind: 'running', done: 0, total: targets.length });
+                        let ok = 0, errs = 0;
+                        for (let i = 0; i < targets.length; i++) {
+                          const email = targets[i];
+                          const existing = athletes[email]?.weeks || [];
+                          const latest = [...existing].map(w => w.weekStart).filter(Boolean).sort().pop();
+                          let weekStart;
+                          if (latest) {
+                            const next = new Date(latest + 'T00:00:00');
+                            next.setDate(next.getDate() + 7);
+                            weekStart = ymd(next);
+                          } else {
+                            weekStart = todayMondayFallback();
+                          }
+                          const newWeek = {
+                            id: newId(),
+                            weekLabel: clipboardWeek.weekLabel || 'Pasted week',
+                            weekStart,
+                            sessions: (clipboardWeek.sessions || []).map(s => ({ ...s, id: newId() })),
+                          };
+                          try {
+                            await Promise.resolve(onSave(email, [...existing, newWeek], { name: athletes[email]?.name, goal: athletes[email]?.goal, current: athletes[email]?.current }));
+                            ok++;
+                          } catch (e) { errs++; console.error('bulk paste failed for', email, e); }
+                          setBulkPasteStatus({ kind: 'running', done: i + 1, total: targets.length });
+                        }
+                        setBulkPasteStatus({ kind: 'done', message: `Pasted to ${ok} athlete${ok === 1 ? '' : 's'}${errs ? ` · ${errs} failed` : ''}.` });
+                        setBulkPasteTargets({});
+                      }}
+                      style={{
+                        background: C.accent, color: C.accentInk, border: 'none', borderRadius: 2,
+                        padding: '8px 14px', fontSize: 11, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
+                        opacity: !Object.values(bulkPasteTargets).some(Boolean) ? 0.4 : 1,
+                      }}>
+                      {bulkPasteStatus?.kind === 'running' ? `Pasting ${bulkPasteStatus.done}/${bulkPasteStatus.total}…` : `Paste to ${Object.values(bulkPasteTargets).filter(Boolean).length} athletes`}
+                    </button>
+                    {bulkPasteStatus?.kind === 'done' && (
+                      <span style={{ fontSize: 12, color: C.mute, fontStyle: 'italic' }}>{bulkPasteStatus.message}</span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
