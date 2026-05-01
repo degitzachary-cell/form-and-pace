@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useWindowWidth, useRealtimeSync, useAthleteStats } from "./lib/hooks.js";
 import CoachPlanBuilder from "./CoachPlanBuilder";
 import { supabase, exchangeStravaCode, syncAthleteStrava, sendPush } from "./lib/supabase.js";
@@ -638,18 +638,19 @@ export default function App() {
     }
   }, [user, role]);
 
-  // Default the coach calendar to today's Monday whenever they open an athlete
-  // (desktop: also runs when an athlete is selected on the dashboard panel).
+  // Default the coach week to today's Monday on FIRST entry to an athlete,
+  // and reset to today's Monday whenever the coach picks a DIFFERENT athlete.
+  // Critically, do NOT reset on plain screen changes — when the coach taps a
+  // session card to edit/view it and clicks back, they should land on the
+  // same week they were browsing, not get snapped back to "this week".
+  const lastDashAthleteRef = useRef(null);
   useEffect(() => {
-    const isAthleteContext = role === "coach" && dashAthlete &&
-      (coachScreen === "athlete" || (isDesktop && coachScreen === "dashboard"));
-    if (!isAthleteContext) {
-      if (coachActiveMonday !== null) setCoachActiveMonday(null);
-      return;
+    if (role !== "coach") return;
+    if (dashAthlete !== lastDashAthleteRef.current) {
+      lastDashAthleteRef.current = dashAthlete;
+      setCoachActiveMonday(dashAthlete ? thisMonday() : null);
     }
-    if (coachActiveMonday) return;
-    setCoachActiveMonday(thisMonday());
-  }, [role, coachScreen, dashAthlete, coachActiveMonday, isDesktop]);
+  }, [role, dashAthlete]);
 
   // ── Live sync: subscribe to session_logs + activities + coach_plans ──
   useRealtimeSync({ user, role, setLogs, setActivities, setAthletePrograms });
