@@ -2,9 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { C, S } from './styles.js';
-import { newId, snapToMonday } from './lib/helpers.js';
+import { newId, snapToMonday, ymd } from './lib/helpers.js';
 import { DAY_LABELS } from './lib/constants.js';
 import { formatStep } from './lib/load.js';
+import { PaceRangeInput, PaceInput } from './components.jsx';
 
 // ─── EXCEL PARSER ────────────────────────────────────────────
 function inferSessionType(desc) {
@@ -76,12 +77,7 @@ function parseFlexibleDate(input, fallbackYear) {
   return isNaN(d) ? null : d;
 }
 
-const ymdStr = (d) => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
+const ymdStr = ymd;
 
 function parseExcelToWeeks(file) {
   return new Promise((resolve, reject) => {
@@ -115,9 +111,7 @@ function parseExcelToWeeks(file) {
           const weekLabel = sheetName + (kmLabel ? ` · ${kmLabel}` : '');
 
           const sessions = [];
-          const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
-
-          days.forEach((day, i) => {
+          DAY_LABELS.forEach((day, i) => {
             const colIdx = i + 1;
             const rawDesc = runRow ? (runRow[colIdx] || '') : '';
             const desc = rawDesc instanceof Date ? '' : rawDesc;
@@ -206,12 +200,12 @@ function StatusBanner({ status, onDismiss }) {
 // VO2, cool for recovery, plum for long, amber for tempo, mute for rest.
 // Matches the COMPLY/typeStyle palette used elsewhere.
 const SCORE_TYPE_COLOR = {
-  EASY:        C.accent,
+  EASY:        "rgba(181, 72, 42, 0.5)",   // half-opacity terracotta
   RECOVERY:    C.cool,
   "LONG RUN":  "#7B5A8C",
   LONG:        "#7B5A8C",
-  TEMPO:       C.warn,
-  SPEED:       C.hot,
+  TEMPO:       "#D97706",                   // bright orange
+  SPEED:       "#C8341B",                   // deep red
   RACE:        C.ink,
   "RACE DAY":  C.ink,
   REST:        C.mute,
@@ -226,7 +220,6 @@ const scoreTypeColor = (t) => SCORE_TYPE_COLOR[String(t || "").toUpperCase()] ||
 // editor below. Renders nothing if no weeks exist yet.
 function PlanScoreGrid({ weeks, blockLabel }) {
   if (!Array.isArray(weeks) || weeks.length === 0) return null;
-  const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
   return (
     <div style={{ marginBottom: 28 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 8px", borderBottom: `1px solid ${C.rule}` }}>
@@ -237,7 +230,7 @@ function PlanScoreGrid({ weeks, blockLabel }) {
       <div style={{ display: "grid", gridTemplateColumns: "100px 80px repeat(7, 1fr)", padding: "10px 0", borderBottom: `1px solid ${C.rule}` }}>
         <span style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.mute }}>Week</span>
         <span style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.mute, textAlign: "right", paddingRight: 8 }}>Km</span>
-        {days.map(d => (
+        {DAY_LABELS.map(d => (
           <span key={d} style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: C.mute, textAlign: "center" }}>{d}</span>
         ))}
       </div>
@@ -272,7 +265,7 @@ function PlanScoreGrid({ weeks, blockLabel }) {
                 {Math.round(totalKm)}
               </span>
             </div>
-            {days.map(dayInitial => {
+            {DAY_LABELS.map(dayInitial => {
               // Find sessions whose day starts with this initial (Mon, Tue, ...).
               const dayKey = dayInitial.charAt(0) + dayInitial.slice(1).toLowerCase();
               const found = sessions.find(s => (s.day || "").slice(0, 3) === dayKey);
@@ -313,7 +306,7 @@ function PlanScoreGrid({ weeks, blockLabel }) {
 // session card. Coaches can mix-and-match — type a desc, build steps, or
 // both. When steps are present the athlete view will render them as a
 // checkable list.
-function StepsEditor({ session, onChange }) {
+export function StepsEditor({ session, onChange }) {
   const steps = Array.isArray(session?.steps) ? session.steps : [];
   const setStep = (i, patch) => {
     const next = steps.map((s, idx) => idx === i ? { ...s, ...patch } : s);
@@ -336,84 +329,224 @@ function StepsEditor({ session, onChange }) {
       switch (kind) {
         case 'warmup':   return { kind: 'warmup',   duration_min: 15, pace: '' };
         case 'cooldown': return { kind: 'cooldown', duration_min: 10, pace: '' };
-        case 'steady':   return { kind: 'steady',   duration_min: '', distance_km: '', pace: '', note: '' };
+        case 'steady':   return { kind: 'steady',   unit: 'km',  duration_min: '', distance_km: 5, pace: '', note: '' };
+        case 'recovery': return { kind: 'recovery', unit: 'min', duration_min: 5, distance_km: '', pace: '' };
+        case 'strides':  return { kind: 'strides',  reps: 6, stride_s: 20, rest_s: 40 };
         case 'interval': return { kind: 'interval', reps: 6,
-                                  work:     { distance_m: 800, pace: '' },
-                                  recovery: { duration_s: 90, pace: '' } };
+                                  work:     { unit: 'm',   distance_m: 800, duration_s: '', pace: '' },
+                                  recovery: { unit: 'sec', distance_m: '',  duration_s: 90, pace: '' } };
         default: return null;
       }
     })();
     if (blank) onChange([...steps, blank]);
   };
 
-  const inp = { background: C.white, border: `1px solid ${C.rule}`, borderRadius: 2, padding: '5px 8px', fontSize: 12, fontFamily: S.bodyFont, color: C.ink };
+  const inp = { background: C.paper, border: `1px solid ${C.rule}`, borderRadius: 2, padding: '5px 8px', fontSize: 12, fontFamily: S.bodyFont, color: C.ink, fontVariantNumeric: 'tabular-nums' };
   const lbl = { fontSize: 9, letterSpacing: 1.5, color: C.mid, textTransform: 'uppercase', marginRight: 6 };
-  const stepBox = { background: C.white, border: `1px solid ${C.rule}`, borderLeft: `3px solid ${C.accent}`, borderRadius: 2, padding: '8px 10px', marginBottom: 6 };
+  const stepBox = { background: C.paper, border: `1px solid ${C.rule}`, borderLeft: `3px solid ${C.accent}`, borderRadius: 2, padding: '10px 12px', marginBottom: 8 };
+
+  // UI label per kind. Steady stays as "Workout" in the spec — the underlying
+  // kind name is preserved for back-compat with sessions stored before this
+  // refactor.
+  const kindLabel = (kind) => ({
+    warmup:   'Warm Up',
+    cooldown: 'Cool Down',
+    steady:   'Workout',
+    recovery: 'Recovery',
+    interval: 'Interval',
+    strides:  'Strides',
+  }[kind] || kind);
+
+  // Recovery style picker — jog (slow easy) or float (moderate, faster
+  // than jog but slower than work). Stored on the relevant block's
+  // .style field so it travels alongside duration + pace.
+  const StyleToggle = ({ value, onChange }) => (
+    <div style={{ display: 'inline-flex', borderRadius: 2, border: `1px solid ${C.rule}`, overflow: 'hidden' }}>
+      {[{ v: 'jog', label: 'Jog' }, { v: 'float', label: 'Float' }].map((opt, idx) => {
+        const active = (value || 'jog') === opt.v;
+        return (
+          <button key={opt.v} type="button" onClick={() => onChange(opt.v)}
+            style={{
+              background: active ? C.ink : 'transparent', color: active ? C.paper : C.mute,
+              border: 0, padding: '4px 10px',
+              fontFamily: S.bodyFont, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+              cursor: 'pointer', borderLeft: idx === 0 ? 'none' : `1px solid ${C.rule}`,
+            }}>{opt.label}</button>
+        );
+      })}
+    </div>
+  );
+
+  // Distance/Time mode picker — small two-button toggle that flips the field
+  // shown for a section. Stores the preferred unit on `step.unit`.
+  const UnitToggle = ({ step, i, options }) => (
+    <div style={{ display: 'inline-flex', borderRadius: 2, border: `1px solid ${C.rule}`, overflow: 'hidden', marginRight: 6 }}>
+      {options.map((opt, idx) => {
+        const active = (step.unit || options[0].value) === opt.value;
+        return (
+          <button key={opt.value} type="button"
+            onClick={() => setStep(i, { unit: opt.value })}
+            style={{
+              background: active ? C.ink : 'transparent', color: active ? C.paper : C.mute,
+              border: 0, padding: '4px 10px',
+              fontFamily: S.bodyFont, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+              cursor: 'pointer', borderLeft: idx === 0 ? 'none' : `1px solid ${C.rule}`,
+            }}>{opt.label}</button>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 6 }}>Structured steps (optional)</div>
+      <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 8 }}>Sections (optional)</div>
       {steps.map((step, i) => (
         <div key={i} style={stepBox}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <span style={{ fontSize: 10, letterSpacing: 1.5, color: C.accent, fontWeight: 700, textTransform: 'uppercase' }}>{step.kind}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 10, letterSpacing: 1.5, color: C.accent, fontWeight: 700, textTransform: 'uppercase' }}>{kindLabel(step.kind)}</span>
             <span style={{ fontSize: 12, color: C.mute, fontStyle: 'italic', flex: 1, fontFamily: S.displayFont }}>{formatStep(step)}</span>
             <button type="button" onClick={() => move(i, -1)} disabled={i === 0} style={{ background: 'transparent', border: 'none', color: i === 0 ? C.rule : C.mute, cursor: i === 0 ? 'default' : 'pointer', fontSize: 14 }}>↑</button>
             <button type="button" onClick={() => move(i, 1)} disabled={i === steps.length - 1} style={{ background: 'transparent', border: 'none', color: i === steps.length - 1 ? C.rule : C.mute, cursor: i === steps.length - 1 ? 'default' : 'pointer', fontSize: 14 }}>↓</button>
-            <button type="button" onClick={() => remove(i)} style={{ background: 'transparent', border: 'none', color: C.hot, cursor: 'pointer', fontSize: 11 }}>×</button>
+            <button type="button" onClick={() => remove(i)} style={{ background: 'transparent', border: 'none', color: C.hot, cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>×</button>
           </div>
-          {step.kind === 'warmup' || step.kind === 'cooldown' ? (
+
+          {(step.kind === 'warmup' || step.kind === 'cooldown') && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={lbl}>min</span>
-              <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
-              <span style={lbl}>pace</span>
-              <input style={{ ...inp, width: 80 }} placeholder="5:30" value={step.pace || ''} onChange={e => setStep(i, { pace: e.target.value })}/>
+              <UnitToggle step={step} i={i} options={[{ value: 'min', label: 'Time' }, { value: 'km', label: 'Distance' }]}/>
+              {(step.unit || 'min') === 'min' ? (
+                <>
+                  <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} placeholder="min" onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <span style={lbl}>min</span>
+                </>
+              ) : (
+                <>
+                  <input style={{ ...inp, width: 60 }} type="number" step="0.1" value={step.distance_km ?? ''} placeholder="km" onChange={e => setStep(i, { distance_km: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <span style={lbl}>km</span>
+                </>
+              )}
+              <PaceRangeInput value={step.pace || ''} onChange={(v) => setStep(i, { pace: v })} label="Pace"/>
             </div>
-          ) : step.kind === 'steady' ? (
+          )}
+
+          {step.kind === 'steady' && (
+            <div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                <UnitToggle step={step} i={i} options={[{ value: 'km', label: 'Distance' }, { value: 'min', label: 'Time' }]}/>
+                {(step.unit || 'km') === 'km' ? (
+                  <>
+                    <input style={{ ...inp, width: 60 }} type="number" step="0.1" value={step.distance_km ?? ''} placeholder="km" onChange={e => setStep(i, { distance_km: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                    <span style={lbl}>km</span>
+                  </>
+                ) : (
+                  <>
+                    <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} placeholder="min" onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                    <span style={lbl}>min</span>
+                  </>
+                )}
+                <PaceRangeInput value={step.pace || ''} onChange={(v) => setStep(i, { pace: v })} label="Pace"/>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={lbl}>reps</span>
+                <input style={{ ...inp, width: 50 }} type="number" min="1" value={step.reps ?? 1} onChange={e => setStep(i, { reps: Math.max(1, Number(e.target.value) || 1) })}/>
+                {(Number(step.reps) || 1) > 1 && (
+                  <>
+                    <span style={lbl}>rest</span>
+                    <input style={{ ...inp, width: 60 }} type="number" placeholder="sec" value={step.rest?.duration_s ?? ''} onChange={e => setNested(i, 'rest', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                    <span style={lbl}>sec</span>
+                    <span style={{ fontSize:10, color:C.mid }}>or</span>
+                    <input style={{ ...inp, width: 50 }} type="number" placeholder="min" value={step.rest?.duration_min ?? ''} onChange={e => setNested(i, 'rest', { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                    <span style={lbl}>min</span>
+                    {/* Rest type: standing rest, jog, or float */}
+                    <div style={{ display: 'inline-flex', borderRadius: 2, border: `1px solid ${C.rule}`, overflow: 'hidden' }}>
+                      {[{ v: 'rest', label: 'Rest' }, { v: 'jog', label: 'Jog' }, { v: 'float', label: 'Float' }].map((opt, idx) => {
+                        const active = (step.rest?.style || 'rest') === opt.v;
+                        return (
+                          <button key={opt.v} type="button" onClick={() => setNested(i, 'rest', { style: opt.v })}
+                            style={{
+                              background: active ? C.ink : 'transparent', color: active ? C.paper : C.mute,
+                              border: 0, padding: '4px 10px',
+                              fontFamily: S.bodyFont, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+                              cursor: 'pointer', borderLeft: idx === 0 ? 'none' : `1px solid ${C.rule}`,
+                            }}>{opt.label}</button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+                <input style={{ ...inp, width: 160, marginLeft:'auto' }} placeholder="note (e.g. at MP)" value={step.note || ''} onChange={e => setStep(i, { note: e.target.value })}/>
+              </div>
+            </div>
+          )}
+
+          {step.kind === 'recovery' && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={lbl}>km</span>
-              <input style={{ ...inp, width: 60 }} type="number" step="0.1" value={step.distance_km ?? ''} onChange={e => setStep(i, { distance_km: e.target.value === '' ? '' : Number(e.target.value) })}/>
-              <span style={lbl}>min</span>
-              <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
-              <span style={lbl}>pace</span>
-              <input style={{ ...inp, width: 80 }} placeholder="4:35" value={step.pace || ''} onChange={e => setStep(i, { pace: e.target.value })}/>
-              <input style={{ ...inp, width: 140 }} placeholder="note (e.g. at MP)" value={step.note || ''} onChange={e => setStep(i, { note: e.target.value })}/>
+              <UnitToggle step={step} i={i} options={[{ value: 'min', label: 'Time' }, { value: 'km', label: 'Distance' }]}/>
+              {(step.unit || 'min') === 'min' ? (
+                <>
+                  <input style={{ ...inp, width: 60 }} type="number" value={step.duration_min ?? ''} placeholder="min" onChange={e => setStep(i, { duration_min: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <span style={lbl}>min</span>
+                </>
+              ) : (
+                <>
+                  <input style={{ ...inp, width: 60 }} type="number" step="0.1" value={step.distance_km ?? ''} placeholder="km" onChange={e => setStep(i, { distance_km: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <span style={lbl}>km</span>
+                </>
+              )}
+              <StyleToggle value={step.style} onChange={(v) => setStep(i, { style: v })}/>
+              <PaceRangeInput value={step.pace || ''} onChange={(v) => setStep(i, { pace: v })} label="Pace"/>
             </div>
-          ) : step.kind === 'interval' ? (
+          )}
+
+          {step.kind === 'strides' && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={lbl}>reps</span>
+              <input style={{ ...inp, width: 50 }} type="number" min="1" value={step.reps ?? 6} onChange={e => setStep(i, { reps: Math.max(1, Number(e.target.value) || 1) })}/>
+              <span style={lbl}>stride</span>
+              <input style={{ ...inp, width: 60 }} type="number" min="1" value={step.stride_s ?? 20} onChange={e => setStep(i, { stride_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>sec</span>
+              <span style={lbl}>rest</span>
+              <input style={{ ...inp, width: 60 }} type="number" min="0" value={step.rest_s ?? 40} onChange={e => setStep(i, { rest_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+              <span style={lbl}>sec</span>
+            </div>
+          )}
+
+          {step.kind === 'interval' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', gridColumn: '1 / -1' }}>
                 <span style={lbl}>reps</span>
                 <input style={{ ...inp, width: 50 }} type="number" min="1" value={step.reps ?? 1} onChange={e => setStep(i, { reps: Math.max(1, Number(e.target.value) || 1) })}/>
               </div>
-              <div/>
-              <div style={{ background: C.bgDeep, padding: 6, borderRadius: 2 }}>
-                <div style={{ ...lbl, marginBottom: 4 }}>Work</div>
+              <div style={{ background: C.bg, border: `1px solid ${C.rule}`, padding: 8, borderRadius: 2 }}>
+                <div style={{ ...lbl, marginBottom: 6 }}>Work</div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input style={{ ...inp, width: 70 }} type="number" placeholder="m" value={step.work?.distance_m ?? ''} onChange={e => setNested(i, 'work', { distance_m: e.target.value === '' ? '' : Number(e.target.value) })}/>
                   <span style={{ fontSize: 10, color: C.mid }}>or</span>
-                  <input style={{ ...inp, width: 60 }} type="number" placeholder="s" value={step.work?.duration_s ?? ''} onChange={e => setNested(i, 'work', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
-                  <input style={{ ...inp, width: 70 }} placeholder="pace" value={step.work?.pace || ''} onChange={e => setNested(i, 'work', { pace: e.target.value })}/>
+                  <input style={{ ...inp, width: 60 }} type="number" placeholder="sec" value={step.work?.duration_s ?? ''} onChange={e => setNested(i, 'work', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <PaceRangeInput value={step.work?.pace || ''} onChange={(v) => setNested(i, 'work', { pace: v })}/>
                 </div>
               </div>
-              <div style={{ background: C.bgDeep, padding: 6, borderRadius: 2 }}>
-                <div style={{ ...lbl, marginBottom: 4 }}>Recovery</div>
+              <div style={{ background: C.bg, border: `1px solid ${C.rule}`, padding: 8, borderRadius: 2 }}>
+                <div style={{ ...lbl, marginBottom: 6 }}>Recovery</div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input style={{ ...inp, width: 70 }} type="number" placeholder="m" value={step.recovery?.distance_m ?? ''} onChange={e => setNested(i, 'recovery', { distance_m: e.target.value === '' ? '' : Number(e.target.value) })}/>
                   <span style={{ fontSize: 10, color: C.mid }}>or</span>
-                  <input style={{ ...inp, width: 60 }} type="number" placeholder="s" value={step.recovery?.duration_s ?? ''} onChange={e => setNested(i, 'recovery', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
-                  <input style={{ ...inp, width: 70 }} placeholder="pace" value={step.recovery?.pace || ''} onChange={e => setNested(i, 'recovery', { pace: e.target.value })}/>
+                  <input style={{ ...inp, width: 60 }} type="number" placeholder="sec" value={step.recovery?.duration_s ?? ''} onChange={e => setNested(i, 'recovery', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  <StyleToggle value={step.recovery?.style} onChange={(v) => setNested(i, 'recovery', { style: v })}/>
+                  <PaceRangeInput value={step.recovery?.pace || ''} onChange={(v) => setNested(i, 'recovery', { pace: v })}/>
                 </div>
               </div>
             </div>
-          ) : null}
+          )}
         </div>
       ))}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {[
-          { k: 'warmup',   label: '+ Warm-up'  },
-          { k: 'steady',   label: '+ Steady'   },
+          { k: 'warmup',   label: '+ Warm Up'  },
+          { k: 'steady',   label: '+ Workout'  },
+          { k: 'recovery', label: '+ Recovery' },
           { k: 'interval', label: '+ Interval' },
-          { k: 'cooldown', label: '+ Cool-down' },
+          { k: 'strides',  label: '+ Strides'  },
+          { k: 'cooldown', label: '+ Cool Down' },
         ].map(({ k, label }) => (
           <button key={k} type="button" onClick={() => add(k)} style={{
             background: 'transparent', color: C.accent, border: `1px solid ${C.rule}`,
@@ -440,6 +573,9 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [status, setStatus] = useState(null);   // { kind: 'success' | 'error', message }
   const [saving, setSaving] = useState(false);
   const [baseline, setBaseline] = useState('');
+  const [bulkPasteOpen, setBulkPasteOpen] = useState(false);
+  const [bulkPasteTargets, setBulkPasteTargets] = useState({});
+  const [bulkPasteStatus, setBulkPasteStatus] = useState(null);
   const fileInputRef = useRef(null);
 
   // Cross-athlete copy/paste — survives switching the selected athlete.
@@ -537,13 +673,10 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     // Default the new weekStart to the Monday after the source week.
     const next = new Date((src.weekStart || todayMondayFallback()) + 'T00:00:00');
     next.setDate(next.getDate() + 7);
-    const y = next.getFullYear();
-    const m = String(next.getMonth() + 1).padStart(2, '0');
-    const dy = String(next.getDate()).padStart(2, '0');
     const newWeek = {
       id: newId(),
       weekLabel: `${src.weekLabel || 'Week'} (copy)`,
-      weekStart: `${y}-${m}-${dy}`,
+      weekStart: ymd(next),
       sessions: src.sessions.map(s => ({ ...s, id: newId() })),
     };
     const idx = weeks.findIndex(w => w.id === weekId);
@@ -584,10 +717,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
       if (latest) {
         const next = new Date(latest + 'T00:00:00');
         next.setDate(next.getDate() + 7);
-        const y = next.getFullYear();
-        const m = String(next.getMonth() + 1).padStart(2, '0');
-        const dy = String(next.getDate()).padStart(2, '0');
-        weekStart = `${y}-${m}-${dy}`;
+        weekStart = ymd(next);
       }
     }
     if (!weekStart) weekStart = todayMondayFallback();
@@ -725,27 +855,106 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
             <div style={{
               ...cardStyle,
               background: C.bgDeep, borderColor: C.accent, borderLeft: `3px solid ${C.accent}`,
-              marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+              marginBottom: 14,
             }}>
-              <div>
-                <div style={{ fontSize: 10, letterSpacing: 2, color: C.accent, textTransform: 'uppercase', fontWeight: 700 }}>Clipboard</div>
-                <div style={{ fontFamily: S.displayFont, fontSize: 16, color: C.ink, marginTop: 2 }}>
-                  {clipboardWeek.weekLabel || 'Copied week'}
-                  <span style={{ fontStyle: 'italic', color: C.mute, fontSize: 13, marginLeft: 8 }}>
-                    · {clipboardWeek.sessions?.length || 0} sessions{clipboardWeek._copiedFrom ? ` from ${clipboardWeek._copiedFrom}` : ''}
-                  </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 10, letterSpacing: 2, color: C.accent, textTransform: 'uppercase', fontWeight: 700 }}>Clipboard</div>
+                  <div style={{ fontFamily: S.displayFont, fontSize: 16, color: C.ink, marginTop: 2 }}>
+                    {clipboardWeek.weekLabel || 'Copied week'}
+                    <span style={{ fontStyle: 'italic', color: C.mute, fontSize: 13, marginLeft: 8 }}>
+                      · {clipboardWeek.sessions?.length || 0} sessions{clipboardWeek._copiedFrom ? ` from ${clipboardWeek._copiedFrom}` : ''}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={handlePasteWeek} style={{
+                    background: C.accent, color: C.accentInk, border: 'none', borderRadius: 2,
+                    padding: '8px 16px', fontSize: 11, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
+                  }}>Paste here →</button>
+                  <button type="button" onClick={() => { setBulkPasteOpen(v => !v); setBulkPasteTargets({}); setBulkPasteStatus(null); }} style={{
+                    background: 'transparent', color: C.accent, border: `1px solid ${C.accent}`,
+                    borderRadius: 2, padding: '8px 14px', fontSize: 11, cursor: 'pointer', letterSpacing: 1.5, fontWeight: 700, textTransform: 'uppercase',
+                  }}>{bulkPasteOpen ? 'Cancel bulk' : 'Paste to roster…'}</button>
+                  <button type="button" onClick={() => writeClipboard(null)} style={{
+                    background: 'transparent', color: C.mute, border: `1px solid ${C.rule}`,
+                    borderRadius: 2, padding: '8px 12px', fontSize: 11, cursor: 'pointer',
+                  }}>Clear</button>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={handlePasteWeek} style={{
-                  background: C.accent, color: C.accentInk, border: 'none', borderRadius: 2,
-                  padding: '8px 16px', fontSize: 11, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
-                }}>Paste here →</button>
-                <button type="button" onClick={() => writeClipboard(null)} style={{
-                  background: 'transparent', color: C.mute, border: `1px solid ${C.rule}`,
-                  borderRadius: 2, padding: '8px 12px', fontSize: 11, cursor: 'pointer',
-                }}>Clear</button>
-              </div>
+
+              {bulkPasteOpen && (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.rule}` }}>
+                  <div style={{ fontSize: 11, color: C.mute, marginBottom: 8 }}>
+                    Pick athletes to receive this week. Each gets it appended after their latest existing week (or this Monday if their plan is empty).
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 6, marginBottom: 12, maxHeight: 240, overflowY: 'auto' }}>
+                    {Object.entries(athletes || {}).filter(([email]) => email !== selectedEmail).map(([email, ap]) => {
+                      const checked = !!bulkPasteTargets[email];
+                      return (
+                        <label key={email} style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 10px',
+                          background: checked ? C.accent + '14' : C.white,
+                          border: `1px solid ${checked ? C.accent : C.rule}`,
+                          borderRadius: 2, cursor: 'pointer', fontSize: 13, color: C.ink,
+                        }}>
+                          <input type="checkbox" checked={checked}
+                            onChange={e => setBulkPasteTargets(prev => ({ ...prev, [email]: e.target.checked }))}/>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ap?.name || email}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button type="button" disabled={!Object.values(bulkPasteTargets).some(Boolean) || bulkPasteStatus?.kind === 'running'}
+                      onClick={async () => {
+                        const targets = Object.entries(bulkPasteTargets).filter(([, v]) => v).map(([k]) => k);
+                        if (!targets.length) return;
+                        setBulkPasteStatus({ kind: 'running', done: 0, total: targets.length });
+                        let ok = 0, errs = 0;
+                        for (let i = 0; i < targets.length; i++) {
+                          const email = targets[i];
+                          const existing = athletes[email]?.weeks || [];
+                          const latest = [...existing].map(w => w.weekStart).filter(Boolean).sort().pop();
+                          let weekStart;
+                          if (latest) {
+                            const next = new Date(latest + 'T00:00:00');
+                            next.setDate(next.getDate() + 7);
+                            weekStart = ymd(next);
+                          } else {
+                            weekStart = todayMondayFallback();
+                          }
+                          const newWeek = {
+                            id: newId(),
+                            weekLabel: clipboardWeek.weekLabel || 'Pasted week',
+                            weekStart,
+                            sessions: (clipboardWeek.sessions || []).map(s => ({ ...s, id: newId() })),
+                          };
+                          try {
+                            await Promise.resolve(onSave(email, [...existing, newWeek], { name: athletes[email]?.name, goal: athletes[email]?.goal, current: athletes[email]?.current }));
+                            ok++;
+                          } catch (e) { errs++; console.error('bulk paste failed for', email, e); }
+                          setBulkPasteStatus({ kind: 'running', done: i + 1, total: targets.length });
+                        }
+                        setBulkPasteStatus({ kind: 'done', message: `Pasted to ${ok} athlete${ok === 1 ? '' : 's'}${errs ? ` · ${errs} failed` : ''}.` });
+                        setBulkPasteTargets({});
+                      }}
+                      style={{
+                        background: C.accent, color: C.accentInk, border: 'none', borderRadius: 2,
+                        padding: '8px 14px', fontSize: 11, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
+                        opacity: !Object.values(bulkPasteTargets).some(Boolean) ? 0.4 : 1,
+                      }}>
+                      {bulkPasteStatus?.kind === 'running' ? `Pasting ${bulkPasteStatus.done}/${bulkPasteStatus.total}…` : `Paste to ${Object.values(bulkPasteTargets).filter(Boolean).length} athletes`}
+                    </button>
+                    {bulkPasteStatus?.kind === 'done' && (
+                      <span style={{ fontSize: 12, color: C.mute, fontStyle: 'italic' }}>{bulkPasteStatus.message}</span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -796,12 +1005,11 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                         {SESSION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                      <input
-                        style={{ ...inputStyle, flex: 1 }}
-                        placeholder="Pace (e.g. 5:00/km)"
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <PaceRangeInput
+                        label="Pace"
                         value={session.pace}
-                        onChange={e => handleSessionChange(week.id, session.id, 'pace', e.target.value)}
+                        onChange={(v) => handleSessionChange(week.id, session.id, 'pace', v)}
                       />
                       <input
                         style={{ ...inputStyle, flex: 1 }}
@@ -810,9 +1018,10 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                         onChange={e => handleSessionChange(week.id, session.id, 'terrain', e.target.value)}
                       />
                     </div>
+                    <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 6 }}>Coach notes</div>
                     <textarea
                       style={{ ...S.textarea, minHeight: 64, marginBottom: 8 }}
-                      placeholder="Session description…"
+                      placeholder="Anything the athlete should know — context, focus, cues."
                       value={session.desc}
                       onChange={e => handleSessionChange(week.id, session.id, 'desc', e.target.value)}
                     />

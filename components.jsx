@@ -7,6 +7,89 @@ import {
   paceStrToSecsPerKm, computePMC, densifyDailyRtss,
 } from "./lib/load.js";
 
+// ─── PACE INPUTS ─────────────────────────────────────────────────────────────
+// Masked text input for paces. Accepts digits only and auto-formats as
+// "M:SS" — typing "435" reads back as "4:35", "1234" as "12:34". The colon
+// inserts itself when the user types the third digit. Backspace removes the
+// last digit; the colon is virtual so it never gets stuck.
+//
+// `value` is the canonical "M:SS" string (or "" when empty). Used inside
+// PaceRangeInput below and exported for reuse anywhere a single pace is
+// captured.
+export function PaceInput({ value, onChange, placeholder = "0:00", style, ariaLabel, autoFocus }) {
+  const handleChange = (raw) => {
+    const digits = String(raw || "").replace(/[^\d]/g, "").slice(0, 4);
+    if (digits.length === 0)      onChange("");
+    else if (digits.length === 1) onChange(digits);
+    else if (digits.length === 2) onChange(digits[0] + ":" + digits[1]);
+    else if (digits.length === 3) onChange(digits[0] + ":" + digits.slice(1));
+    else                          onChange(digits.slice(0, 2) + ":" + digits.slice(2));
+  };
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      autoFocus={autoFocus}
+      aria-label={ariaLabel}
+      value={value || ""}
+      onChange={(e) => handleChange(e.target.value)}
+      placeholder={placeholder}
+      style={{
+        width: 60,
+        background: "var(--c-paper)",
+        border: "1px solid var(--c-rule)",
+        borderRadius: 2,
+        padding: "6px 8px",
+        fontFamily: "var(--f-mono)",
+        fontSize: 13,
+        color: "var(--c-ink)",
+        textAlign: "center",
+        fontVariantNumeric: "tabular-nums",
+        outline: "none",
+        ...style,
+      }}
+    />
+  );
+}
+
+// Range pace picker — two PaceInputs joined by "–". Stores the value as a
+// single string in one of three shapes so existing code that reads
+// `session.pace` keeps working without a schema change:
+//   ""             empty
+//   "4:35"         single pace
+//   "4:32–4:38"    range (en-dash, no spaces)
+// Either side is optional; if only one is filled, we save just that one.
+export function PaceRangeInput({ value, onChange, label }) {
+  // Lenient split — any en-dash / hyphen separates the two halves, even
+  // mid-typing when one side is still a partial 'M' or 'M:S'. Colons are
+  // never treated as separators.
+  const parsed = (() => {
+    const v = String(value || "");
+    if (!v) return ["", ""];
+    const parts = v.split(/\s*[–-]\s*/);
+    if (parts.length >= 2) return [parts[0], parts.slice(1).join("")];
+    return [v, ""];
+  })();
+  // Always join with the en-dash when there's a 'high' component, even if
+  // 'low' is empty — that keeps the second input editable while the first
+  // is being cleared.
+  const join = (lo, hi) => {
+    if (!lo && !hi) return "";
+    if (!hi)         return lo;
+    return `${lo || ""}–${hi}`;
+  };
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      {label && <span className="t-eyebrow" style={{ color: "var(--c-mute)", marginRight: 2 }}>{label}</span>}
+      <PaceInput value={parsed[0]} onChange={(lo) => onChange(join(lo, parsed[1]))} placeholder="0:00" ariaLabel="Pace low" />
+      <span className="t-mono" style={{ fontSize: 12, color: "var(--c-mute)" }}>–</span>
+      <PaceInput value={parsed[1]} onChange={(hi) => onChange(join(parsed[0], hi))} placeholder="0:00" ariaLabel="Pace high" />
+      <span className="t-mono" style={{ fontSize: 11, color: "var(--c-mute)", letterSpacing: "0.06em" }}>/km</span>
+    </div>
+  );
+}
+
 // ─── TRAINING-LOAD PILLS ─────────────────────────────────────────────────────
 
 // Renders a small "rTSS 64" pill colored by load band. Pure presentational —
@@ -163,9 +246,11 @@ export function CoachLeftRail({ current, onNav, unread = 0, coachName = "Coach",
   const items = [
     { key: "dashboard", label: "Dashboard" },
     { key: "athletes", label: "Athletes" },
-    { key: "plans",    label: "Plans" },
-    { key: "inbox",    label: "Inbox", badge: unread > 0 ? unread : null },
-    { key: "library",  label: "Library" },
+    { key: "plans",      label: "Plans" },
+    { key: "atp",        label: "Season" },
+    { key: "inbox",      label: "Inbox", badge: unread > 0 ? unread : null },
+    { key: "library",    label: "Library" },
+    { key: "compliance", label: "Compliance" },
   ];
 
   return (
@@ -307,6 +392,18 @@ export function MobileTabBar({ current, onTab, onTapLog, isDesktop }) {
       <line x1="3" y1="9" x2="15" y2="9"  stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
     </svg>
   );
+  const Calendar = (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="2.5" y="3.5" width="13" height="11" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="2.5" y1="6.5" x2="15.5" y2="6.5" stroke="currentColor" strokeWidth={sw}/>
+      <line x1="6" y1="2.5" x2="6"  y2="4.5" stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
+      <line x1="12" y1="2.5" x2="12" y2="4.5" stroke="currentColor" strokeWidth={sw} strokeLinecap="round"/>
+      <circle cx="6" cy="9.5" r="0.8" fill="currentColor"/>
+      <circle cx="9" cy="9.5" r="0.8" fill="currentColor"/>
+      <circle cx="12" cy="9.5" r="0.8" fill="currentColor"/>
+      <circle cx="6" cy="12" r="0.8" fill="currentColor"/>
+    </svg>
+  );
   const Profile = (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
       <circle cx="9" cy="6.2" r="2.6" stroke="currentColor" strokeWidth={sw}/>
@@ -324,10 +421,11 @@ export function MobileTabBar({ current, onTab, onTapLog, isDesktop }) {
       zIndex: 50,
     }}>
       <div style={{ maxWidth: 500, margin: "0 auto", display: "flex" }}>
-        <Item name="today"   label="Today"   glyph={Today}   onClick={() => onTab("today")}/>
-        <Item name="home"    label="Week"    glyph={Week}    onClick={() => onTab("home")}/>
-        <Item name="log"     label="Log"     glyph={Log}     onClick={onTapLog}/>
-        <Item name="profile" label="Profile" glyph={Profile} onClick={() => onTab("profile")}/>
+        <Item name="today"    label="Today"    glyph={Today}    onClick={() => onTab("today")}/>
+        <Item name="home"     label="Week"     glyph={Week}     onClick={() => onTab("home")}/>
+        <Item name="calendar" label="Calendar" glyph={Calendar} onClick={() => onTab("calendar")}/>
+        <Item name="log"      label="Log"      glyph={Log}      onClick={onTapLog}/>
+        <Item name="profile"  label="Profile"  glyph={Profile}  onClick={() => onTab("profile")}/>
       </div>
     </div>
   );
@@ -427,105 +525,123 @@ export function ThreadPanel({ thread = [], viewerRole = "athlete", onSend }) {
 //
 // `dailyRtss` is an array of { date: 'YYYY-MM-DD', rtss }. The chart
 // densifies to daily, computes PMC, and renders.
-export function PMCChart({ dailyRtss, fromDate, toDate, height = 200 }) {
+// Display window defaults to the last 90 days, but the chart computes PMC
+// over whatever range is supplied via fromDate/toDate. To get an accurate CTL
+// you want at least 4–6 months of data feeding in (CTL has a 42-day time
+// constant and needs ~3× to warm up). Pass a fromDate that's 6 months before
+// the visible window and the chart slices it for display automatically.
+export function PMCChart({ dailyRtss, fromDate, toDate, displayDays = 90, height = 200 }) {
   const dense = densifyDailyRtss(dailyRtss || [], fromDate, toDate);
-  const pmc = computePMC(dense);
+  const pmcAll = computePMC(dense);
+  const pmc = pmcAll.length > displayDays ? pmcAll.slice(-displayDays) : pmcAll;
   if (pmc.length < 2) {
     return (
       <div style={{ padding: 24, textAlign: "center", color: "var(--c-mute)", fontFamily: "var(--f-display)", fontStyle: "italic", fontSize: 14 }}>
-        Not enough data yet — log a few weeks of runs and CTL/ATL will start to draw.
+        Not enough data yet — log a few weeks of runs and your fitness curve will start to draw.
       </div>
     );
   }
   const VB_W = 600, VB_H = height;
-  const PAD_L = 40, PAD_R = 12, PAD_T = 14, PAD_B = 22;
+  const PAD_L = 36, PAD_R = 12, PAD_T = 10, PAD_B = 22;
   const innerW = VB_W - PAD_L - PAD_R;
   const innerH = VB_H - PAD_T - PAD_B;
 
   const N = pmc.length;
+  // Reserve top 70% for CTL/ATL load lines, bottom 25% for TSB band, leaving a small gap.
+  const loadBandH = innerH * 0.70;
+  const tsbBandTop = PAD_T + innerH * 0.75;
+  const tsbBandH = innerH * 0.25;
+  const tsbZeroY = tsbBandTop + tsbBandH / 2;
+
   const maxLoad = Math.max(40, ...pmc.map(p => p.ctl), ...pmc.map(p => p.atl));
-  const yLoad = (v) => PAD_T + (1 - v / maxLoad) * innerH;
+  const yLoad = (v) => PAD_T + (1 - v / maxLoad) * loadBandH;
   const x = (i) => PAD_L + (i * innerW) / Math.max(1, N - 1);
 
   const ctlPath = pmc.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yLoad(p.ctl).toFixed(1)}`).join(" ");
   const atlPath = pmc.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yLoad(p.atl).toFixed(1)}`).join(" ");
 
-  // TSB drawn against zero-axis at the bottom band (below load lines).
-  // We map TSB to the bottom 30% of the chart, with zero in the middle of
-  // that band so positive (fresh) goes up and negative (fatigued) goes down.
-  const tsbBandTop = PAD_T + innerH * 0.7;
-  const tsbBandH = innerH * 0.28;
-  const tsbZeroY = tsbBandTop + tsbBandH / 2;
   const maxTsb = Math.max(10, ...pmc.map(p => Math.abs(p.tsb)));
-  const yTsb = (v) => tsbZeroY - (v / maxTsb) * (tsbBandH / 2);
+  const yTsb = (v) => tsbZeroY - (v / maxTsb) * (tsbBandH / 2 - 2);
 
   const last = pmc[pmc.length - 1];
+  const tsbHint = last.tsb > 5 ? "fresh — good to race" : last.tsb < -20 ? "very fatigued — ease off" : last.tsb < -10 ? "fatigued — training hard" : "balanced";
+  const tsbColor = last.tsb >= 5 ? "var(--c-cool)" : last.tsb < -20 ? "var(--c-hot)" : last.tsb < 0 ? "var(--c-warn)" : "var(--c-ink)";
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 18, marginBottom: 8, flexWrap: "wrap" }}>
-        <div>
-          <div className="t-eyebrow">Fitness · CTL</div>
-          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: "var(--c-accent)", fontWeight: 600 }}>{last.ctl.toFixed(1)}</div>
+      {/* Three headline numbers — plain-language labels with the technical name underneath */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+        <div style={{ borderLeft: "2px solid var(--c-accent)", paddingLeft: 10 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 2 }}>Fitness</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 20, color: "var(--c-accent)", fontWeight: 600, lineHeight: 1 }}>{last.ctl.toFixed(0)}</div>
+          <div style={{ fontSize: 9, color: "var(--c-mute)", marginTop: 3, fontFamily: "var(--f-mono)", letterSpacing: "0.1em" }}>CTL · 42d</div>
         </div>
-        <div>
-          <div className="t-eyebrow">Fatigue · ATL</div>
-          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: "var(--c-hot)", fontWeight: 600 }}>{last.atl.toFixed(1)}</div>
+        <div style={{ borderLeft: "2px solid var(--c-hot)", paddingLeft: 10 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 2 }}>Fatigue</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 20, color: "var(--c-hot)", fontWeight: 600, lineHeight: 1 }}>{last.atl.toFixed(0)}</div>
+          <div style={{ fontSize: 9, color: "var(--c-mute)", marginTop: 3, fontFamily: "var(--f-mono)", letterSpacing: "0.1em" }}>ATL · 7d</div>
         </div>
-        <div>
-          <div className="t-eyebrow">Form · TSB</div>
-          <div style={{ fontFamily: "var(--f-mono)", fontSize: 18, color: last.tsb >= 0 ? "var(--c-cool)" : "var(--c-warn)", fontWeight: 600 }}>
-            {last.tsb >= 0 ? "+" : ""}{last.tsb.toFixed(1)}
+        <div style={{ borderLeft: `2px solid ${tsbColor}`, paddingLeft: 10 }}>
+          <div className="t-eyebrow" style={{ marginBottom: 2 }}>Form</div>
+          <div style={{ fontFamily: "var(--f-mono)", fontSize: 20, color: tsbColor, fontWeight: 600, lineHeight: 1 }}>
+            {last.tsb >= 0 ? "+" : ""}{last.tsb.toFixed(0)}
           </div>
+          <div style={{ fontSize: 9, color: "var(--c-mute)", marginTop: 3, fontFamily: "var(--f-mono)", letterSpacing: "0.1em" }}>TSB · {tsbHint}</div>
         </div>
       </div>
+
       <svg viewBox={`0 0 ${VB_W} ${VB_H}`} preserveAspectRatio="none" style={{ width: "100%", height: "auto", display: "block" }}>
-        {/* axis lines */}
-        <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={VB_H - PAD_B} stroke="var(--c-rule)" strokeWidth="0.5"/>
-        <line x1={PAD_L} y1={VB_H - PAD_B} x2={VB_W - PAD_R} y2={VB_H - PAD_B} stroke="var(--c-rule)" strokeWidth="0.5"/>
-        {/* y-axis ticks */}
+        {/* y-axis grid (load band only) */}
         {[0, 0.5, 1].map(t => {
           const v = Math.round(maxLoad * t);
           return (
             <g key={t}>
               <line x1={PAD_L} y1={yLoad(v)} x2={VB_W - PAD_R} y2={yLoad(v)} stroke="var(--c-ruleSoft)" strokeWidth="0.4" strokeDasharray="2 3"/>
-              <text x={PAD_L - 6} y={yLoad(v) + 3} textAnchor="end" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">{v}</text>
+              <text x={PAD_L - 5} y={yLoad(v) + 3} textAnchor="end" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">{v}</text>
             </g>
           );
         })}
-        {/* daily rTSS as faint background bars */}
+
+        {/* daily rTSS as faint background bars in the load band */}
         {pmc.map((p, i) => p.rtss > 0 && (
-          <rect key={i}
+          <rect key={`r${i}`}
             x={x(i) - 0.8} y={yLoad(p.rtss)}
-            width="1.6" height={Math.max(0.5, (VB_H - PAD_B) - yLoad(p.rtss))}
+            width="1.6" height={Math.max(0.5, (PAD_T + loadBandH) - yLoad(p.rtss))}
             fill="var(--c-ruleSoft)"/>
         ))}
-        {/* TSB filled area */}
-        <line x1={PAD_L} y1={tsbZeroY} x2={VB_W - PAD_R} y2={tsbZeroY} stroke="var(--c-rule)" strokeWidth="0.4"/>
+
+        {/* CTL line (fitness) */}
+        <path d={ctlPath} fill="none" stroke="var(--c-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        {/* ATL line (fatigue) */}
+        <path d={atlPath} fill="none" stroke="var(--c-hot)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 2"/>
+
+        {/* TSB band — separated below the load chart with a divider */}
+        <line x1={PAD_L} y1={tsbBandTop - 2} x2={VB_W - PAD_R} y2={tsbBandTop - 2} stroke="var(--c-rule)" strokeWidth="0.5"/>
+        <text x={PAD_L - 5} y={tsbZeroY + 3} textAnchor="end" fontSize="8" fill="var(--c-mute)" fontFamily="var(--f-mono)">TSB</text>
+        <line x1={PAD_L} y1={tsbZeroY} x2={VB_W - PAD_R} y2={tsbZeroY} stroke="var(--c-rule)" strokeWidth="0.4" strokeDasharray="1 2"/>
         {pmc.map((p, i) => {
           const yp = yTsb(p.tsb);
           const h = Math.abs(yp - tsbZeroY);
           const top = Math.min(yp, tsbZeroY);
           const fill = p.tsb >= 0 ? "var(--c-cool)" : "var(--c-warn)";
           return (
-            <rect key={i} x={x(i) - 1} y={top} width="2" height={Math.max(0.5, h)} fill={fill} fillOpacity="0.45"/>
+            <rect key={`t${i}`} x={x(i) - 1} y={top} width="2" height={Math.max(0.5, h)} fill={fill} fillOpacity="0.5"/>
           );
         })}
-        {/* CTL line */}
-        <path d={ctlPath} fill="none" stroke="var(--c-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        {/* ATL line */}
-        <path d={atlPath} fill="none" stroke="var(--c-hot)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-        {/* date ticks: first / midpoint / last */}
+
+        {/* date ticks */}
         {[0, Math.floor(N/2), N - 1].map(i => (
-          <text key={i} x={x(i)} y={VB_H - 6} textAnchor="middle" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">
+          <text key={`d${i}`} x={x(i)} y={VB_H - 6} textAnchor="middle" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">
             {pmc[i].date.slice(5)}
           </text>
         ))}
       </svg>
-      <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 10, color: "var(--c-mute)", fontFamily: "var(--f-mono)" }}>
-        <span><span style={{ display: "inline-block", width: 10, height: 2, background: "var(--c-accent)", verticalAlign: "middle", marginRight: 5 }}/>CTL fitness</span>
-        <span><span style={{ display: "inline-block", width: 10, height: 2, background: "var(--c-hot)", verticalAlign: "middle", marginRight: 5 }}/>ATL fatigue</span>
-        <span><span style={{ display: "inline-block", width: 6, height: 8, background: "var(--c-cool)", opacity: 0.45, verticalAlign: "middle", marginRight: 5 }}/>TSB form</span>
+
+      <div style={{ display: "flex", gap: 14, marginTop: 8, fontSize: 10, color: "var(--c-mute)", fontFamily: "var(--f-mono)", flexWrap: "wrap" }}>
+        <span><span style={{ display: "inline-block", width: 14, height: 2, background: "var(--c-accent)", verticalAlign: "middle", marginRight: 5 }}/>Fitness</span>
+        <span><span style={{ display: "inline-block", width: 14, height: 0, borderTop: "1.5px dashed var(--c-hot)", verticalAlign: "middle", marginRight: 5 }}/>Fatigue</span>
+        <span><span style={{ display: "inline-block", width: 6, height: 8, background: "var(--c-cool)", opacity: 0.5, verticalAlign: "middle", marginRight: 5 }}/>Fresh</span>
+        <span><span style={{ display: "inline-block", width: 6, height: 8, background: "var(--c-warn)", opacity: 0.5, verticalAlign: "middle", marginRight: 5 }}/>Tired</span>
       </div>
     </div>
   );
@@ -620,18 +736,22 @@ export const SectionHead = ({ index, total, label, action }) => (
 // Workout type → editorial dot color + label. Independent of the legacy
 // TYPE_STYLE map (which handles backgrounds for logged cards). Used wherever
 // we want the desaturated dot palette of the redesign.
+// Differentiation rule (matches styles.js TYPE_STYLE):
+//   SPEED — solid deep red, full strength
+//   TEMPO — solid bright orange
+//   EASY  — half-opacity terracotta (most days are easy; quiet by default)
 export const TYPE_META = {
-  EASY:       { dot: "var(--c-accent)", label: "Easy" },
-  RECOVERY:   { dot: "var(--c-cool)",   label: "Recovery" },
-  LONG:       { dot: "#7B5A8C",         label: "Long" },
-  "LONG RUN": { dot: "#7B5A8C",         label: "Long" },
-  TEMPO:      { dot: "var(--c-warn)",   label: "Tempo" },
-  SPEED:      { dot: "var(--c-hot)",    label: "Speed" },
-  RACE:       { dot: "var(--c-ink)",    label: "Race" },
-  "RACE DAY": { dot: "var(--c-ink)",    label: "Race" },
-  REST:       { dot: "var(--c-mute)",   label: "Rest" },
-  STRENGTH:   { dot: "#5A6B7B",         label: "Strength" },
-  HYROX:      { dot: "#C79541",         label: "Hyrox" },
+  EASY:       { dot: "rgba(181, 72, 42, 0.5)", label: "Easy" },
+  RECOVERY:   { dot: "var(--c-cool)",          label: "Recovery" },
+  LONG:       { dot: "#7B5A8C",                label: "Long" },
+  "LONG RUN": { dot: "#7B5A8C",                label: "Long" },
+  TEMPO:      { dot: "#D97706",                label: "Tempo" },
+  SPEED:      { dot: "#C8341B",                label: "Speed" },
+  RACE:       { dot: "var(--c-ink)",           label: "Race" },
+  "RACE DAY": { dot: "var(--c-ink)",           label: "Race" },
+  REST:       { dot: "var(--c-mute)",          label: "Rest" },
+  STRENGTH:   { dot: "#5A6B7B",                label: "Strength" },
+  HYROX:      { dot: "#C79541",                label: "Hyrox" },
 };
 export const typeMeta = (type) => {
   if (!type) return TYPE_META.EASY;
@@ -746,7 +866,22 @@ export function StravaCard({ data, onClear }) {
           <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:"var(--c-mute)" }}>STRAVA</span>
           <div>
             <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{data.name}</div>
-            <div style={{ fontSize:10, color:C.green, letterSpacing:2, textTransform:"uppercase" }}>{onClear ? "Strava Imported" : "Strava Data"}</div>
+            {(() => {
+              // When the run actually happened (local time on the athlete's
+              // device), not when it was imported. Falls back to UTC start_date
+              // if local isn't present.
+              const raw = data.start_date_local || data.start_date;
+              if (!raw) return null;
+              const d = new Date(raw);
+              if (isNaN(d)) return null;
+              const dateStr = d.toLocaleDateString(undefined, { weekday:"short", day:"numeric", month:"short" });
+              const timeStr = d.toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit" });
+              return (
+                <div className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.1em", marginTop:2, textTransform:"uppercase" }}>
+                  {dateStr} · {timeStr}
+                </div>
+              );
+            })()}
           </div>
         </div>
         {onClear && <button onClick={onClear} style={{ background:"none", border:`1px solid ${C.rule}`, borderRadius:2, padding:"4px 10px", color:C.mid, fontSize:11, cursor:"pointer" }}>✕ Clear</button>}
@@ -843,6 +978,16 @@ export function StravaActivityPicker({ activities, loading, selectedId, detail, 
   }
   if (detail) return <StravaCard data={detail} onClear={onClear} />;
 
+  // While fetching detail for a pre-selected ID, show a slim loading row.
+  if (detailLoading) {
+    return (
+      <div style={{ marginBottom:14, padding:"12px 14px", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, display:"flex", alignItems:"center", gap:8 }}>
+        <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:C.green }}>STRAVA</span>
+        <span style={{ fontSize:13, color:C.mid, fontStyle:"italic" }}>Importing run…</span>
+      </div>
+    );
+  }
+
   return (
     <div style={{ marginBottom:14 }}>
       {!activities.length && !loading ? (
@@ -872,7 +1017,6 @@ export function StravaActivityPicker({ activities, loading, selectedId, detail, 
               );
             })}
           </select>
-          {detailLoading && <div style={{ fontSize:12, color:C.green, marginTop:6, textAlign:"center" }}>Fetching detail…</div>}
         </div>
       )}
     </div>
