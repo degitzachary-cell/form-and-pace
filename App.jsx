@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useWindowWidth, useRealtimeSync, useAthleteStats } from "./lib/hooks.js";
 import CoachPlanBuilder from "./CoachPlanBuilder";
-import { supabase, exchangeStravaCode, syncAthleteStrava } from "./lib/supabase.js";
+import { supabase, exchangeStravaCode, syncAthleteStrava, sendPush } from "./lib/supabase.js";
+import { enablePush, disablePush, isPushActive, pushPermissionState } from "./lib/push.js";
 import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail, normaliseSportType, isStravaRun } from "./lib/strava.js";
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr, getWeekBounds,
@@ -488,6 +489,8 @@ export default function App() {
 
   // Strava state
   const [stravaConnected,       setStravaConnected]       = useState(false);
+  const [pushSubscribed,        setPushSubscribed]        = useState(false);
+  const [pushPerm,              setPushPerm]              = useState("default");
   const [stravaActivities,      setStravaActivities]      = useState([]);
   const [stravaActivitiesLoading, setStravaActivitiesLoading] = useState(false);
   const [selectedStravaId,      setSelectedStravaId]      = useState(null);
@@ -972,6 +975,20 @@ export default function App() {
     setStravaConnected(await checkStravaConnection());
   };
 
+  // Resolve current Web Push state (whether the SW has an active sub +
+  // browser permission). Re-runs when the user changes (sign-in/out).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const perm = pushPermissionState();
+      if (cancelled) return;
+      setPushPerm(perm);
+      if (perm === "granted") setPushSubscribed(await isPushActive());
+      else setPushSubscribed(false);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.email]);
+
   // Auto-fetch recent Strava activities for the rolling volume graph.
   // Refreshes whenever the tab regains focus so athletes don't manually re-sync.
   useEffect(() => {
@@ -1369,6 +1386,17 @@ export default function App() {
     if (!coachReply.trim()) return;
     try {
       await saveLog(sessionId, { coach_reply: coachReply });
+      const log = logs[sessionId];
+      const athleteEmail = log?.athlete_email || activeSession?.athleteEmail;
+      if (athleteEmail) {
+        sendPush({
+          recipientEmails: [athleteEmail],
+          title: "Coach reply",
+          body: coachReply.length > 140 ? coachReply.slice(0, 137) + "…" : coachReply,
+          url: "/",
+          tag: `coach-reply-${sessionId}`,
+        });
+      }
       setCoachReply("");
     } catch(e) { console.error("coach reply save error:", e); }
   };
@@ -2654,7 +2682,19 @@ export default function App() {
           subtitle="Edit athlete training plans"
           right={<button onClick={() => setCoachScreen("dashboard")} style={S.signOutBtn}>← Back</button>}
         />
-        <CoachPlanBuilder athletes={athletePrograms} onSave={handleSavePlan} />
+        <CoachPlanBuilder
+          athletes={athletePrograms}
+          onSave={async (athleteEmail, weeks, meta) => {
+            await handleSavePlan(athleteEmail, weeks, meta);
+            sendPush({
+              recipientEmails: [athleteEmail],
+              title: "Plan updated",
+              body: "Your coach has updated your training plan.",
+              url: "/",
+              tag: `plan-update-${athleteEmail}`,
+            });
+          }}
+        />
       </div>
     );
   }
@@ -3595,6 +3635,15 @@ export default function App() {
                     .from("session_logs").update({ messages: next, coach_reply: body, updated_at: ts }).eq("session_id", activeSession.id).select().maybeSingle();
                   if (updated) { setLogs(prev => ({ ...prev, [activeSession.id]: updated })); wroteAnywhere = true; }
                   if (!wroteAnywhere) alert("No session log or activity found for this session.");
+                  if (wroteAnywhere && activeSession?.athleteEmail) {
+                    sendPush({
+                      recipientEmails: [activeSession.athleteEmail],
+                      title: "Coach reply",
+                      body: body.length > 140 ? body.slice(0, 137) + "…" : body,
+                      url: "/",
+                      tag: `coach-thread-${activeSession.id}`,
+                    });
+                  }
                 };
                 const recap = log?.feedback || linkedAthAct?.notes || (an?.distance_km ? `${an.distance_km}km logged.` : null);
                 const athleteName = activeSession?.athleteEmail
@@ -3824,7 +3873,20 @@ export default function App() {
                 <button onClick={async ()=>{
                   if (!coachReply.trim()) return;
                   const { data } = await supabase.from("activities").update({ coach_reply: coachReply }).eq("id", act.id).select().single();
-                  if (data) { setActiveExtraActivity(data); setActivities(prev => prev.map(a => a.id === data.id ? data : a)); setCoachReply(""); }
+                  if (data) {
+                    setActiveExtraActivity(data);
+                    setActivities(prev => prev.map(a => a.id === data.id ? data : a));
+                    if (act.athlete_email) {
+                      sendPush({
+                        recipientEmails: [act.athlete_email],
+                        title: "Coach reply",
+                        body: coachReply.length > 140 ? coachReply.slice(0, 137) + "…" : coachReply,
+                        url: "/",
+                        tag: `coach-reply-act-${act.id}`,
+                      });
+                    }
+                    setCoachReply("");
+                  }
                 }} disabled={!coachReply.trim()} style={S.primaryBtn(C.accent, !coachReply.trim())}>
                   Send Reply →
                 </button>
@@ -4198,7 +4260,40 @@ export default function App() {
             value={stravaConnected ? "Connected" : "Not connected"}
             onClick={() => stravaConnected ? flashSoon("Disconnect Strava") : connectStrava()}
           />
-          <SettingsRow label="Notifications" onClick={() => flashSoon("Notifications")} />
+          <SettingsRow
+            label="Notifications"
+            value={pushPerm === "unsupported" ? "Unsupported on this device"
+              : pushSubscribed ? "On"
+              : pushPerm === "denied" ? "Blocked in browser"
+              : "Off"}
+            onClick={async () => {
+              if (pushPerm === "unsupported") {
+                setProfileStatus({ kind:"info", message:"This browser doesn't support push notifications." });
+                return;
+              }
+              if (pushPerm === "denied") {
+                setProfileStatus({ kind:"error", message:"Push is blocked. Allow notifications in your browser settings." });
+                return;
+              }
+              if (pushSubscribed) {
+                await disablePush();
+                setPushSubscribed(false);
+                setProfileStatus({ kind:"info", message:"Notifications turned off on this device." });
+              } else {
+                const r = await enablePush(user?.email);
+                if (r.ok) {
+                  setPushSubscribed(true);
+                  setPushPerm("granted");
+                  setProfileStatus({ kind:"info", message:"Notifications turned on. We'll ping you about coach replies and missed sessions." });
+                } else if (r.reason === "denied") {
+                  setPushPerm("denied");
+                  setProfileStatus({ kind:"error", message:"Permission denied. Allow notifications in your browser settings." });
+                } else {
+                  setProfileStatus({ kind:"error", message:`Couldn't enable push: ${r.reason}` });
+                }
+              }
+            }}
+          />
           <SettingsRow label="Units" value="Kilometres" onClick={() => flashSoon("Units")} />
           <SettingsRow label="Help"  onClick={() => { window.location.href = "mailto:hello@formandpace.app?subject=Form%20%26%20Pace%20support"; }} />
         </div>
