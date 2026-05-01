@@ -359,23 +359,33 @@ export function StepsEditor({ session, onChange }) {
 
   // Recovery style picker — jog (slow easy) or float (moderate, faster
   // than jog but slower than work). Stored on the relevant block's
-  // .style field so it travels alongside duration + pace.
-  const StyleToggle = ({ value, onChange }) => (
-    <div style={{ display: 'inline-flex', borderRadius: 2, border: `1px solid ${C.rule}`, overflow: 'hidden' }}>
-      {[{ v: 'jog', label: 'Jog' }, { v: 'float', label: 'Float' }].map((opt, idx) => {
-        const active = (value || 'jog') === opt.v;
-        return (
-          <button key={opt.v} type="button" onClick={() => onChange(opt.v)}
-            style={{
-              background: active ? C.ink : 'transparent', color: active ? C.paper : C.mute,
-              border: 0, padding: '4px 10px',
-              fontFamily: S.bodyFont, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
-              cursor: 'pointer', borderLeft: idx === 0 ? 'none' : `1px solid ${C.rule}`,
-            }}>{opt.label}</button>
-        );
-      })}
-    </div>
-  );
+  // .style field so it travels alongside duration + pace. Pass
+  // withRest to add a standing-rest option (used for interval recovery,
+  // where the athlete may be doing 10×400m with full rest between).
+  const STYLE_OPTS = [
+    { v: 'rest',  label: 'Rest'  },
+    { v: 'jog',   label: 'Jog'   },
+    { v: 'float', label: 'Float' },
+  ];
+  const StyleToggle = ({ value, onChange, withRest = false }) => {
+    const opts = withRest ? STYLE_OPTS : STYLE_OPTS.filter(o => o.v !== 'rest');
+    return (
+      <div style={{ display: 'inline-flex', borderRadius: 2, border: `1px solid ${C.rule}`, overflow: 'hidden' }}>
+        {opts.map((opt, idx) => {
+          const active = (value || 'jog') === opt.v;
+          return (
+            <button key={opt.v} type="button" onClick={() => onChange(opt.v)}
+              style={{
+                background: active ? C.ink : 'transparent', color: active ? C.paper : C.mute,
+                border: 0, padding: '4px 10px',
+                fontFamily: S.bodyFont, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+                cursor: 'pointer', borderLeft: idx === 0 ? 'none' : `1px solid ${C.rule}`,
+              }}>{opt.label}</button>
+          );
+        })}
+      </div>
+    );
+  };
 
   // Distance/Time mode picker — small two-button toggle that flips the field
   // shown for a section. Stores the preferred unit on `step.unit`.
@@ -531,7 +541,7 @@ export function StepsEditor({ session, onChange }) {
                   <input style={{ ...inp, width: 70 }} type="number" placeholder="m" value={step.recovery?.distance_m ?? ''} onChange={e => setNested(i, 'recovery', { distance_m: e.target.value === '' ? '' : Number(e.target.value) })}/>
                   <span style={{ fontSize: 10, color: C.mid }}>or</span>
                   <input style={{ ...inp, width: 60 }} type="number" placeholder="sec" value={step.recovery?.duration_s ?? ''} onChange={e => setNested(i, 'recovery', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
-                  <StyleToggle value={step.recovery?.style} onChange={(v) => setNested(i, 'recovery', { style: v })}/>
+                  <StyleToggle withRest value={step.recovery?.style} onChange={(v) => setNested(i, 'recovery', { style: v })}/>
                   <PaceRangeInput value={step.recovery?.pace || ''} onChange={(v) => setNested(i, 'recovery', { pace: v })}/>
                 </div>
               </div>
