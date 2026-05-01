@@ -1230,10 +1230,18 @@ export default function App() {
     } catch (e) { console.error("drag-move saveLog error:", e); }
 
     // Keep the linked activity's date in sync so coach views, weekly km totals,
-    // and actByDate lookups land on the new day too. Only updates if a
-    // matching activity exists at the previous date.
-    if (prevDate && prevDate !== newDate) {
-      const linked = findAthAct(targetEmail, prevDate);
+    // and actByDate lookups land on the new day too. Only fires when the
+    // session was actually logged (without a real log there's no linked
+    // activity to follow), and only moves session-sourced activities — never
+    // a separate manual or strava-auto run that happens to share the date.
+    // Without this guard, dragging a skipped hyrox off Tuesday would also
+    // drag a separate Tuesday strength workout to the new day.
+    if (prevDate && prevDate !== newDate && isLogReal(existing)) {
+      const linked = activities.find(a =>
+        a.athlete_email?.toLowerCase() === targetEmail
+        && a.activity_date === prevDate
+        && (a.source === "session" || a.source === "strava")
+      );
       if (linked) {
         const { data: updAct, error } = await supabase
           .from("activities")
