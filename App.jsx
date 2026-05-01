@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useWindowWidth, useRealtimeSync, useAthleteStats } from "./lib/hooks.js";
 import CoachPlanBuilder from "./CoachPlanBuilder";
 import { supabase, exchangeStravaCode, syncAthleteStrava } from "./lib/supabase.js";
-import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail } from "./lib/strava.js";
+import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStravaDetail, normaliseSportType, isStravaRun } from "./lib/strava.js";
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr, getWeekBounds,
   prettyEmailName, todayStr, newId, ymd,
@@ -992,34 +992,32 @@ export default function App() {
     const myEmail = user.email.toLowerCase();
     const myActivities = activities.filter(a => a.athlete_email?.toLowerCase() === myEmail);
     const existingStravaIds = new Set(myActivities.map(a => a.strava_data?.id).filter(Boolean));
-    // Also index by date+distance so a manually-logged run that wasn't tagged
-    // with strava_data still suppresses a duplicate auto-sync row.
-    const matchesExistingByDateAndDist = (date, distKm) => myActivities.some(a => {
+    // Dedupe by (date, sport, distance) so a manually-logged activity that
+    // wasn't tagged with strava_data still suppresses an auto-sync row, but
+    // a 5km run on the same day as a 5km bike ride still BOTH sync.
+    const matchesExistingByDateAndDist = (date, type, distKm) => myActivities.some(a => {
       if (a.activity_date !== date) return false;
+      if ((a.activity_type || "Run") !== type) return false;
       const ad = parseFloat(a.distance_km);
       if (!ad) return false;
       return Math.abs(ad - distKm) / Math.max(ad, distKm) < 0.1;
     });
     const rows = stravaActivities
-      .filter(a => {
-        if (existingStravaIds.has(a.id)) return false;
-        const date = a.start_date_local?.split("T")[0];
-        const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
-        if (date && distKm && matchesExistingByDateAndDist(date, distKm)) return false;
-        return true;
-      })
       .map(a => {
+        if (existingStravaIds.has(a.id)) return null;
         const date = a.start_date_local?.split("T")[0];
         const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
         const durSec = a.moving_time || null;
-        if (!date || !distKm || !durSec) return null;
+        if (!date || !durSec) return null; // distance can be null for strength
+        const activityType = normaliseSportType(a.sport_type, a.type);
+        if (date && distKm && matchesExistingByDateAndDist(date, activityType, distKm)) return null;
         return {
           athlete_email: myEmail,
           athlete_name: athleteData?.name || user.email,
           activity_date: date,
           distance_km: distKm,
           duration_seconds: durSec,
-          activity_type: "Run",
+          activity_type: activityType,
           source: "strava-auto",
           strava_data: {
             id: a.id, name: a.name,
@@ -4156,7 +4154,9 @@ export default function App() {
     });
     const todaysSession = allWithMoves.find(x => x.onDate === today && (x.s.type || "").toUpperCase() !== "REST");
     const todaysActivity = myActs.find(a => a.activity_date === today);
-    const todaysStrava = stravaActivities.find(a => a.start_date_local?.split("T")[0] === today);
+    // Only surface today's Strava run on the Today screen — bike / strength /
+    // walk activities sync silently and shouldn't prompt "log this session".
+    const todaysStrava = stravaActivities.find(a => a.start_date_local?.split("T")[0] === today && isStravaRun(a));
     // Already done if: Strava ID was explicitly imported, OR any activity
     // (manual or otherwise) already exists for today's date.
     const todaysStravaUnimported = todaysStrava
@@ -5556,7 +5556,7 @@ export default function App() {
   //  ATHLETE — LOG ACTIVITY
   // ────────────────────────────────────────────────────────────
   if (role === "athlete" && screen === "log-activity") {
-    const activityTypes = ["Run","Long Run","Easy Run","Tempo","Speed","Trail Run","Race","Strength","Cross-train","Other"];
+    const activityTypes = ["Run","Long Run","Easy Run","Tempo","Speed","Trail Run","Race","Strength","Workout","Ride","Swim","Walk","Hike","Mobility","Cross-train","Other"];
     const canSubmit = logForm.distanceKm && parseFloat(logForm.distanceKm) > 0 && logForm.date;
     return (
       <div style={S.page}>
@@ -5578,25 +5578,33 @@ export default function App() {
               onSelect={async (id) => {
                 setSelectedStravaId(id);
                 if (id) {
+                  const picked = stravaActivities.find(a => a.id === id);
                   const d = await loadStravaDetail(id);
                   if (d) {
-                    const actDate = stravaActivities.find(a=>a.id===id)?.start_date_local?.split("T")[0] || logForm.date;
-                    // Auto-classify the run type from splits + threshold pace.
-                    // Map the lib/load.js label to the activityTypes list the
-                    // form picker uses ("Easy Run" etc).
-                    const labelMap = { LONG: "Long Run", SPEED: "Speed", TEMPO: "Tempo", RECOVERY: "Easy Run", EASY: "Easy Run" };
-                    const cls = autoClassifyRunType({
-                      distanceKm: d.distance_m / 1000,
-                      durationSec: d.moving_time_s,
-                      splits: d.splits,
-                      thresholdSecsPerKm: getThresholdPace(profile),
-                    });
+                    const actDate = picked?.start_date_local?.split("T")[0] || logForm.date;
+                    // For runs, auto-classify by splits + threshold. For other
+                    // sports (Ride, Strength, etc.), just use the normalised
+                    // Strava sport type.
+                    let pickedType = f => f.type;
+                    if (isStravaRun(picked)) {
+                      const labelMap = { LONG: "Long Run", SPEED: "Speed", TEMPO: "Tempo", RECOVERY: "Easy Run", EASY: "Easy Run" };
+                      const cls = autoClassifyRunType({
+                        distanceKm: d.distance_m / 1000,
+                        durationSec: d.moving_time_s,
+                        splits: d.splits,
+                        thresholdSecsPerKm: getThresholdPace(profile),
+                      });
+                      pickedType = f => labelMap[cls] || f.type;
+                    } else {
+                      const t = normaliseSportType(picked?.sport_type, picked?.type);
+                      pickedType = () => t;
+                    }
                     setLogForm(f=>({
                       ...f,
                       date: actDate,
                       distanceKm: (d.distance_m/1000).toFixed(2),
                       durationMin: Math.round(d.moving_time_s/60).toString(),
-                      type: labelMap[cls] || f.type,
+                      type: pickedType(f),
                     }));
                   }
                 } else clearStravaSelection();

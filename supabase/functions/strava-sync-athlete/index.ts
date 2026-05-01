@@ -51,7 +51,7 @@ async function getValidToken(supabase: any, email: string): Promise<string> {
   return refreshed.access_token;
 }
 
-async function fetchAllStravaRuns(accessToken: string, afterEpoch: number) {
+async function fetchAllStravaActivities(accessToken: string, afterEpoch: number) {
   const all: any[] = [];
   for (let page = 1; page <= 10; page++) {
     const url = `https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=${STRAVA_PAGE_SIZE}&page=${page}`;
@@ -62,7 +62,22 @@ async function fetchAllStravaRuns(accessToken: string, afterEpoch: number) {
     all.push(...batch);
     if (batch.length < STRAVA_PAGE_SIZE) break;
   }
-  return all.filter(a => a.sport_type === "Run" || a.type === "Run");
+  return all;
+}
+
+function normaliseSportType(sportType?: string, fallbackType?: string): string {
+  const s = String(sportType || fallbackType || "").toLowerCase();
+  if (s === "run" || s === "trailrun" || s === "virtualrun") return "Run";
+  if (s === "ride" || s === "virtualride" || s === "ebikeride" || s === "mountainbikeride" || s === "gravelride" || s === "handcycle" || s === "velomobile") return "Ride";
+  if (s === "swim") return "Swim";
+  if (s === "walk") return "Walk";
+  if (s === "hike") return "Hike";
+  if (s === "weighttraining") return "Strength";
+  if (s === "workout" || s === "crossfit" || s === "hiit") return "Workout";
+  if (s === "yoga" || s === "pilates") return "Mobility";
+  if (s === "rowing" || s === "virtualrow") return "Row";
+  if (!sportType) return "Other";
+  return sportType.charAt(0).toUpperCase() + sportType.slice(1);
 }
 
 serve(async (req) => {
@@ -88,7 +103,7 @@ serve(async (req) => {
     const targetEmail = String(athleteEmail).toLowerCase();
     const accessToken = await getValidToken(supabase, targetEmail);
     const afterEpoch = Math.floor(Date.now() / 1000) - daysBack * 24 * 60 * 60;
-    const runs = await fetchAllStravaRuns(accessToken, afterEpoch);
+    const stravaActs = await fetchAllStravaActivities(accessToken, afterEpoch);
 
     // Look up athlete name + already-synced strava IDs
     const { data: profileRow } = await supabase
@@ -97,41 +112,39 @@ serve(async (req) => {
 
     const { data: existing } = await supabase
       .from("activities")
-      .select("strava_data, activity_date, distance_km")
+      .select("strava_data, activity_date, activity_type, distance_km")
       .eq("athlete_email", targetEmail);
     const existingIds = new Set(
       (existing || []).map((r: any) => r.strava_data?.id).filter(Boolean),
     );
-    // Also dedupe by date + similar distance so manually-logged runs don't
-    // get a duplicate auto-sync row when the athlete didn't tag strava_data.
-    const matchesExistingByDateAndDist = (date: string, distKm: number) =>
+    // Dedupe by (date, type, distance) so a manually-logged activity that
+    // wasn't tagged with strava_data still suppresses an auto-sync row, but
+    // a 5km run + 5km bike on the same day stay separate.
+    const matchesExistingByDateAndDist = (date: string, type: string, distKm: number) =>
       (existing || []).some((r: any) => {
         if (r.activity_date !== date) return false;
+        if ((r.activity_type || "Run") !== type) return false;
         const ad = parseFloat(r.distance_km);
         if (!ad) return false;
         return Math.abs(ad - distKm) / Math.max(ad, distKm) < 0.1;
       });
 
-    const rows = runs
-      .filter(a => {
-        if (existingIds.has(a.id)) return false;
-        const date = a.start_date_local?.split("T")[0];
-        const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
-        if (date && distKm && matchesExistingByDateAndDist(date, distKm)) return false;
-        return true;
-      })
-      .map(a => {
+    const rows = stravaActs
+      .map((a: any) => {
+        if (existingIds.has(a.id)) return null;
         const date = a.start_date_local?.split("T")[0];
         const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
         const durSec = a.moving_time || null;
-        if (!date || !distKm || !durSec) return null;
+        if (!date || !durSec) return null;
+        const activityType = normaliseSportType(a.sport_type, a.type);
+        if (date && distKm && matchesExistingByDateAndDist(date, activityType, distKm)) return null;
         return {
           athlete_email: targetEmail,
           athlete_name: athleteName,
           activity_date: date,
           distance_km: distKm,
           duration_seconds: durSec,
-          activity_type: "Run",
+          activity_type: activityType,
           source: "strava-auto",
           strava_data: {
             id: a.id, name: a.name,
@@ -162,8 +175,8 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       athleteEmail: targetEmail,
-      fetched: runs.length,
-      alreadySynced: runs.length - rows.length,
+      fetched: stravaActs.length,
+      alreadySynced: stravaActs.length - rows.length,
       inserted,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
