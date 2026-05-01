@@ -13,7 +13,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss } from "./lib/load.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
@@ -2662,12 +2662,13 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   //  PROFILE EDITOR — shared renderer for athlete-self and coach-edit-on-behalf
   // ────────────────────────────────────────────────────────────
-  const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight, tabBar = null, statsBlock = null, settingsBlock = null }) => (
+  const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight, tabBar = null, statsBlock = null, settingsBlock = null, predictorBlock = null }) => (
     <div style={S.page}>
       <div style={S.grain}/>
       <Header title={title} subtitle={subtitle} onBack={onBack} right={headerRight} />
       <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 96px" }}>
         {statsBlock}
+        {predictorBlock}
         <ProfileForm form={profileForm} setForm={setProfileForm} email={email} />
         {profileStatus && (
           <div style={{ marginBottom: 12, padding: "10px 12px", fontSize: 13, borderRadius: 2,
@@ -2689,11 +2690,48 @@ export default function App() {
 
   if (role === "coach" && coachScreen === "profile" && dashAthlete) {
     const ap = athletePrograms[dashAthlete] || {};
+    // Live race forecast from whatever PBs the coach has typed in.
+    const coachRaceForecast = (() => {
+      const predicted = predictRaces(profileForm.pbs);
+      const keys = ["5k", "10k", "half_marathon", "full_marathon"];
+      const labels = { "5k": "5K", "10k": "10K", "half_marathon": "Half Marathon", "full_marathon": "Marathon" };
+      if (!keys.some(k => predicted[k])) return null;
+      return (
+        <div style={{ marginBottom:24, padding:"14px 0", borderTop:`1px solid ${C.rule}`, borderBottom:`1px solid ${C.rule}` }}>
+          <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:8 }}>
+            <Eyebrow>Race forecast</Eyebrow>
+            <span className="t-mono" style={{ fontSize:9, color:C.mute, letterSpacing:"0.12em" }}>RIEGEL</span>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8 }}>
+            {keys.map(k => {
+              const r = predicted[k];
+              if (!r) return null;
+              const withHours = (k === "half_marathon" || k === "full_marathon") || r.seconds >= 3600;
+              return (
+                <div key={k} style={{
+                  padding:"10px 12px",
+                  background: r.isActual ? C.accent + "14" : C.bg,
+                  border:`1px solid ${r.isActual ? C.accent + "55" : C.rule}`, borderRadius:2,
+                }}>
+                  <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:3 }}>
+                    {labels[k]} · {r.isActual ? "PB" : "PREDICTED"}
+                  </div>
+                  <div style={{ fontFamily:"var(--f-mono)", fontSize:18, fontWeight:600, color: r.isActual ? C.accent : C.ink }}>
+                    {secondsToTimeStr(r.seconds, withHours)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    })();
     return renderProfileScreen({
       title: `Edit ${ap.name || prettyEmailName(dashAthlete)}`,
       subtitle: dashAthlete,
       email: dashAthlete,
       onBack: () => setCoachScreen("athlete"),
+      predictorBlock: coachRaceForecast,
     });
   }
 
@@ -2763,10 +2801,64 @@ export default function App() {
             const today = new Date();
             const from = new Date(today); from.setDate(today.getDate() - 180);
             const fmt = ymd;
+            // Forecast: project the athlete's CTL/ATL through their next
+            // 14 days of planned sessions so the coach sees TSB trajectory.
+            const dense = densifyDailyRtss(dailyRtss, fmt(from), fmt(today));
+            const pmc = computePMC(dense);
+            const tail = pmc[pmc.length - 1];
+            const todayStrLocal = todayStr();
+            const futurePlanned = new Map();
+            for (const w of (da.weeks || [])) {
+              for (const s of (w.sessions || [])) {
+                const d = sessionDateStr(w.weekStart, s.day);
+                if (!d || d <= todayStrLocal) continue;
+                const r = plannedSessionRtss(s, da) || 0;
+                futurePlanned.set(d, (futurePlanned.get(d) || 0) + r);
+              }
+            }
+            const futureSeries = [];
+            for (let i = 1; i <= 14; i++) {
+              const d = new Date(today); d.setDate(today.getDate() + i);
+              const ds = ymd(d);
+              futureSeries.push({ date: ds, rtss: futurePlanned.get(ds) || 0 });
+            }
+            const forecast = tail ? forecastPMC({ ctl: tail.ctl, atl: tail.atl }, futureSeries) : [];
+            const f7  = forecast[6]  || null;
+            const f14 = forecast[13] || null;
             return (
               <div style={{ ...S.card, marginBottom:20 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
                 <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(today)} height={220} displayDays={90}/>
+                {tail && (f7 || f14) && (
+                  <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${C.rule}` }}>
+                    <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6 }}>
+                      <Eyebrow>If they do the plan</Eyebrow>
+                      <span className="t-mono" style={{ fontSize:9, color:C.mute, letterSpacing:"0.12em" }}>FORECAST</span>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      {[{ d: f7, label:"In 7 days" }, { d: f14, label:"In 14 days" }].map(({ d, label }) => {
+                        if (!d) return null;
+                        const tsbColor = d.tsb >= 5 ? C.cool : d.tsb < -20 ? C.hot : d.tsb < 0 ? C.warn : C.ink;
+                        return (
+                          <div key={label} style={{ padding:"10px 12px", background:C.bg, border:`1px solid ${C.rule}`, borderRadius:2 }}>
+                            <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:3 }}>{label}</div>
+                            <div style={{ display:"flex", gap:14, alignItems:"baseline" }}>
+                              <div>
+                                <span style={{ fontFamily:"var(--f-mono)", fontSize:16, fontWeight:600, color:tsbColor }}>
+                                  {d.tsb >= 0 ? "+" : ""}{d.tsb.toFixed(0)}
+                                </span>
+                                <span style={{ fontSize:10, color:C.mute, marginLeft:4 }}>TSB</span>
+                              </div>
+                              <div style={{ fontSize:11, color:C.mute }}>
+                                CTL {d.ctl.toFixed(0)} · ATL {d.atl.toFixed(0)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -4121,6 +4213,57 @@ export default function App() {
       </div>
     );
 
+    // Race predictor — derive 5K/10K/HM/Marathon equivalents from the
+    // athlete's PBs using Riegel. Uses profileForm.pbs as the live source so
+    // it updates as the athlete types new times in.
+    const RaceForecast = (() => {
+      const predicted = predictRaces(profileForm.pbs);
+      const keys = ["5k", "10k", "half_marathon", "full_marathon"];
+      const labels = { "5k": "5K", "10k": "10K", "half_marathon": "Half Marathon", "full_marathon": "Marathon" };
+      const hasAny = keys.some(k => predicted[k]);
+      if (!hasAny) {
+        return (
+          <div style={{ marginBottom:24, padding:"14px 0", borderTop:`1px solid ${C.rule}`, borderBottom:`1px solid ${C.rule}` }}>
+            <Eyebrow>Race forecast</Eyebrow>
+            <div style={{ marginTop:8, fontSize:13, color:C.mute, fontStyle:"italic", fontFamily:S.displayFont }}>
+              Add at least one PB below to see your equivalent times across distances.
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div style={{ marginBottom:24, padding:"14px 0", borderTop:`1px solid ${C.rule}`, borderBottom:`1px solid ${C.rule}` }}>
+          <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:8 }}>
+            <Eyebrow>Race forecast</Eyebrow>
+            <span className="t-mono" style={{ fontSize:9, color:C.mute, letterSpacing:"0.12em" }}>RIEGEL</span>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8 }}>
+            {keys.map(k => {
+              const r = predicted[k];
+              if (!r) return null;
+              const withHours = (k === "half_marathon" || k === "full_marathon") || r.seconds >= 3600;
+              const time = secondsToTimeStr(r.seconds, withHours);
+              return (
+                <div key={k} style={{
+                  padding:"10px 12px",
+                  background: r.isActual ? C.accent + "14" : C.bg,
+                  border:`1px solid ${r.isActual ? C.accent + "55" : C.rule}`,
+                  borderRadius:2,
+                }}>
+                  <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:3 }}>
+                    {labels[k]} · {r.isActual ? "PB" : "PREDICTED"}
+                  </div>
+                  <div style={{ fontFamily:"var(--f-mono)", fontSize:18, fontWeight:600, color: r.isActual ? C.accent : C.ink }}>
+                    {time}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    })();
+
     return renderProfileScreen({
       title: "My Profile",
       subtitle: "Edit your details",
@@ -4128,6 +4271,7 @@ export default function App() {
       onBack: () => setScreen("today"),
       headerRight: <button onClick={signOut} style={S.signOutBtn}>Sign out</button>,
       statsBlock: StatTrio,
+      predictorBlock: RaceForecast,
       settingsBlock: SettingsBlock,
       tabBar: <MobileTabBar current="profile" isDesktop={isDesktop} onTab={(s) => setScreen(s)} onTapLog={handleTapLog}/>,
     });
@@ -5532,10 +5676,69 @@ export default function App() {
             const t = new Date();
             const from = new Date(t); from.setDate(t.getDate() - 180);
             const fmt = ymd;
+
+            // Forecast: project CTL/ATL/TSB forward through the next 14 days
+            // of planned sessions so the athlete sees what TSB will be if
+            // they execute the plan as written.
+            const dense = densifyDailyRtss(dailyRtss, fmt(from), fmt(t));
+            const pmc = computePMC(dense);
+            const tail = pmc[pmc.length - 1];
+            const futureDays = 14;
+            const todayStrLocal = todayStr();
+            // Build a date → planned rTSS map across all weeks ahead.
+            const futurePlanned = new Map();
+            for (const w of weeks) {
+              for (const s of w.sessions) {
+                const d = sessionDateStr(w.weekStart, s.day);
+                if (!d || d <= todayStrLocal) continue;
+                const r = plannedSessionRtss(s, profile) || 0;
+                futurePlanned.set(d, (futurePlanned.get(d) || 0) + r);
+              }
+            }
+            const futureSeries = [];
+            for (let i = 1; i <= futureDays; i++) {
+              const d = new Date(t); d.setDate(t.getDate() + i);
+              const ds = ymd(d);
+              futureSeries.push({ date: ds, rtss: futurePlanned.get(ds) || 0 });
+            }
+            const forecast = tail ? forecastPMC({ ctl: tail.ctl, atl: tail.atl }, futureSeries) : [];
+            const f7  = forecast[6]  || null;
+            const f14 = forecast[13] || null;
+
             return (
               <div style={{ ...S.card, marginTop:18 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
                 <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(t)} height={200} displayDays={90}/>
+                {tail && (f7 || f14) && (
+                  <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${C.rule}` }}>
+                    <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6 }}>
+                      <Eyebrow>If you do the plan</Eyebrow>
+                      <span className="t-mono" style={{ fontSize:9, color:C.mute, letterSpacing:"0.12em" }}>FORECAST</span>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      {[{ d: f7, label:"In 7 days" }, { d: f14, label:"In 14 days" }].map(({ d, label }) => {
+                        if (!d) return null;
+                        const tsbColor = d.tsb >= 5 ? C.cool : d.tsb < -20 ? C.hot : d.tsb < 0 ? C.warn : C.ink;
+                        return (
+                          <div key={label} style={{ padding:"10px 12px", background:C.bg, border:`1px solid ${C.rule}`, borderRadius:2 }}>
+                            <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:3 }}>{label}</div>
+                            <div style={{ display:"flex", gap:14, alignItems:"baseline" }}>
+                              <div>
+                                <span style={{ fontFamily:"var(--f-mono)", fontSize:16, fontWeight:600, color:tsbColor }}>
+                                  {d.tsb >= 0 ? "+" : ""}{d.tsb.toFixed(0)}
+                                </span>
+                                <span style={{ fontSize:10, color:C.mute, marginLeft:4 }}>TSB</span>
+                              </div>
+                              <div style={{ fontSize:11, color:C.mute }}>
+                                CTL {d.ctl.toFixed(0)} · ATL {d.atl.toFixed(0)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
