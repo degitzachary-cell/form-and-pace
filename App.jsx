@@ -401,6 +401,7 @@ export default function App() {
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
   const [templateSearch, setTemplateSearch] = useState("");
   const [templateTab, setTemplateTab] = useState("library");
+  const [atpAthlete, setAtpAthlete] = useState(null);
   const [stravaBackfillState, setStravaBackfillState] = useState(null); // { running, done, total, msg }
   const [templateTypeFilter, setTemplateTypeFilter] = useState("all");
 
@@ -1859,6 +1860,7 @@ export default function App() {
               else if (k === "plans")        setCoachScreen("plan-builder");
               else if (k === "library")      setCoachScreen("templates");
               else if (k === "compliance")   setCoachScreen("compliance");
+              else if (k === "atp")          setCoachScreen("atp");
             }}
             onSignOut={signOut}
             onSettings={() => alert("Coach settings — coming soon.")}
@@ -2263,6 +2265,7 @@ export default function App() {
               else if (k === "plans")        setCoachScreen("plan-builder");
               else if (k === "library")      setCoachScreen("templates");
               else if (k === "compliance")   setCoachScreen("compliance");
+              else if (k === "atp")          setCoachScreen("atp");
             }}
             onSignOut={signOut}
             onSettings={() => alert("Coach settings — coming soon.")}
@@ -2599,6 +2602,259 @@ export default function App() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── COACH → ANNUAL TRAINING PLAN ─────────────────────────────────
+  // Race-anchored season view: per-athlete, paints planned weekly TSS bars
+  // against a projected CTL ramp through the next 26 weeks. Phase bands
+  // (base/build/peak/taper) derived from weeks-to-next-A-race.
+  if (role === "coach" && coachScreen === "atp") {
+    const sortedAthletes = Object.entries(athletePrograms)
+      .map(([email, ap]) => ({ email, name: ap.name || prettyEmailName(email), data: ap }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const target = atpAthlete && athletePrograms[atpAthlete] ? atpAthlete : sortedAthletes[0]?.email;
+    const ap = target ? athletePrograms[target] : null;
+    const todayD = new Date(); todayD.setHours(0,0,0,0);
+
+    // Find the next A-race (or any race) marker for this athlete.
+    const myMarkers = target ? (markersByEmail[target?.toLowerCase()] || []) : [];
+    const upcomingRaces = myMarkers
+      .filter(m => m.kind === "race" && m.marker_date >= todayStr())
+      .sort((a, b) => a.marker_date.localeCompare(b.marker_date));
+    const aRace = upcomingRaces.find(m => m.is_a_race) || upcomingRaces[0];
+    const raceDate = aRace?.marker_date || null;
+
+    // Build 26-week timeline from this Monday.
+    const dow = todayD.getDay(); const off = dow === 0 ? -6 : 1 - dow;
+    const monday0 = new Date(todayD); monday0.setDate(todayD.getDate() + off);
+    const N_WEEKS = 26;
+    const weeksOut = [];
+    for (let i = 0; i < N_WEEKS; i++) {
+      const wkStart = new Date(monday0); wkStart.setDate(monday0.getDate() + i * 7);
+      const wkEnd = new Date(wkStart); wkEnd.setDate(wkStart.getDate() + 6);
+      weeksOut.push({ idx: i, weekStart: ymd(wkStart), weekEnd: ymd(wkEnd) });
+    }
+
+    // Compute current CTL/ATL from existing PMC.
+    const daActs = target ? (activitiesByEmail.get(target?.toLowerCase()) || []) : [];
+    const dailyR = dailyRtssFromActivities(daActs, ap || {});
+    const fromBack = new Date(todayD); fromBack.setDate(todayD.getDate() - 180);
+    const dense = densifyDailyRtss(dailyR, ymd(fromBack), ymd(todayD));
+    const pmc = computePMC(dense);
+    const tail = pmc[pmc.length - 1] || { ctl: 0, atl: 0 };
+
+    // Sum each week's planned rTSS from the athlete's plan + project forward.
+    const plannedByDate = new Map();
+    for (const w of (ap?.weeks || [])) {
+      for (const s of (w.sessions || [])) {
+        const d = sessionDateStr(w.weekStart, s.day);
+        if (!d) continue;
+        const r = plannedSessionRtss(s, ap || {}) || 0;
+        plannedByDate.set(d, (plannedByDate.get(d) || 0) + r);
+      }
+    }
+    const futureSeries = [];
+    for (let i = 0; i < N_WEEKS * 7; i++) {
+      const d = new Date(monday0); d.setDate(monday0.getDate() + i);
+      const ds = ymd(d);
+      futureSeries.push({ date: ds, rtss: plannedByDate.get(ds) || 0 });
+    }
+    const forecast = forecastPMC({ ctl: tail.ctl, atl: tail.atl }, futureSeries);
+
+    // Aggregate into per-week bars: planned km + planned TSS + end-of-week CTL.
+    const bars = weeksOut.map((w, wi) => {
+      let weekRtss = 0, weekKm = 0;
+      const weekData = (ap?.weeks || []).find(x => x.weekStart === w.weekStart);
+      if (weekData) {
+        for (const s of (weekData.sessions || [])) {
+          const r = plannedSessionRtss(s, ap || {}) || 0;
+          weekRtss += r;
+          // Approximate km from session top-level or from steps.
+          let km = s.distance_km || 0;
+          if (!km && Array.isArray(s.steps) && s.steps.length) {
+            const agg = aggregateSteps(s.steps);
+            km = agg.distance_km || 0;
+          }
+          weekKm += km;
+        }
+      }
+      const endIdx = (wi + 1) * 7 - 1;
+      const ctl = forecast[endIdx]?.ctl ?? tail.ctl;
+      return { ...w, rtss: weekRtss, km: weekKm, ctl };
+    });
+
+    // Periodisation phases. If a race is set, derive base/build/peak/taper
+    // from weeks-to-race; otherwise show "Base" everywhere.
+    const phaseFor = (weekStart) => {
+      if (!raceDate) return "BASE";
+      const d = new Date(weekStart + "T00:00:00");
+      const r = new Date(raceDate + "T00:00:00");
+      const weeksToRace = Math.round((r - d) / (7 * 86400000));
+      if (weeksToRace < 0) return "POST";
+      if (weeksToRace <= 2) return "TAPER";
+      if (weeksToRace <= 5) return "PEAK";
+      if (weeksToRace <= 12) return "BUILD";
+      return "BASE";
+    };
+    const PHASE_COLOR = { BASE: C.cool, BUILD: C.warn, PEAK: C.crimson, TAPER: C.accent, POST: C.mute };
+    const maxRtss = Math.max(40, ...bars.map(b => b.rtss));
+    const maxCtl = Math.max(40, ...bars.map(b => b.ctl));
+
+    return (
+      <div style={S.page}>
+        <div style={S.grain}/>
+        <Header title="Season View" subtitle={`Next ${N_WEEKS} weeks`} onBack={() => setCoachScreen("dashboard")} />
+        <div style={{ maxWidth: isDesktop ? 1100 : 540, margin:"0 auto", padding:"24px 16px 80px" }}>
+          {sortedAthletes.length === 0 ? (
+            <div style={{ color:C.mute, fontSize:14, fontStyle:"italic", textAlign:"center", padding:"48px 0" }}>No athletes on roster.</div>
+          ) : (
+            <>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:18, flexWrap:"wrap" }}>
+                <div>
+                  <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>ATHLETE</div>
+                  <select value={target || ""} onChange={e => setAtpAthlete(e.target.value)}
+                    style={{ ...S.input, padding:"8px 10px", fontSize:14 }}>
+                    {sortedAthletes.map(a => <option key={a.email} value={a.email}>{a.name}</option>)}
+                  </select>
+                </div>
+                {aRace && (
+                  <div style={{ flex:1, minWidth:200, padding:"8px 12px", background:C.bg, border:`1px solid ${C.rule}`, borderLeft:`3px solid ${aRace.is_a_race ? C.crimson : C.accent}`, borderRadius:2 }}>
+                    <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:2 }}>
+                      {aRace.is_a_race ? "A-RACE" : "NEXT RACE"} · {aRace.marker_date}
+                    </div>
+                    <div style={{ fontSize:14, fontWeight:600, color:C.ink, fontFamily:S.displayFont }}>{aRace.label || "Race"}</div>
+                  </div>
+                )}
+                {!aRace && (
+                  <div style={{ flex:1, fontSize:12, color:C.mute, fontStyle:"italic" }}>
+                    No upcoming races. Add one from the calendar to see periodisation phases.
+                  </div>
+                )}
+              </div>
+
+              {/* Phase legend */}
+              <div style={{ display:"flex", gap:14, fontSize:10, color:C.mute, fontFamily:"var(--f-mono)", letterSpacing:"0.12em", marginBottom:12, flexWrap:"wrap" }}>
+                {Object.entries(PHASE_COLOR).filter(([k]) => k !== "POST").map(([k, v]) => (
+                  <span key={k}>
+                    <span style={{ display:"inline-block", width:10, height:10, background:v, opacity:0.5, marginRight:5, verticalAlign:"middle" }}/>
+                    {k}
+                  </span>
+                ))}
+                <span style={{ marginLeft:"auto" }}>
+                  <span style={{ display:"inline-block", width:14, height:2, background:C.accent, marginRight:5, verticalAlign:"middle" }}/>FITNESS PROJECTION
+                </span>
+              </div>
+
+              {/* Chart */}
+              {(() => {
+                const VB_W = 1100, VB_H = 280;
+                const PAD_L = 36, PAD_R = 12, PAD_T = 16, PAD_B = 50;
+                const innerW = VB_W - PAD_L - PAD_R;
+                const innerH = VB_H - PAD_T - PAD_B;
+                const barW = innerW / bars.length;
+                const yRtss = (v) => PAD_T + innerH - (v / maxRtss) * innerH;
+                const yCtl  = (v) => PAD_T + innerH - (v / maxCtl) * innerH;
+                const x = (i) => PAD_L + i * barW + barW / 2;
+                const ctlPath = bars.map((b, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yCtl(b.ctl).toFixed(1)}`).join(" ");
+                return (
+                  <div style={{ ...S.card, padding:"16px 12px", overflowX:"auto" }}>
+                    <svg viewBox={`0 0 ${VB_W} ${VB_H}`} preserveAspectRatio="none" style={{ width:"100%", height:"auto", display:"block" }}>
+                      {/* y-axis */}
+                      {[0, 0.5, 1].map(t => {
+                        const v = Math.round(maxRtss * t);
+                        return (
+                          <g key={t}>
+                            <line x1={PAD_L} y1={yRtss(v)} x2={VB_W - PAD_R} y2={yRtss(v)} stroke="var(--c-ruleSoft)" strokeWidth="0.4" strokeDasharray="2 3"/>
+                            <text x={PAD_L - 5} y={yRtss(v) + 3} textAnchor="end" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">{v}</text>
+                          </g>
+                        );
+                      })}
+
+                      {/* Phase bands */}
+                      {bars.map((b, i) => {
+                        const ph = phaseFor(b.weekStart);
+                        return (
+                          <rect key={`p${i}`} x={PAD_L + i * barW} y={PAD_T} width={barW} height={innerH}
+                            fill={PHASE_COLOR[ph]} fillOpacity="0.06"/>
+                        );
+                      })}
+
+                      {/* Race vertical line */}
+                      {raceDate && (() => {
+                        const idx = bars.findIndex(b => b.weekStart <= raceDate && raceDate <= b.weekEnd);
+                        if (idx < 0) return null;
+                        return (
+                          <g>
+                            <line x1={x(idx)} y1={PAD_T} x2={x(idx)} y2={PAD_T + innerH} stroke={C.crimson} strokeWidth="1.2" strokeDasharray="3 2"/>
+                            <text x={x(idx)} y={PAD_T - 4} textAnchor="middle" fontSize="9" fill={C.crimson} fontFamily="var(--f-mono)" fontWeight="700">RACE</text>
+                          </g>
+                        );
+                      })()}
+
+                      {/* Weekly TSS bars */}
+                      {bars.map((b, i) => {
+                        const ph = phaseFor(b.weekStart);
+                        const h = b.rtss > 0 ? Math.max(2, (b.rtss / maxRtss) * innerH) : 0;
+                        return (
+                          <g key={`b${i}`}>
+                            {h > 0 && (
+                              <rect x={PAD_L + i * barW + 2} y={yRtss(b.rtss)} width={Math.max(2, barW - 4)} height={h}
+                                fill={PHASE_COLOR[ph]} fillOpacity="0.45"/>
+                            )}
+                          </g>
+                        );
+                      })}
+
+                      {/* CTL projection line */}
+                      <path d={ctlPath} fill="none" stroke="var(--c-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+
+                      {/* week-of date labels every 4 weeks */}
+                      {bars.map((b, i) => {
+                        if (i % 4 !== 0 && i !== bars.length - 1) return null;
+                        return (
+                          <text key={`d${i}`} x={x(i)} y={VB_H - 32} textAnchor="middle" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">
+                            {b.weekStart.slice(5)}
+                          </text>
+                        );
+                      })}
+
+                      {/* phase labels every 4 weeks */}
+                      {bars.map((b, i) => {
+                        if (i % 4 !== 0) return null;
+                        const ph = phaseFor(b.weekStart);
+                        return (
+                          <text key={`ph${i}`} x={x(i)} y={VB_H - 16} textAnchor="middle" fontSize="9" fill={PHASE_COLOR[ph]} fontFamily="var(--f-mono)" fontWeight="700" letterSpacing="1">
+                            {ph}
+                          </text>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                );
+              })()}
+
+              {/* Summary stats */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:18 }}>
+                {[
+                  { label:"Current fitness (CTL)", val: tail.ctl.toFixed(0), color: C.accent },
+                  { label:"Race fitness", val: raceDate ? (forecast.find(f => f.date >= raceDate)?.ctl ?? tail.ctl).toFixed(0) : "—", color: C.crimson },
+                  { label:"Peak weekly TSS", val: Math.max(...bars.map(b => b.rtss)).toFixed(0), color: C.warn },
+                ].map(s => (
+                  <div key={s.label} style={{ ...S.card, padding:"12px 14px", borderLeft:`3px solid ${s.color}` }}>
+                    <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:4 }}>{s.label.toUpperCase()}</div>
+                    <div style={{ fontFamily:"var(--f-mono)", fontSize:22, fontWeight:600, color:s.color }}>{s.val}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop:18, fontSize:11, color:C.mute, fontStyle:"italic", fontFamily:S.displayFont }}>
+                Bars show planned weekly rTSS. The accent line projects fitness (CTL) forward assuming the planned sessions are completed. Phase bands estimate periodisation from weeks-to-race: BASE → BUILD → PEAK → TAPER.
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
