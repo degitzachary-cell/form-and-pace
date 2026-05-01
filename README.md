@@ -1,6 +1,6 @@
 # Form & Pace
 
-An AI-powered run coaching platform. Athletes log session feedback and wellness data, coaches build plans and reply, and the app tracks training load, compliance, and performance over time.
+A run coaching platform. Athletes log session feedback and wellness data, coaches build plans and reply, and the app tracks training load, compliance, and performance over time.
 
 ---
 
