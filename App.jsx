@@ -193,12 +193,14 @@ function CoachDraggableSession({ session, children }) {
         transition: isDragging ? "none" : "transform 120ms ease",
         position: "relative",
       }}>
-      {/* drag handle — grip dots in top-right corner; only this triggers drag */}
+      {/* drag handle — grip dots in bottom-right corner so they don't collide
+          with the status badge ("Done" / "Missed") that sits at top-right of
+          the card content. Only this element activates drag. */}
       <div
         ref={setActivatorNodeRef}
         {...listeners}
         style={{
-          position: "absolute", top: 6, right: 6,
+          position: "absolute", bottom: 6, right: 6,
           display: "flex", flexDirection: "column", gap: 3,
           padding: "6px", cursor: "grab", touchAction: "none", zIndex: 2, opacity: 0.4,
         }}>
