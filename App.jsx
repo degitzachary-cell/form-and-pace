@@ -3435,6 +3435,27 @@ export default function App() {
               </ol>
             )}
 
+            {/* Exercises list — strength sessions */}
+            {Array.isArray(activeSession.exercises) && activeSession.exercises.length > 0 && (
+              <div style={{ marginBottom:12 }}>
+                {activeSession.exercises.map((ex, i) => (
+                  <div key={i} style={{ borderLeft:`2px solid ${C.rule}`, paddingLeft:14, marginLeft:8, marginBottom:10 }}>
+                    <div style={{ fontFamily:S.displayFont, fontSize:15, color:C.ink, fontWeight:600, marginBottom:2 }}>{ex.name || "—"}</div>
+                    <div style={{ fontSize:12, color:C.mid, fontFamily:"var(--f-mono)" }}>
+                      {[ex.sets ? `${ex.sets} sets` : null, ex.reps ? `${ex.reps} reps` : null, ex.load].filter(Boolean).join(" · ")}
+                    </div>
+                    {ex.note && (
+                      <div style={{ fontSize:11, color:C.mute, fontStyle:"italic", marginTop:2 }}>
+                        {ex.note.match(/^https?:/i)
+                          ? <a href={ex.note} target="_blank" rel="noopener" style={{ color:C.accent }}>{ex.note}</a>
+                          : ex.note}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Coach notes — only render if present */}
             {activeSession.desc && String(activeSession.desc).trim() && (
               <div style={{ marginBottom:12 }}>
@@ -3723,7 +3744,7 @@ export default function App() {
               dayLabel: activeSession.day?.slice(0, 3),
               sessionId: activeSession.id,
               athleteEmail: activeSession.athleteEmail || dashAthlete,
-              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain, rpe_target: activeSession.rpe_target || "", steps: activeSession.steps || [], duration_min: activeSession.duration_min || "" },
+              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain, rpe_target: activeSession.rpe_target || "", steps: activeSession.steps || [], exercises: activeSession.exercises || [], duration_min: activeSession.duration_min || "" },
             });
             setCoachScreen("edit-workout");
           }} style={{ ...S.ghostBtn, marginTop:16 }}>Edit prescribed workout</button>
@@ -3998,13 +4019,15 @@ export default function App() {
     const dayDate = sessionDateStr(ew.weekStart, ew.dayLabel);
     const dayDisplay = dayDate ? `${ew.dayLabel} ${parseInt(dayDate.slice(8), 10)}` : ew.dayLabel;
     const setField = (k, v) => setEditingWorkout(prev => ({ ...prev, prefill: { ...(prev.prefill || {}), [k]: v } }));
-    const TYPES = ["EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX", "RACE DAY", "REST"];
+    const TYPES = ["EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX", "STRENGTH", "RACE DAY", "REST"];
+    const isStrengthType = (f.type || "").toUpperCase() === "STRENGTH";
     const tagFor = (t) => t === "SPEED" ? "speed" : t === "TEMPO" ? "tempo" : "easy";
     // A valid workout needs a type plus at least ONE of: coach notes,
-    // structured steps, a pace target, or a duration.
+    // structured steps, exercises (strength), a pace target, or a duration.
     const canSave = !!(f.type || "EASY") && (
       ((f.desc || "").trim().length > 0) ||
       (Array.isArray(f.steps) && f.steps.length > 0) ||
+      (Array.isArray(f.exercises) && f.exercises.length > 0) ||
       ((f.pace || "").trim().length > 0) ||
       !!(f.duration_min)
     );
@@ -4156,12 +4179,79 @@ export default function App() {
             <input type="text" value={f.terrain || ""} onChange={e => setField("terrain", e.target.value)} placeholder="e.g. FLAT/ROAD" style={S.input}/>
           </div>
 
+          {/* Strength editor — only when type === STRENGTH. Lives on
+              session.exercises[]; the steps[] / pace fields are unused. */}
+          {isStrengthType && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:8 }}>Exercises</div>
+              {(f.exercises || []).map((ex, i) => (
+                <div key={i} style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"10px 12px", marginBottom:8 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:8, marginBottom:8 }}>
+                    <input value={ex.name || ""} placeholder="Exercise name (e.g. Back squat)"
+                      onChange={e => {
+                        const next = [...(f.exercises || [])];
+                        next[i] = { ...next[i], name: e.target.value };
+                        setField("exercises", next);
+                      }}
+                      style={{ ...S.input, padding:"7px 10px", fontSize:14 }}/>
+                    <button onClick={() => setField("exercises", (f.exercises || []).filter((_, x) => x !== i))}
+                      style={{ background:"transparent", border:0, color:C.mute, fontSize:14, cursor:"pointer", padding:"0 8px" }}>×</button>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:8 }}>
+                    <div>
+                      <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:3 }}>SETS</div>
+                      <input type="number" min="0" max="20" value={ex.sets || ""}
+                        onChange={e => {
+                          const next = [...(f.exercises || [])];
+                          next[i] = { ...next[i], sets: e.target.value ? Number(e.target.value) : null };
+                          setField("exercises", next);
+                        }}
+                        style={{ ...S.input, padding:"6px 8px", fontSize:13 }}/>
+                    </div>
+                    <div>
+                      <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:3 }}>REPS</div>
+                      <input value={ex.reps || ""} placeholder="8-10"
+                        onChange={e => {
+                          const next = [...(f.exercises || [])];
+                          next[i] = { ...next[i], reps: e.target.value };
+                          setField("exercises", next);
+                        }}
+                        style={{ ...S.input, padding:"6px 8px", fontSize:13 }}/>
+                    </div>
+                    <div>
+                      <div className="t-mono" style={{ fontSize:9, letterSpacing:"0.14em", color:C.mute, marginBottom:3 }}>LOAD</div>
+                      <input value={ex.load || ""} placeholder="60kg / RPE 8 / BW"
+                        onChange={e => {
+                          const next = [...(f.exercises || [])];
+                          next[i] = { ...next[i], load: e.target.value };
+                          setField("exercises", next);
+                        }}
+                        style={{ ...S.input, padding:"6px 8px", fontSize:13 }}/>
+                    </div>
+                  </div>
+                  <input value={ex.note || ""} placeholder="Cue / tempo / video URL"
+                    onChange={e => {
+                      const next = [...(f.exercises || [])];
+                      next[i] = { ...next[i], note: e.target.value };
+                      setField("exercises", next);
+                    }}
+                    style={{ ...S.input, padding:"6px 10px", fontSize:13, marginBottom:0 }}/>
+                </div>
+              ))}
+              <button onClick={() => setField("exercises", [...(f.exercises || []), { name:"", sets:3, reps:"8-10", load:"", note:"" }])}
+                style={{ ...S.ghostBtn, padding:"10px", fontSize:11 }}>+ ADD EXERCISE</button>
+            </div>
+          )}
+
           {/* Section-based workout editor — Warm Up / Workout / Recovery /
-              Interval / Cool Down. Stored on session.steps[]. Optional. */}
-          <StepsEditor
-            session={{ steps: f.steps || [] }}
-            onChange={(nextSteps) => setField("steps", nextSteps)}
-          />
+              Interval / Cool Down. Stored on session.steps[]. Optional.
+              Hidden for strength sessions which use exercises[] instead. */}
+          {!isStrengthType && (
+            <StepsEditor
+              session={{ steps: f.steps || [] }}
+              onChange={(nextSteps) => setField("steps", nextSteps)}
+            />
+          )}
 
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Coach notes</div>
@@ -4181,6 +4271,7 @@ export default function App() {
               rpe_target: (f.rpe_target || "").toString().trim() || null,
               duration_min: f.duration_min ? Number(f.duration_min) : null,
               ...(Array.isArray(f.steps) && f.steps.length > 0 ? { steps: f.steps } : {}),
+              ...(Array.isArray(f.exercises) && f.exercises.length > 0 ? { exercises: f.exercises } : {}),
             };
             try {
               await saveWorkout(ew.athleteEmail, ew.weekStart, sessionData, ew.sessionId);
@@ -6078,6 +6169,25 @@ export default function App() {
                 </li>
               ))}
             </ol>
+          )}
+          {Array.isArray(activeSession.exercises) && activeSession.exercises.length > 0 && (
+            <div style={{ marginBottom:12 }}>
+              {activeSession.exercises.map((ex, i) => (
+                <div key={i} style={{ borderLeft:`2px solid ${C.rule}`, paddingLeft:14, marginLeft:8, marginBottom:10 }}>
+                  <div style={{ fontFamily:S.displayFont, fontSize:15, color:C.ink, fontWeight:600, marginBottom:2 }}>{ex.name || "—"}</div>
+                  <div style={{ fontSize:12, color:C.mid, fontFamily:"var(--f-mono)" }}>
+                    {[ex.sets ? `${ex.sets} sets` : null, ex.reps ? `${ex.reps} reps` : null, ex.load].filter(Boolean).join(" · ")}
+                  </div>
+                  {ex.note && (
+                    <div style={{ fontSize:11, color:C.mute, fontStyle:"italic", marginTop:2 }}>
+                      {ex.note.match(/^https?:/i)
+                        ? <a href={ex.note} target="_blank" rel="noopener" style={{ color:"var(--c-accent)" }}>Watch demo →</a>
+                        : ex.note}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
           {activeSession.desc && activeSession.desc.split("\n").filter(l => !/^\w{3} \w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2}/.test(l.trim())).map((l,i)=>(
             <div key={i} style={{ fontSize:14, color:i===0?C.navy:C.mid, lineHeight:1.9 }}>{l}</div>
