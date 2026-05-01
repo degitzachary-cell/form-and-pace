@@ -14,7 +14,8 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, expandZonePace } from "./lib/load.js";
+import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
@@ -399,6 +400,7 @@ export default function App() {
   const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
   const [templateSearch, setTemplateSearch] = useState("");
+  const [templateTab, setTemplateTab] = useState("library");
   const [stravaBackfillState, setStravaBackfillState] = useState(null); // { running, done, total, msg }
   const [templateTypeFilter, setTemplateTypeFilter] = useState("all");
 
@@ -2485,8 +2487,10 @@ export default function App() {
   }
 
   if (role === "coach" && coachScreen === "templates") {
-    const TEMPLATE_TYPES = ["all", "EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX"];
-    const filteredTemplates = workoutTemplates.filter(t => {
+    const TEMPLATE_TYPES = ["all", "EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX", "RACE", "REST"];
+    const onLibraryTab = templateTab === "library";
+    const sourceList = onLibraryTab ? WORKOUT_SEEDS : workoutTemplates;
+    const filteredTemplates = sourceList.filter(t => {
       const matchesType = templateTypeFilter === "all" || (t.type || "").toUpperCase() === templateTypeFilter;
       const q = templateSearch.toLowerCase();
       const matchesSearch = !q ||
@@ -2498,67 +2502,103 @@ export default function App() {
     return (
       <div style={S.page}>
         <div style={S.grain}/>
-        <Header title="Workout Templates" subtitle={`${workoutTemplates.length} saved`} onBack={() => setCoachScreen("dashboard")} />
+        <Header title="Workout Templates"
+          subtitle={onLibraryTab ? `Library · ${WORKOUT_SEEDS.length} canonical workouts` : `${workoutTemplates.length} saved`}
+          onBack={() => setCoachScreen("dashboard")} />
         <div style={{ maxWidth: isDesktop ? 800 : 520, margin:"0 auto", padding:"24px 16px 80px" }}>
-          {workoutTemplates.length === 0 ? (
+
+          {/* Library / My templates tabs */}
+          <div style={{ display:"flex", borderBottom:`1px solid ${C.rule}`, marginBottom:14 }}>
+            {[
+              { key:"library", label:"Library" },
+              { key:"mine",    label:`My templates (${workoutTemplates.length})` },
+            ].map(t => {
+              const active = (templateTab || "library") === t.key;
+              return (
+                <button key={t.key} onClick={() => setTemplateTab(t.key)}
+                  style={{
+                    flex:1, background:"transparent", border:0,
+                    padding:"10px 0",
+                    fontFamily:S.bodyFont, fontSize:12, letterSpacing:"0.14em", textTransform:"uppercase",
+                    color: active ? C.ink : C.mute,
+                    fontWeight: active ? 700 : 500,
+                    borderBottom: active ? `2px solid ${C.ink}` : "2px solid transparent",
+                    marginBottom:-1, cursor:"pointer",
+                  }}>{t.label}</button>
+              );
+            })}
+          </div>
+
+          {/* Search bar */}
+          <input
+            type="search" value={templateSearch} onChange={e => setTemplateSearch(e.target.value)}
+            placeholder={onLibraryTab ? "Search the library…" : "Search your templates…"}
+            style={{ ...S.input, width:"100%", marginBottom:10, boxSizing:"border-box" }}
+          />
+          {/* Type filter chips */}
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
+            {TEMPLATE_TYPES.map(tp => {
+              const sel = templateTypeFilter === tp;
+              const ts = tp === "all" ? null : typeStyle(tp);
+              return (
+                <button key={tp} type="button" onClick={() => setTemplateTypeFilter(tp)}
+                  style={{
+                    background: sel ? (ts?.accent || C.ink) : C.white,
+                    color: sel ? "#fffdf8" : ts?.accent || C.mid,
+                    border: `1px solid ${sel ? (ts?.accent || C.ink) : C.rule}`,
+                    borderRadius:2, padding:"5px 11px", fontSize:11, cursor:"pointer",
+                    fontWeight: sel ? 700 : 500, letterSpacing:"0.06em",
+                  }}>
+                  {tp === "all" ? "ALL" : tp}
+                </button>
+              );
+            })}
+          </div>
+
+          {!onLibraryTab && workoutTemplates.length === 0 ? (
             <div style={{ background:C.white, border:`1px dashed ${C.rule}`, borderRadius:2, padding:"32px", textAlign:"center" }}>
-              <div style={{ fontSize:16, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:6 }}>No templates yet.</div>
-              <div style={{ fontSize:12, color:C.mid, lineHeight:1.5 }}>When editing a workout, hit "Save as template" to reuse it on any athlete's plan.</div>
+              <div style={{ fontSize:16, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:6 }}>No saved templates yet.</div>
+              <div style={{ fontSize:12, color:C.mid, lineHeight:1.5 }}>Save library presets, or hit "Save as template" while editing a workout.</div>
             </div>
-          ) : (
-            <>
-              {/* Search bar */}
-              <input
-                type="search" value={templateSearch} onChange={e => setTemplateSearch(e.target.value)}
-                placeholder="Search templates…"
-                style={{ ...S.input, width:"100%", marginBottom:10, boxSizing:"border-box" }}
-              />
-              {/* Type filter chips */}
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
-                {TEMPLATE_TYPES.map(tp => {
-                  const sel = templateTypeFilter === tp;
-                  const ts = tp === "all" ? null : typeStyle(tp);
-                  return (
-                    <button key={tp} type="button" onClick={() => setTemplateTypeFilter(tp)}
-                      style={{
-                        background: sel ? (ts?.accent || C.ink) : C.white,
-                        color: sel ? "#fffdf8" : ts?.accent || C.mid,
-                        border: `1px solid ${sel ? (ts?.accent || C.ink) : C.rule}`,
-                        borderRadius:2, padding:"5px 11px", fontSize:11, cursor:"pointer",
-                        fontWeight: sel ? 700 : 500, letterSpacing:"0.06em",
-                      }}>
-                      {tp === "all" ? "ALL" : tp}
-                    </button>
-                  );
-                })}
-              </div>
-              {filteredTemplates.length === 0 ? (
-                <div style={{ color:C.mute, fontSize:13, fontStyle:"italic", fontFamily:S.displayFont, textAlign:"center", padding:"24px 0" }}>
-                  No templates match.
-                </div>
-              ) : filteredTemplates.map(t => (
-                <div key={t.id} style={{ ...S.card, marginBottom:10, padding:"14px 16px" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:10, letterSpacing:2, color:typeStyle(t.type).accent, fontWeight:700, marginBottom:4 }}>{(t.type || t.tag || "").toUpperCase()}</div>
-                      <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, marginBottom:4 }}>{t.name}</div>
-                      {t.description && <div style={{ fontSize:12, color:C.mid, lineHeight:1.5, marginBottom:4 }}>{t.description}</div>}
-                      {(t.pace || t.duration_min) && (
-                        <div style={{ fontSize:11, color:C.mid, fontFamily:"monospace" }}>
-                          {[t.duration_min && `${t.duration_min}min`, t.pace, t.terrain].filter(Boolean).join(' · ')}
-                        </div>
-                      )}
+          ) : filteredTemplates.length === 0 ? (
+            <div style={{ color:C.mute, fontSize:13, fontStyle:"italic", fontFamily:S.displayFont, textAlign:"center", padding:"24px 0" }}>
+              {onLibraryTab ? "No library workouts match." : "No templates match."}
+            </div>
+          ) : filteredTemplates.map(t => (
+            <div key={t.id || t.seedKey} style={{ ...S.card, marginBottom:10, padding:"14px 16px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:10, letterSpacing:2, color:typeStyle(t.type).accent, fontWeight:700, marginBottom:4 }}>{(t.type || t.tag || "").toUpperCase()}</div>
+                  <div style={{ fontWeight:700, fontSize:15, color:C.navy, fontFamily:S.displayFont, marginBottom:4 }}>{t.name}</div>
+                  {t.description && <div style={{ fontSize:12, color:C.mid, lineHeight:1.5, marginBottom:4 }}>{t.description}</div>}
+                  {(t.pace || t.duration_min) && (
+                    <div style={{ fontSize:11, color:C.mid, fontFamily:"monospace" }}>
+                      {[t.duration_min && `${t.duration_min}min`, t.pace, t.terrain].filter(Boolean).join(' · ')}
                     </div>
-                    <button onClick={async () => {
-                      if (!confirm("Delete this template?")) return;
-                      const { error } = await supabase.from("workout_templates").delete().eq("id", t.id);
-                      if (!error) setWorkoutTemplates(prev => prev.filter(x => x.id !== t.id));
-                    }} style={{ background:"transparent", border:0, color:C.crimson, fontSize:11, letterSpacing:1, cursor:"pointer", fontWeight:700 }}>DELETE</button>
-                  </div>
+                  )}
                 </div>
-              ))}
-            </>
-          )}
+                {onLibraryTab ? (
+                  <button onClick={async () => {
+                    // Save the seed as a personal template (still keeping zone tokens
+                    // — they'll resolve at apply-time per athlete).
+                    const { data, error } = await supabase.from("workout_templates").insert({
+                      coach_email: user.email?.toLowerCase(),
+                      name: t.name, type: t.type, tag: t.tag,
+                      description: t.description, pace: t.pace, terrain: t.terrain,
+                      steps: t.steps,
+                    }).select().single();
+                    if (!error && data) setWorkoutTemplates(prev => [data, ...prev]);
+                  }} style={{ background:"transparent", border:`1px solid ${C.accent}`, color:C.accent, fontSize:11, padding:"4px 10px", borderRadius:2, letterSpacing:1, cursor:"pointer", fontWeight:700 }}>+ SAVE</button>
+                ) : (
+                  <button onClick={async () => {
+                    if (!confirm("Delete this template?")) return;
+                    const { error } = await supabase.from("workout_templates").delete().eq("id", t.id);
+                    if (!error) setWorkoutTemplates(prev => prev.filter(x => x.id !== t.id));
+                  }} style={{ background:"transparent", border:0, color:C.crimson, fontSize:11, letterSpacing:1, cursor:"pointer", fontWeight:700 }}>DELETE</button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -3975,39 +4015,54 @@ export default function App() {
         <div style={S.grain}/>
         <Header title={isNew ? "Add Workout" : "Edit Workout"} subtitle={`${ew.athleteEmail} · ${dayDisplay}`} onBack={()=>{ setEditingWorkout(null); setCoachScreen("athlete"); }}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
-          {workoutTemplates.length > 0 && (
-            <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Apply Template</div>
-              <select onChange={(e) => {
-                  const tpl = workoutTemplates.find(t => t.id === e.target.value);
-                  if (!tpl) return;
-                  // New IDs for the pasted steps so the editor's reorder/
-                  // delete handlers don't collide with the template row.
-                  const stepsCopy = Array.isArray(tpl.steps)
-                    ? tpl.steps.map(s => ({ ...s }))
-                    : [];
-                  setEditingWorkout(prev => ({
-                    ...prev,
-                    prefill: {
-                      ...(prev.prefill || {}),
-                      type: tpl.type || "EASY",
-                      desc: tpl.description || "",
-                      pace: tpl.pace || "",
-                      terrain: tpl.terrain || "",
-                      steps: stepsCopy,
-                    },
-                  }));
-                  e.target.value = "";
-                }}
-                defaultValue=""
-                style={{ ...S.input, width:"100%" }}>
-                <option value="" disabled>Choose a saved template…</option>
-                {workoutTemplates.map(t => (
-                  <option key={t.id} value={t.id}>{t.name} {t.tag ? `· ${t.tag}` : ""}</option>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Apply Template</div>
+            <select onChange={(e) => {
+                const v = e.target.value;
+                if (!v) return;
+                let raw = null;
+                if (v.startsWith("seed:")) {
+                  raw = WORKOUT_SEEDS.find(s => s.seedKey === v.slice(5));
+                } else {
+                  raw = workoutTemplates.find(t => t.id === v);
+                }
+                if (!raw) return;
+                // Resolve zone tokens (E / T / I etc.) against the athlete's
+                // threshold pace before stamping into the editor — so the
+                // saved workout has concrete paces.
+                const athleteProfile = athletePrograms[ew.athleteEmail?.toLowerCase()] || {};
+                const tpl = resolveSeedForAthlete(raw, athleteProfile);
+                const stepsCopy = Array.isArray(tpl.steps) ? tpl.steps.map(s => ({ ...s })) : [];
+                setEditingWorkout(prev => ({
+                  ...prev,
+                  prefill: {
+                    ...(prev.prefill || {}),
+                    type: tpl.type || "EASY",
+                    desc: tpl.description || "",
+                    pace: tpl.pace || "",
+                    terrain: tpl.terrain || "",
+                    steps: stepsCopy,
+                  },
+                }));
+                e.target.value = "";
+              }}
+              defaultValue=""
+              style={{ ...S.input, width:"100%" }}>
+              <option value="" disabled>Choose a template…</option>
+              {workoutTemplates.length > 0 && (
+                <optgroup label="My templates">
+                  {workoutTemplates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} {t.tag ? `· ${t.tag}` : ""}</option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Library (auto-scaled to athlete)">
+                {WORKOUT_SEEDS.map(s => (
+                  <option key={s.seedKey} value={`seed:${s.seedKey}`}>{s.name} · {s.type}</option>
                 ))}
-              </select>
-            </div>
-          )}
+              </optgroup>
+            </select>
+          </div>
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Type</div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
