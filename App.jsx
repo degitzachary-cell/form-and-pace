@@ -14,7 +14,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor, maskPaceInput } from "./lib/load.js";
 import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
 import { matchActivitiesToSessions } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
@@ -336,7 +336,14 @@ function ProfileForm({ form, setForm, email }) {
 
       <div style={{ marginBottom: 18 }}>
         <div style={labelStyle}>Threshold pace (optional)</div>
-        <input style={inputStyle} value={form.threshold_pace || ""} onChange={setField("threshold_pace")} placeholder="e.g. 4:35" />
+        <input
+          style={inputStyle}
+          value={form.threshold_pace || ""}
+          onChange={e => setForm(f => ({ ...f, threshold_pace: maskPaceInput(e.target.value) }))}
+          placeholder="00:00"
+          inputMode="numeric"
+          maxLength={5}
+        />
         <div style={{ fontSize: 11, color: C.mid, marginTop: 6, lineHeight: 1.5 }}>
           Lactate-threshold pace as min/km. The pace you can hold for ~1 hour all-out — close to half-marathon pace. Used for rTSS load and Z1–Z5 zones. If left blank, we estimate it from your PBs.
         </div>
