@@ -574,6 +574,11 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [athleteName, setAthleteName] = useState('');
   const [athleteGoal, setAthleteGoal] = useState('');
   const [athletePb,   setAthletePb]   = useState('');
+  // Per-athlete default week shape — saved sessions array, no IDs/dates,
+  // used as the starting fill when the coach adds a new week. Lives on
+  // the coach_plans plan_json as `defaultWeek`. Strip on save the same
+  // way the cross-athlete clipboard does so it stays portable.
+  const [defaultWeek, setDefaultWeek] = useState(null);
   const [newWeekLabel, setNewWeekLabel] = useState('');
   const [newWeekStart, setNewWeekStart] = useState('');
   const [showAddWeek, setShowAddWeek] = useState(false);
@@ -611,7 +616,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   };
 
   // Dirty = current state differs from last loaded/saved snapshot.
-  const currentSnapshot = JSON.stringify({ weeks, athleteName, athleteGoal, athletePb });
+  const currentSnapshot = JSON.stringify({ weeks, athleteName, athleteGoal, athletePb, defaultWeek });
   const isDirty = !!selectedEmail && baseline !== '' && currentSnapshot !== baseline;
 
   // Warn before leaving the tab with unsaved changes.
@@ -633,17 +638,20 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     const n = entry?.name && entry.name !== selectedEmail ? entry.name : '';
     const g = entry?.goal && entry.goal !== '—' ? entry.goal : '';
     const p = entry?.current && entry.current !== '—' ? entry.current : '';
+    const dw = entry?.defaultWeek || null;
     setWeeks(w);
     setAthleteName(n);
     setAthleteGoal(g);
     setAthletePb(p);
-    setBaseline(JSON.stringify({ weeks: w, athleteName: n, athleteGoal: g, athletePb: p }));
+    setDefaultWeek(dw);
+    setBaseline(JSON.stringify({ weeks: w, athleteName: n, athleteGoal: g, athletePb: p, defaultWeek: dw }));
   }, [selectedEmail, athletes]);
 
   const buildMeta = () => ({
     name:    athleteName,
     goal:    athleteGoal,
     current: athletePb,
+    defaultWeek: defaultWeek || undefined,
   });
 
   const handleExcelUpload = async (e) => {
@@ -674,11 +682,42 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     if (!newWeekLabel || !newWeekStart) return;
     // Always snap to Monday so weeks line up with sessionDateStr lookups.
     const monday = snapToMonday(newWeekStart) || newWeekStart;
-    const newWeek = { id: newId(), weekLabel: newWeekLabel, weekStart: monday, sessions: [] };
+    // If this athlete has a default week shape saved, stamp it in as
+    // the starting sessions. Coach can then edit fine details from
+    // there without rebuilding the structure each time.
+    const sessions = (defaultWeek?.sessions || []).map(s => ({ ...s, id: newId() }));
+    const newWeek = { id: newId(), weekLabel: newWeekLabel, weekStart: monday, sessions };
     setWeeks([...weeks, newWeek]);
     setNewWeekLabel('');
     setNewWeekStart('');
     setShowAddWeek(false);
+  };
+
+  // Save this week's shape as the athlete's default. Strips IDs and the
+  // weekStart/weekLabel since those are per-week. Sessions keep their
+  // type/desc/pace/etc so the next added week starts pre-populated.
+  const handleSaveAsDefaultWeek = (weekId) => {
+    const src = weeks.find(w => w.id === weekId);
+    if (!src) return;
+    if (!(src.sessions || []).length) {
+      setStatus({ kind: 'error', message: 'This week has no sessions to save as a default.' });
+      return;
+    }
+    if (defaultWeek && !window.confirm('Replace this athlete\'s existing default week?')) return;
+    const stripped = {
+      sessions: (src.sessions || []).map(s => {
+        const { id, _, ...rest } = s;
+        return rest;
+      }),
+    };
+    setDefaultWeek(stripped);
+    setStatus({ kind: 'success', message: `Default week saved (${stripped.sessions.length} sessions). New weeks will start from this shape.` });
+  };
+
+  const handleClearDefaultWeek = () => {
+    if (!window.confirm('Clear this athlete\'s default week? New weeks will start empty.')) return;
+    setDefaultWeek(null);
+    setStatus({ kind: 'success', message: 'Default week cleared.' });
   };
 
   const handleDuplicateWeek = (weekId) => {
@@ -778,7 +817,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
       await Promise.resolve(onSave(selectedEmail, weeks, buildMeta()));
       const displayName = athleteName || athletes[selectedEmail]?.name || selectedEmail;
       setStatus({ kind: 'success', message: `Plan saved for ${displayName}.` });
-      setBaseline(JSON.stringify({ weeks, athleteName, athleteGoal, athletePb }));
+      setBaseline(JSON.stringify({ weeks, athleteName, athleteGoal, athletePb, defaultWeek }));
     } catch (err) {
       setStatus({ kind: 'error', message: `Save failed: ${err.message}` });
     }
@@ -949,11 +988,15 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                   <div style={{ fontWeight: 700, color: C.navy, fontFamily: S.displayFont, fontSize: 16 }}>{week.weekLabel || 'Untitled week'}</div>
                   <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{week.weekStart}</div>
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button type="button" onClick={() => handleCopyWeek(week.id)} style={{
                     background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                   }} title="Copy this week to clipboard — paste into any athlete">Copy</button>
+                  <button type="button" onClick={() => handleSaveAsDefaultWeek(week.id)} style={{
+                    background: C.white, color: C.accent, border: `1px solid ${C.accent}`,
+                    borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600,
+                  }} title="Use this week's shape as the default starting point for new weeks for this athlete">Save as default</button>
                   <button type="button" onClick={() => handleDuplicateWeek(week.id)} style={{
                     background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
@@ -1045,6 +1088,11 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                   onChange={e => setNewWeekStart(e.target.value)}
                 />
               </div>
+              {defaultWeek && (
+                <div style={{ fontSize: 11, color: C.accent, fontFamily: S.displayFont, fontStyle: 'italic', marginBottom: 8 }}>
+                  → New week will start from this athlete's default shape ({defaultWeek.sessions?.length || 0} sessions). Edit details after adding.
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 6 }}>
                 <button type="button" style={{ ...S.primaryBtn(C.navy, !newWeekLabel || !newWeekStart), flex: 1 }}
                   disabled={!newWeekLabel || !newWeekStart} onClick={handleAddWeek}>Add week</button>
@@ -1053,7 +1101,18 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
               </div>
             </div>
           ) : (
-            <button type="button" onClick={() => setShowAddWeek(true)} style={S.ghostBtn}>+ Add week</button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => setShowAddWeek(true)} style={S.ghostBtn}>+ Add week</button>
+              {defaultWeek && (
+                <span style={{ fontSize: 11, color: C.mute, fontFamily: 'var(--f-mono)', letterSpacing: '0.12em' }}>
+                  DEFAULT WEEK · {defaultWeek.sessions?.length || 0} SESSIONS
+                  <button type="button" onClick={handleClearDefaultWeek}
+                    style={{ background: 'transparent', border: 'none', color: C.crimson, cursor: 'pointer', fontSize: 11, marginLeft: 6, padding: 0 }}>
+                    × clear
+                  </button>
+                </span>
+              )}
+            </div>
           )}
 
           <button type="button" onClick={handleSave} disabled={saving || !isDirty}

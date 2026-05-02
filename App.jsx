@@ -2315,7 +2315,7 @@ export default function App() {
     } else {
       week.sessions.push({ id: newId(), ...sessionData });
     }
-    await handleSavePlan(athleteEmail, existingWeeks, { name: meta.name, goal: meta.goal, current: meta.current });
+    await handleSavePlan(athleteEmail, existingWeeks, { name: meta.name, goal: meta.goal, current: meta.current, defaultWeek: meta.defaultWeek });
   };
 
   const deleteWorkout = async (athleteEmail, weekStart, sessionId) => {
@@ -2325,7 +2325,7 @@ export default function App() {
       if (w.weekStart !== weekStart) return w;
       return { ...w, sessions: (w.sessions || []).filter(s => s.id !== sessionId) };
     });
-    await handleSavePlan(athleteEmail, nextWeeks, { name: meta.name, goal: meta.goal, current: meta.current });
+    await handleSavePlan(athleteEmail, nextWeeks, { name: meta.name, goal: meta.goal, current: meta.current, defaultWeek: meta.defaultWeek });
   };
 
   const saveDayNote = async (athleteEmail, weekStart, dayLabel, text) => {
@@ -2345,7 +2345,7 @@ export default function App() {
     const next = { ...(week.dayNotes || {}) };
     if (text.trim()) next[dayLabel] = text.trim(); else delete next[dayLabel];
     week.dayNotes = next;
-    await handleSavePlan(athleteEmail, existingWeeks, { name: meta.name, goal: meta.goal, current: meta.current });
+    await handleSavePlan(athleteEmail, existingWeeks, { name: meta.name, goal: meta.goal, current: meta.current, defaultWeek: meta.defaultWeek });
   };
 
   const handleSavePlan = async (athleteEmail, weeksArray, meta = {}) => {
@@ -2371,6 +2371,7 @@ export default function App() {
       athleteGoal: meta.goal?.trim() || null,
       athletePb:   meta.current?.trim() || null,
       weeks: weeksArray,
+      ...(meta.defaultWeek ? { defaultWeek: meta.defaultWeek } : {}),
     };
     const { error } = await supabase.from('coach_plans').upsert({
       athlete_email: key,
