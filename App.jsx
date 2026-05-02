@@ -15,6 +15,7 @@ import {
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
 import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, expandZonePace } from "./lib/load.js";
+import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
@@ -3860,16 +3861,27 @@ export default function App() {
                   )}
 
                   {(log?.strava_data || linkedAthAct?.strava_data) && <StravaCard data={log?.strava_data || linkedAthAct?.strava_data}/>}
-                  {an?.wellness && Object.keys(an.wellness).length > 0 && (
-                    <SectionCard label="Wellness">
-                      <div style={{ display:"flex", gap:14, flexWrap:"wrap", fontSize:13, color:C.navy }}>
-                        {an.wellness.rpe        != null && <div><b>RPE</b> {an.wellness.rpe}/10</div>}
-                        {an.wellness.sleep_hours != null && <div><b>Sleep</b> {an.wellness.sleep_hours}h</div>}
-                        {an.wellness.soreness   != null && <div><b>Soreness</b> {an.wellness.soreness}/5</div>}
-                        {an.wellness.mood       != null && <div><b>Mood</b> {["awful","rough","ok","good","flying"][an.wellness.mood-1]} {an.wellness.mood}/5</div>}
-                      </div>
-                    </SectionCard>
-                  )}
+                  {an?.wellness && Object.keys(an.wellness).length > 0 && (() => {
+                    const drift = effortDrift({ session: activeSession, log });
+                    const driftCopy = drift === "over"  ? { color: C.hot,  text: "felt harder than target" }
+                                    : drift === "under" ? { color: C.cool, text: "felt easier than target" }
+                                    : null;
+                    return (
+                      <SectionCard label="Wellness">
+                        <div style={{ display:"flex", gap:14, flexWrap:"wrap", fontSize:13, color:C.navy }}>
+                          {an.wellness.rpe        != null && <div><b>RPE</b> {an.wellness.rpe}/10</div>}
+                          {an.wellness.sleep_hours != null && <div><b>Sleep</b> {an.wellness.sleep_hours}h</div>}
+                          {an.wellness.soreness   != null && <div><b>Soreness</b> {an.wellness.soreness}/5</div>}
+                          {an.wellness.mood       != null && <div><b>Mood</b> {["awful","rough","ok","good","flying"][an.wellness.mood-1]} {an.wellness.mood}/5</div>}
+                        </div>
+                        {driftCopy && (
+                          <div className="t-mono" style={{ marginTop:8, fontSize:10, letterSpacing:"0.16em", color: driftCopy.color, fontWeight:700 }}>
+                            EFFORT DRIFT — {driftCopy.text.toUpperCase()}
+                          </div>
+                        )}
+                      </SectionCard>
+                    );
+                  })()}
                   {notes ? (
                     <SectionCard label="Athlete's Notes">
                       <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{notes}"</div>
@@ -4929,36 +4941,66 @@ export default function App() {
       </div>
     ) : null;
 
-    // Training overload alert: compute PMC from all athlete activities and check
-    // if ATL has exceeded CTL by a meaningful margin for 5+ of the last 7 days.
-    const OverloadAlert = (() => {
-      const dailyRtss = stravaConnected && stravaActivities.length
+    // Single morning readiness verdict combining four signals (see
+    // lib/wellness.js): sRPE-aware PMC → ACWR, Hooper z-score vs personal
+    // baseline, and easy-run effort drift. Quorum-gated: needs ≥2 confident
+    // signals before recommending a change, which prevents single-night
+    // sleep blips or one hot easy run from spamming the athlete.
+    const myLogs = Object.fromEntries(
+      Object.entries(logs).filter(([, l]) => l?.athlete_email?.toLowerCase() === user.email?.toLowerCase())
+    );
+    const ReadinessAlert = (() => {
+      // sRPE-aware daily load (run rTSS where available, sRPE-converted
+      // to rTSS units for strength / hyrox / manual logs).
+      const dailyR = dailyLoadFromActivitiesAndLogs({
+        activities: myActs,
+        logs: myLogs,
+        profile,
+      });
+      // Fall back to Strava-only when activities table is empty but Strava
+      // is connected (covers brand-new athletes mid-sync).
+      const series = (dailyR.length === 0 && stravaConnected && stravaActivities.length)
         ? dailyRtssFromStravaList(stravaActivities, profile)
-        : dailyRtssFromActivities(myActs, profile);
-      if (!dailyRtss || dailyRtss.length === 0) return null;
+        : dailyR;
       const from = new Date(t); from.setDate(t.getDate() - 90);
-      const fmtD = ymd;
-      const dense = densifyDailyRtss(dailyRtss, fmtD(from), today);
+      const dense = densifyDailyRtss(series, ymd(from), today);
       const pmc = computePMC(dense);
-      if (pmc.length < 7) return null;
-      const last7 = pmc.slice(-7);
-      const overloadDays = last7.filter(d => d.atl > d.ctl + 10).length;
-      if (overloadDays < 5) return null;
-      const latest = pmc[pmc.length - 1];
-      const tsb = Math.round(latest.ctl - latest.atl);
+      const pmcTail = pmc.length > 0 ? pmc[pmc.length - 1] : null;
+
+      const hooper = hooperToday({ logs: myLogs, asOfDate: today });
+      const drift = recentEasyDrift({
+        sessions: programEntry?.weeks?.flatMap(w => w.sessions) || [],
+        logs: myLogs,
+        asOfDate: today,
+      });
+      const verdict = readinessScore({ pmcTail, hooper, drift });
+
+      // Stay silent when there's nothing useful to say. Either we don't
+      // have enough data (neutral=true) or all signals agree on "go".
+      if (verdict.neutral) return null;
+      if (verdict.severity === 0) return null;
+
+      const palette = verdict.severity === 2
+        ? { fg: C.hot,  bg: "#fff0ec", border: "#f0a890", label: "READINESS · BACK OFF" }
+        : { fg: C.warn, bg: "#fff8f0", border: "#f0c080", label: "READINESS · CAUTION" };
+      const labels = READINESS_LABELS[verdict.verdict];
       return (
         <div style={{
-          margin:"12px 16px 0", padding:"12px 14px",
-          background:"#fff8f0", border:`1px solid #f0c080`, borderLeft:`4px solid ${C.warn}`,
-          borderRadius:2, display:"flex", alignItems:"flex-start", gap:10,
+          margin:"12px 16px 0", padding:"14px 16px",
+          background: palette.bg, border:`1px solid ${palette.border}`, borderLeft:`4px solid ${palette.fg}`,
+          borderRadius:2,
         }}>
-          <div style={{ fontSize:16, lineHeight:1, flexShrink:0 }}>⚠</div>
-          <div>
-            <div className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.warn, fontWeight:700, marginBottom:3 }}>TRAINING LOAD CAUTION</div>
-            <div style={{ fontSize:13, color:C.navy, fontFamily:S.displayFont, lineHeight:1.4 }}>
-              Your acute load has been above chronic for {overloadDays} of the last 7 days (TSB: {tsb}). Consider an easy day or rest.
-            </div>
+          <div className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color: palette.fg, fontWeight:700, marginBottom:6 }}>
+            {palette.label}
           </div>
+          <div style={{ fontSize:14, color:C.navy, fontFamily:S.displayFont, lineHeight:1.35, marginBottom: verdict.reasons.length ? 8 : 0 }}>
+            {labels.headline} — {labels.cue}
+          </div>
+          {verdict.reasons.length > 0 && (
+            <ul style={{ margin:0, paddingLeft:18, fontSize:12, color:C.mid, lineHeight:1.55 }}>
+              {verdict.reasons.map((r, i) => <li key={i}>{r}</li>)}
+            </ul>
+          )}
         </div>
       );
     })();
@@ -5051,7 +5093,7 @@ export default function App() {
             </div>
           )}
           {RaceCountdown}
-          {OverloadAlert}
+          {ReadinessAlert}
           {isDesktop && (
             <div style={{ display:"flex", gap:0, alignItems:"flex-start" }}>
               {/* ── DESKTOP LEFT: today hero + strava ── */}
@@ -6837,17 +6879,28 @@ export default function App() {
 
           {log?.strava_data && <div style={{ marginBottom:18 }}><StravaCard data={log.strava_data}/></div>}
 
-          {an?.wellness && Object.keys(an.wellness).length > 0 && (
-            <div style={{ marginBottom:24 }}>
-              <SectionHead label="How it felt"/>
-              <p style={{ fontFamily:"var(--f-display)", fontSize:19, lineHeight:1.55, margin:"16px 0 0", color:"var(--c-ink)" }}>
-                {an.wellness.rpe != null && <>Felt like a <em style={{ color:"var(--c-hot)", fontStyle:"italic" }}>{an.wellness.rpe}/10</em>. </>}
-                {an.wellness.sleep_hours != null && <>Slept <em style={{ color:"var(--c-accent)", fontStyle:"italic" }}>{an.wellness.sleep_hours}h</em>, </>}
-                {an.wellness.soreness != null && <>legs <em style={{ color:"var(--c-cool)", fontStyle:"italic" }}>{["nothing","barely","bit sore","tight","wrecked"][an.wellness.soreness-1] || `${an.wellness.soreness}/5`}</em>, </>}
-                {an.wellness.mood != null && <>mood <em style={{ color:"var(--c-warn)", fontStyle:"italic" }}>{["awful","rough","ok","good","flying"][an.wellness.mood-1] || `${an.wellness.mood}/5`}</em>.</>}
-              </p>
-            </div>
-          )}
+          {an?.wellness && Object.keys(an.wellness).length > 0 && (() => {
+            const drift = effortDrift({ session: activeSession, log });
+            const driftCopy = drift === "over"  ? { color:"var(--c-hot)",  text:"That was harder than the prescribed effort — note for next time." }
+                            : drift === "under" ? { color:"var(--c-cool)", text:"That sat below the prescribed effort." }
+                            : null;
+            return (
+              <div style={{ marginBottom:24 }}>
+                <SectionHead label="How it felt"/>
+                <p style={{ fontFamily:"var(--f-display)", fontSize:19, lineHeight:1.55, margin:"16px 0 0", color:"var(--c-ink)" }}>
+                  {an.wellness.rpe != null && <>Felt like a <em style={{ color:"var(--c-hot)", fontStyle:"italic" }}>{an.wellness.rpe}/10</em>. </>}
+                  {an.wellness.sleep_hours != null && <>Slept <em style={{ color:"var(--c-accent)", fontStyle:"italic" }}>{an.wellness.sleep_hours}h</em>, </>}
+                  {an.wellness.soreness != null && <>legs <em style={{ color:"var(--c-cool)", fontStyle:"italic" }}>{["nothing","barely","bit sore","tight","wrecked"][an.wellness.soreness-1] || `${an.wellness.soreness}/5`}</em>, </>}
+                  {an.wellness.mood != null && <>mood <em style={{ color:"var(--c-warn)", fontStyle:"italic" }}>{["awful","rough","ok","good","flying"][an.wellness.mood-1] || `${an.wellness.mood}/5`}</em>.</>}
+                </p>
+                {driftCopy && (
+                  <p className="t-mono" style={{ marginTop:10, fontSize:11, letterSpacing:"0.14em", color: driftCopy.color, fontWeight:700 }}>
+                    {driftCopy.text}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {(log?.feedback || feedbackText) && (
             <div style={{ marginBottom:24 }}>
