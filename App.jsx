@@ -9,25 +9,20 @@ import {
   prettyEmailName, todayStr, newId, ymd,
   snapToMonday, thisMonday,
 } from "./lib/helpers.js";
-import { C, S, TAG_STYLE, TYPE_STYLE, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
+import { C, S, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
 import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, expandZonePace, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor } from "./lib/load.js";
 import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
 import { matchActivitiesToSessions } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Seal, Eyebrow, Rule, Num, BigNum, SectionHead, BackArrow, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Eyebrow, Rule, Num, BigNum, SectionHead, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
 import { StepsEditor } from "./CoachPlanBuilder.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
-
-// ─── ATHLETE PROGRAMS ─────────────────────────────────────────────────────────
-// Programs are stored in the coach_plans table; coaches edit via Plan Builder.
-// New athletes get a blank program until their coach creates one.
-const ATHLETE_PROGRAMS = {};
 
 // "Extra activity" = a real run worth showing as its own calendar card.
 // Excludes session-bound activities (their session card already represents
@@ -449,6 +444,20 @@ export default function App() {
   const [dayOffset, setDayOffset] = useState(0);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
+
+  // Reset the per-session wellness inputs and the two Strava-flow flags
+  // before opening / closing a session form. Called from the half-dozen
+  // places that navigate into or out of the log screens — keeps the
+  // reset list consistent so adding a new wellness field only needs to
+  // be wired here, not at every navigation site.
+  const resetSessionWellness = () => {
+    setSessionRpe(null);
+    setSessionSleepHrs("");
+    setSessionSoreness(null);
+    setSessionMood(null);
+    setNoStravaConfirmed(false);
+    setLogEarly(false);
+  };
   // Calendar (month view): YYYY-MM-01 string anchoring the displayed month.
   // Initialised to the first day of the current month on first render.
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -474,7 +483,9 @@ export default function App() {
   const [coachFilter,   setCoachFilter]   = useState("all");
   const [coachEditAct,  setCoachEditAct]  = useState(null);  // { date, distance, duration } draft for active activity edit
   const [coachEditLog,  setCoachEditLog]  = useState(null);  // { date, distance, duration } draft for active log edit
-  const [athletePrograms, setAthletePrograms] = useState(ATHLETE_PROGRAMS);
+  // Programs are stored in the coach_plans table; coaches edit via Plan
+  // Builder. New athletes get a blank program until their coach creates one.
+  const [athletePrograms, setAthletePrograms] = useState({});
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
   const [templateSearch, setTemplateSearch] = useState("");
   const [templateTab, setTemplateTab] = useState("library");
@@ -5322,7 +5333,7 @@ export default function App() {
                     <div onClick={() => {
                         const s = todaysSession.s;
                         setActiveSession({ ...s, weekStart: monStr });
-                        setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
+                        setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); resetSessionWellness();
                         setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
                         const isLogged = sessionIsLogged(todaysSession.log, todaysActivity);
                         setScreen(isLogged ? "result" : "session");
@@ -5370,7 +5381,7 @@ export default function App() {
                           const s = todaysSession.s;
                           setActiveSession({ ...s, weekStart: monStr });
                           setFeedbackText("");
-                          setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
+                          resetSessionWellness();
                           setSessionDateOverride(today);
                           setSelectedStravaId(todaysStrava.id);
                           // Pre-fill from list data immediately so fields aren't blank while detail loads.
@@ -5418,7 +5429,7 @@ export default function App() {
                         onClick={() => {
                           if (sessHere && !isRest) {
                             setActiveSession({...sessHere.s, weekStart:monStr});
-                            setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
+                            setFeedbackText(""); setSessionDistKm(""); setSessionDurMin(""); resetSessionWellness();
                             setSessionDateOverride(sessHere.log?.analysis?.actual_date || actHere?.activity_date || d.dDate);
                             setScreen(isLogged ? "result" : "session");
                           }
@@ -5475,7 +5486,7 @@ export default function App() {
               if (!todaysSession) return;
               setActiveSession({ ...s, weekStart: monStr });
               setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-              setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
+              resetSessionWellness();
               setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
               setScreen(isLogged ? "result" : "session");
             };
@@ -5657,7 +5668,7 @@ export default function App() {
                 const s = todaysSession.s;
                 setActiveSession({ ...s, weekStart: monStr });
                 setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
+                resetSessionWellness();
                 setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
                 setScreen(sessionIsLogged(todaysSession.log, todaysActivity) ? "result" : "session");
               }} className="fp-btn fp-btn--accent" style={{ width:"100%", padding:"18px" }}>
@@ -5755,7 +5766,7 @@ export default function App() {
                 if (todaysSession) {
                   setActiveSession({ ...todaysSession.s, weekStart: monStr });
                   setFeedbackText("");
-                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
+                  resetSessionWellness();
                   setSessionDateOverride(today);
                   setSelectedStravaId(todaysStrava.id);
                   setSessionDistKm((todaysStrava.distance / 1000).toFixed(2));
@@ -5796,7 +5807,7 @@ export default function App() {
                     if (sessHere && (s.type || "").toUpperCase() !== "REST") {
                       setActiveSession({ ...sessHere.s, weekStart: monStr });
                       setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                      setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
+                      resetSessionWellness();
                       setSessionDateOverride(sessHere.log?.analysis?.actual_date || actHere?.activity_date || d.dDate);
                       setScreen(d.isLogged ? "result" : "session");
                     }
@@ -6398,7 +6409,7 @@ export default function App() {
                 if (s) {
                   setActiveSession({ ...s, weekStart: sess.weekStart });
                   setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-                  setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null); setNoStravaConfirmed(false); setLogEarly(false);
+                  resetSessionWellness();
                   setSessionDateOverride(log?.analysis?.actual_date || act?.activity_date || ds);
                   setScreen(isLogged ? "result" : "session");
                 } else if (act) {
