@@ -2803,9 +2803,21 @@ export default function App() {
       weeksOut.push({ idx: i, weekStart: ymd(wkStart), weekEnd: ymd(wkEnd) });
     }
 
-    // Current CTL/ATL — pulled from the memoised pmcByEmail map so this
-    // doesn't recompute on every render of the coach ATP view.
-    const pmc = (target ? pmcByEmail.get(target.toLowerCase())?.pmc : null) || [];
+    // Current CTL/ATL. Try the memoised series first; fall back to a
+    // direct computation when the memo entry is absent or empty (e.g. on
+    // initial render before athletePrograms is fully populated, or when
+    // an athlete is in the activities table but not yet in the
+    // memoised programs map).
+    const memoTail = target ? pmcByEmail.get(target.toLowerCase()) : null;
+    const pmc = (() => {
+      if (memoTail?.pmc?.length) return memoTail.pmc;
+      const daActs = target ? (activitiesByEmail.get(target?.toLowerCase()) || []) : [];
+      if (!daActs.length) return [];
+      const dailyR = dailyRtssFromActivities(daActs, ap || {});
+      const fromBack = new Date(todayD); fromBack.setDate(todayD.getDate() - 180);
+      const dense = densifyDailyRtss(dailyR, ymd(fromBack), ymd(todayD));
+      return computePMC(dense);
+    })();
     const tail = pmc[pmc.length - 1] || { ctl: 0, atl: 0 };
 
     // Sum each week's planned rTSS from the athlete's plan + project forward.
@@ -3294,14 +3306,21 @@ export default function App() {
           {/* Performance Management Chart — last 90 days visible, computed
               over the last 180 so CTL is fully warmed up. */}
           {coachAthleteTab === "plan" && (() => {
-            // Pull the memoised series for this athlete instead of
-            // recomputing dailyRtss → densify → computePMC every render.
+            // Try the memoised series first; fall back to a direct
+            // computation when the memo entry is empty (e.g. before
+            // athletePrograms enrichment has completed, or when activities
+            // arrived before the program did).
             const memoEntry = pmcByEmail.get(dashAthlete?.toLowerCase()) || null;
-            const dailyRtss = memoEntry?.dailyR || [];
-            const pmc = memoEntry?.pmc || [];
-            const fromStr = memoEntry?.fromStr || ymd(new Date(Date.now() - 180 * 86400000));
-            const toStr = memoEntry?.toStr || todayStr();
             const today = new Date();
+            const fromBack = new Date(today); fromBack.setDate(today.getDate() - 180);
+            const fromStr = memoEntry?.fromStr || ymd(fromBack);
+            const toStr = memoEntry?.toStr || todayStr();
+            const dailyRtss = memoEntry?.dailyR?.length
+              ? memoEntry.dailyR
+              : dailyRtssFromActivities(activitiesByEmail.get(dashAthlete?.toLowerCase()) || [], da);
+            const pmc = memoEntry?.pmc?.length
+              ? memoEntry.pmc
+              : computePMC(densifyDailyRtss(dailyRtss, fromStr, toStr));
             // Forecast: project the athlete's CTL/ATL through their next
             // 14 days of planned sessions so the coach sees TSB trajectory.
             const tail = pmc[pmc.length - 1];
@@ -5879,11 +5898,14 @@ export default function App() {
             const totalKm = lastWeekActs.reduce((acc, a) => acc + (parseFloat(a.distance_km) || 0), 0);
             const thr = (() => { try { return null; } catch { return null; } })();
 
-            // Compute rTSS for each + sum. Sliced from the memoised
-            // per-athlete series so the dailyRtssFromActivities pass
-            // doesn't repeat on every render of the today screen.
-            const fullDailyR = pmcByEmail.get(user.email?.toLowerCase())?.dailyR || [];
-            const dailyR = fullDailyR.filter(d => inLastWeek(d.date));
+            // Compute rTSS for each + sum. Slice from the memoised series
+            // when populated; otherwise recompute fresh from the athlete's
+            // own profile (which has threshold_pace, unlike the per-coach
+            // athletePrograms entry that the memo iterates).
+            const fullDailyR = pmcByEmail.get(user.email?.toLowerCase())?.dailyR;
+            const dailyR = (fullDailyR && fullDailyR.length)
+              ? fullDailyR.filter(d => inLastWeek(d.date))
+              : dailyRtssFromActivities(lastWeekActs, profile);
             const totalRtss = dailyR.reduce((a, b) => a + (b.rtss || 0), 0);
 
             // Top run = the activity with the highest rTSS (or longest distance fallback)
@@ -6601,12 +6623,14 @@ export default function App() {
               computed over the last 180 so CTL is fully warmed up. */}
           {(() => {
             // When Strava is connected we prefer its live list (more
-            // recent than the DB). Otherwise fall back to the memoised
-            // per-athlete series — saves redoing the dailyRtss pass.
-            const memoEntry = pmcByEmail.get(user.email?.toLowerCase());
+            // recent than the DB). Otherwise compute from the athlete's
+            // own activities + profile — the per-athlete memo can't cover
+            // this site because the athlete-side athletePrograms entry
+            // lacks threshold_pace (it lives on `profile`, not on the
+            // plan row), so memo's dailyR would be empty.
             const dailyRtss = stravaConnected && stravaActivities.length
               ? dailyRtssFromStravaList(stravaActivities, profile)
-              : (memoEntry?.dailyR || []);
+              : dailyRtssFromActivities(myActs, profile);
             const t = new Date();
             const from = new Date(t); from.setDate(t.getDate() - 180);
             const fmt = ymd;
