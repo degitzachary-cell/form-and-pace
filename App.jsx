@@ -16,6 +16,7 @@ import {
 } from "./lib/constants.js";
 import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, expandZonePace } from "./lib/load.js";
 import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
+import { matchActivitiesToSessions } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
@@ -413,6 +414,10 @@ export default function App() {
   const [quickSoreness, setQuickSoreness] = useState(null);
   const [quickMood,     setQuickMood]     = useState(null);
   const [quickSaving,   setQuickSaving]   = useState(false);
+  // When the athlete has two sessions on the same day (a "double"),
+  // remembers which one their Today card is currently focused on.
+  // Reset whenever the date or plan changes.
+  const [todayFocusSessionId, setTodayFocusSessionId] = useState(null);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
   // Calendar (month view): YYYY-MM-01 string anchoring the displayed month.
@@ -2641,6 +2646,7 @@ export default function App() {
                       name: t.name, type: t.type, tag: t.tag,
                       description: t.description, pace: t.pace, terrain: t.terrain,
                       steps: t.steps,
+                      exercises: Array.isArray(t.exercises) && t.exercises.length > 0 ? t.exercises : null,
                     }).select().single();
                     if (!error && data) setWorkoutTemplates(prev => [data, ...prev]);
                   }} style={{ background:"transparent", border:`1px solid ${C.accent}`, color:C.accent, fontSize:11, padding:"4px 10px", borderRadius:2, letterSpacing:1, cursor:"pointer", fontWeight:700 }}>+ SAVE</button>
@@ -4063,7 +4069,7 @@ export default function App() {
               dayLabel: activeSession.day?.slice(0, 3),
               sessionId: activeSession.id,
               athleteEmail: activeSession.athleteEmail || dashAthlete,
-              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain, rpe_target: activeSession.rpe_target || "", steps: activeSession.steps || [], exercises: activeSession.exercises || [], duration_min: activeSession.duration_min || "" },
+              prefill: { type: activeSession.type, desc: activeSession.desc, pace: activeSession.pace, terrain: activeSession.terrain, rpe_target: activeSession.rpe_target || "", steps: activeSession.steps || [], exercises: activeSession.exercises || [], duration_min: activeSession.duration_min || "", time_of_day: activeSession.time_of_day || "" },
             });
             setCoachScreen("edit-workout");
           }} style={{ ...S.ghostBtn, marginTop:16 }}>Edit prescribed workout</button>
@@ -4397,6 +4403,7 @@ export default function App() {
                 const athleteProfile = athletePrograms[ew.athleteEmail?.toLowerCase()] || {};
                 const tpl = resolveSeedForAthlete(raw, athleteProfile);
                 const stepsCopy = Array.isArray(tpl.steps) ? tpl.steps.map(s => ({ ...s })) : [];
+                const exercisesCopy = Array.isArray(tpl.exercises) ? tpl.exercises.map(ex => ({ ...ex })) : [];
                 setEditingWorkout(prev => ({
                   ...prev,
                   prefill: {
@@ -4406,6 +4413,7 @@ export default function App() {
                     pace: tpl.pace || "",
                     terrain: tpl.terrain || "",
                     steps: stepsCopy,
+                    exercises: exercisesCopy,
                   },
                 }));
                 e.target.value = "";
@@ -4451,6 +4459,34 @@ export default function App() {
               })}
             </div>
           </div>
+          {/* Time of day — only useful when the athlete might double up on
+              the same day. Drives session↔activity matching when two
+              sessions share a date. Optional; leave blank for "any time". */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Time of day</div>
+            <div style={{ display:"flex", gap:6 }}>
+              {[
+                { v: "",   label: "ANY" },
+                { v: "AM", label: "AM"  },
+                { v: "PM", label: "PM"  },
+              ].map(opt => {
+                const sel = (f.time_of_day || "") === opt.v;
+                return (
+                  <button key={opt.v || "any"} type="button" onClick={() => setField("time_of_day", opt.v)}
+                    style={{
+                      background: sel ? C.ink : C.white,
+                      color: sel ? C.paper : C.ink,
+                      border:`1px solid ${sel ? C.ink : C.rule}`,
+                      borderRadius:2, padding:"6px 14px", fontSize:11, letterSpacing:1.5,
+                      fontWeight: sel ? 700 : 500, cursor:"pointer", fontFamily:S.monoFont,
+                    }}>{opt.label}</button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize:11, color:C.mid, marginTop:6, fontStyle:"italic", fontFamily:S.displayFont }}>
+              Set when scheduling a double — keeps the right activity linked to the right session.
+            </div>
+          </div>
           {/* Duration — shown for aerobic types (easy / recovery / long run).
               Coaches set the total run time; quality sections are added below. */}
           {isAerobicType && (
@@ -4473,8 +4509,9 @@ export default function App() {
 
           {/* Target pace — always shown for aerobic types (pace applies to the main body
               even when quality sections are added). Hidden for structured workouts that
-              define their own pace inside each step. */}
+              define their own pace inside each step, and for STRENGTH (no pace concept). */}
           {(() => {
+            if (isStrengthType) return null;
             const hasPaceSection = !isAerobicType && Array.isArray(f.steps) && f.steps.some(s =>
               s.kind === "interval" || s.kind === "steady" || s.kind === "recovery"
             );
@@ -4611,6 +4648,7 @@ export default function App() {
               terrain: (f.terrain || "").trim(),
               rpe_target: (f.rpe_target || "").toString().trim() || null,
               duration_min: f.duration_min ? Number(f.duration_min) : null,
+              ...(f.time_of_day ? { time_of_day: f.time_of_day } : {}),
               ...(Array.isArray(f.steps) && f.steps.length > 0 ? { steps: f.steps } : {}),
               ...(Array.isArray(f.exercises) && f.exercises.length > 0 ? { exercises: f.exercises } : {}),
             };
@@ -4637,6 +4675,7 @@ export default function App() {
               pace: (f.pace || "").trim(),
               terrain: (f.terrain || "").trim(),
               steps: Array.isArray(f.steps) && f.steps.length > 0 ? f.steps : null,
+              exercises: Array.isArray(f.exercises) && f.exercises.length > 0 ? f.exercises : null,
             }).select().single();
             if (error) { alert("Save template failed: " + error.message); return; }
             if (data) setWorkoutTemplates(prev => [data, ...prev]);
@@ -4878,8 +4917,40 @@ export default function App() {
       const onDate = overrideDate || sessionDateStr(monStr, s.day);
       return { s, log, onDate };
     });
-    const todaysSession = allWithMoves.find(x => x.onDate === today && (x.s.type || "").toUpperCase() !== "REST");
-    const todaysActivity = myActs.find(a => a.activity_date === today);
+    // All non-REST sessions scheduled (or moved) onto today. With doubles
+    // (e.g. AM easy + PM strength) there can be more than one.
+    const allTodaysSessions = allWithMoves.filter(x =>
+      x.onDate === today && (x.s.type || "").toUpperCase() !== "REST"
+    );
+    const allTodaysActivities = myActs.filter(a => a.activity_date === today);
+    // Match activities to sessions using sport type, time-of-day, and
+    // distance/duration proximity (lib/sessionMatching.js). Without this,
+    // both sessions would naively claim the first activity of the day.
+    const todayMatch = matchActivitiesToSessions({
+      sessions: allTodaysSessions.map(x => x.s),
+      activities: allTodaysActivities,
+      logs,
+    });
+    // Pick the focused session: athlete-selected if valid, else the first
+    // un-logged one, else the first overall. Re-prioritising un-logged
+    // gives a sensible default when one of a pair is already done.
+    const focusedTodaysSession = (() => {
+      if (allTodaysSessions.length === 0) return null;
+      if (todayFocusSessionId) {
+        const hit = allTodaysSessions.find(x => x.s.id === todayFocusSessionId);
+        if (hit) return hit;
+      }
+      const firstUnlogged = allTodaysSessions.find(x =>
+        !x.log?.analysis?.distance_km && !todayMatch.bySessionId.get(x.s.id)
+      );
+      return firstUnlogged || allTodaysSessions[0];
+    })();
+    const todaysSession = focusedTodaysSession;
+    const todaysActivity = todaysSession
+      ? (todayMatch.bySessionId.get(todaysSession.s.id)
+         || allTodaysActivities.find(a => a.activity_date === today && todayMatch.unmatchedActs.includes(a))
+         || null)
+      : (allTodaysActivities[0] || null);
     // Only surface today's Strava run on the Today screen — bike / strength /
     // walk activities sync silently and shouldn't prompt "log this session".
     const todaysStrava = stravaActivities.find(a => a.start_date_local?.split("T")[0] === today && isStravaRun(a));
@@ -5094,6 +5165,33 @@ export default function App() {
           )}
           {RaceCountdown}
           {ReadinessAlert}
+          {/* Doubles switcher — only shown when there's more than one
+              non-REST session today. Each pill swaps which session the
+              Today hero focuses on; the matcher already routes the
+              right activity to each. */}
+          {allTodaysSessions.length > 1 && (
+            <div style={{ margin:"12px 16px 0", padding:"10px 14px", background:C.white, border:`1px solid ${C.rule}`, borderLeft:`4px solid ${C.accent}`, borderRadius:2 }}>
+              <div className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.accent, fontWeight:700, marginBottom:6 }}>
+                DOUBLE TODAY · {allTodaysSessions.length} SESSIONS
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {allTodaysSessions.map(({ s }, i) => {
+                  const sel = todaysSession?.s.id === s.id;
+                  const tod = s.time_of_day ? ` · ${s.time_of_day}` : "";
+                  return (
+                    <button key={s.id} type="button" onClick={() => setTodayFocusSessionId(s.id)}
+                      style={{
+                        background: sel ? C.ink : C.white,
+                        color: sel ? C.paper : C.ink,
+                        border:`1px solid ${sel ? C.ink : C.rule}`,
+                        borderRadius:2, padding:"6px 12px", fontSize:11, letterSpacing:1,
+                        fontWeight: sel ? 700 : 500, cursor:"pointer", fontFamily:S.monoFont,
+                      }}>{(s.type || "RUN").toUpperCase()}{tod}</button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {isDesktop && (
             <div style={{ display:"flex", gap:0, alignItems:"flex-start" }}>
               {/* ── DESKTOP LEFT: today hero + strava ── */}
@@ -5924,7 +6022,17 @@ export default function App() {
                           if (overrideDate && dayDate) return overrideDate === dayDate;
                           return s.day?.slice(0, 3) === dayLabel;
                         });
-                      const extrasHere = dayDate ? extraActs.filter(a => a.activity_date === dayDate) : [];
+                      // Per-day matcher so doubles route the right activity
+                      // to each session card (sport type / time-of-day /
+                      // distance proximity, see lib/sessionMatching.js).
+                      const activitiesHere = dayDate ? myActs.filter(a => a.activity_date === dayDate) : [];
+                      const dayMatch = matchActivitiesToSessions({
+                        sessions: sessionsHere.map(({ s }) => s),
+                        activities: activitiesHere,
+                        logs,
+                      });
+                      const extrasHere = activitiesHere
+                        .filter(a => isExtraDisplay(a) && dayMatch.unmatchedActs.includes(a));
                       const hasItems = sessionsHere.length + extrasHere.length > 0;
                       const dayMarkers = dayDate ? markersOnDate(markersByEmail[user.email?.toLowerCase()] || [], dayDate) : [];
                       return (
@@ -5945,7 +6053,7 @@ export default function App() {
                         >
                           {sessionsHere.map(({ s, log }) => {
                             const sDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
-                            const linkedAct = actByDate[sDate];
+                            const linkedAct = dayMatch.bySessionId.get(s.id) || actByDate[sDate] || null;
                             const isLogged = sessionIsLogged(log, linkedAct);
                             const isMissed = !isLogged && sDate && sDate < todayStr() && (s.type || "").toUpperCase() !== "REST";
                             return (
