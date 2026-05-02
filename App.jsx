@@ -1549,6 +1549,27 @@ export default function App() {
 
   const { activitiesByEmail, statsFor } = useAthleteStats({ activities, athletePrograms, logs });
 
+  // Per-athlete PMC series (CTL/ATL/TSB), memoised so the heavy
+  // dailyRtss → densify → computePMC pipeline only runs when activities
+  // or programs change — not on every screen-render. 180-day window so
+  // CTL is fully warmed up; call sites that want a tighter window
+  // slice the result.
+  const pmcByEmail = useMemo(() => {
+    const m = new Map();
+    const todayLocal = todayStr();
+    const fromDate = new Date(); fromDate.setDate(fromDate.getDate() - 180);
+    const fromStr = ymd(fromDate);
+    for (const [email, prog] of Object.entries(athletePrograms)) {
+      const lowerEmail = email.toLowerCase();
+      const acts = activitiesByEmail.get(lowerEmail) || [];
+      const dailyR = dailyRtssFromActivities(acts, prog || {});
+      const dense = densifyDailyRtss(dailyR, fromStr, todayLocal);
+      const pmc = computePMC(dense);
+      m.set(lowerEmail, { dailyR, dense, pmc, fromStr, toStr: todayLocal });
+    }
+    return m;
+  }, [activitiesByEmail, athletePrograms]);
+
   // ────────────────────────────────────────────────────────────
   //  LOADING
   // ────────────────────────────────────────────────────────────
@@ -2782,12 +2803,9 @@ export default function App() {
       weeksOut.push({ idx: i, weekStart: ymd(wkStart), weekEnd: ymd(wkEnd) });
     }
 
-    // Compute current CTL/ATL from existing PMC.
-    const daActs = target ? (activitiesByEmail.get(target?.toLowerCase()) || []) : [];
-    const dailyR = dailyRtssFromActivities(daActs, ap || {});
-    const fromBack = new Date(todayD); fromBack.setDate(todayD.getDate() - 180);
-    const dense = densifyDailyRtss(dailyR, ymd(fromBack), ymd(todayD));
-    const pmc = computePMC(dense);
+    // Current CTL/ATL — pulled from the memoised pmcByEmail map so this
+    // doesn't recompute on every render of the coach ATP view.
+    const pmc = (target ? pmcByEmail.get(target.toLowerCase())?.pmc : null) || [];
     const tail = pmc[pmc.length - 1] || { ctl: 0, atl: 0 };
 
     // Sum each week's planned rTSS from the athlete's plan + project forward.
@@ -3276,15 +3294,16 @@ export default function App() {
           {/* Performance Management Chart — last 90 days visible, computed
               over the last 180 so CTL is fully warmed up. */}
           {coachAthleteTab === "plan" && (() => {
-            const daActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
-            const dailyRtss = dailyRtssFromActivities(daActs, da);
+            // Pull the memoised series for this athlete instead of
+            // recomputing dailyRtss → densify → computePMC every render.
+            const memoEntry = pmcByEmail.get(dashAthlete?.toLowerCase()) || null;
+            const dailyRtss = memoEntry?.dailyR || [];
+            const pmc = memoEntry?.pmc || [];
+            const fromStr = memoEntry?.fromStr || ymd(new Date(Date.now() - 180 * 86400000));
+            const toStr = memoEntry?.toStr || todayStr();
             const today = new Date();
-            const from = new Date(today); from.setDate(today.getDate() - 180);
-            const fmt = ymd;
             // Forecast: project the athlete's CTL/ATL through their next
             // 14 days of planned sessions so the coach sees TSB trajectory.
-            const dense = densifyDailyRtss(dailyRtss, fmt(from), fmt(today));
-            const pmc = computePMC(dense);
             const tail = pmc[pmc.length - 1];
             const todayStrLocal = todayStr();
             const futurePlanned = new Map();
@@ -3308,7 +3327,7 @@ export default function App() {
             return (
               <div style={{ ...S.card, marginBottom:20 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
-                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(today)} height={220} displayDays={90}/>
+                <PMCChart dailyRtss={dailyRtss} fromDate={fromStr} toDate={toStr} height={220} displayDays={90}/>
                 {tail && (f7 || f14) && (
                   <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${C.rule}` }}>
                     <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6 }}>
@@ -5860,8 +5879,11 @@ export default function App() {
             const totalKm = lastWeekActs.reduce((acc, a) => acc + (parseFloat(a.distance_km) || 0), 0);
             const thr = (() => { try { return null; } catch { return null; } })();
 
-            // Compute rTSS for each + sum
-            const dailyR = dailyRtssFromActivities(lastWeekActs, profile);
+            // Compute rTSS for each + sum. Sliced from the memoised
+            // per-athlete series so the dailyRtssFromActivities pass
+            // doesn't repeat on every render of the today screen.
+            const fullDailyR = pmcByEmail.get(user.email?.toLowerCase())?.dailyR || [];
+            const dailyR = fullDailyR.filter(d => inLastWeek(d.date));
             const totalRtss = dailyR.reduce((a, b) => a + (b.rtss || 0), 0);
 
             // Top run = the activity with the highest rTSS (or longest distance fallback)
@@ -6578,9 +6600,13 @@ export default function App() {
           {/* Performance chart — fitness/fatigue/form. 90 days visible,
               computed over the last 180 so CTL is fully warmed up. */}
           {(() => {
+            // When Strava is connected we prefer its live list (more
+            // recent than the DB). Otherwise fall back to the memoised
+            // per-athlete series — saves redoing the dailyRtss pass.
+            const memoEntry = pmcByEmail.get(user.email?.toLowerCase());
             const dailyRtss = stravaConnected && stravaActivities.length
               ? dailyRtssFromStravaList(stravaActivities, profile)
-              : dailyRtssFromActivities(myActs, profile);
+              : (memoEntry?.dailyR || []);
             const t = new Date();
             const from = new Date(t); from.setDate(t.getDate() - 180);
             const fmt = ymd;
