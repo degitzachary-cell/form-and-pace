@@ -658,8 +658,50 @@ export default function App() {
     }
   }, [role, dashAthlete]);
 
-  // ── Live sync: subscribe to session_logs + activities + coach_plans ──
-  useRealtimeSync({ user, role, setLogs, setActivities, setAthletePrograms });
+  // ── Live sync: subscribe to session_logs + activities + coach_plans
+  // + calendar_markers. Status surfaces a small "offline" pill when the
+  // realtime socket isn't connected so the coach knows their view is
+  // stale instead of silently lagging behind the athlete. ──
+  const realtimeStatus = useRealtimeSync({ user, role, setLogs, setActivities, setAthletePrograms, setMarkersByEmail });
+
+  // Imperative status pill — App has many early returns (one per screen),
+  // so a JSX element would need duplicating into each. Mounting a single
+  // fixed-position div via DOM lets the indicator survive every render
+  // path with one effect. Hidden when SUBSCRIBED (the happy path); shows
+  // a small badge when offline / errored so the user knows the view is
+  // stale instead of silently lagging.
+  useEffect(() => {
+    const id = "fp-realtime-pill";
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = id;
+      el.style.cssText = [
+        "position:fixed", "bottom:12px", "left:12px", "z-index:99999",
+        "padding:6px 10px", "border-radius:2px",
+        "font-family:var(--f-mono, ui-monospace, monospace)",
+        "font-size:10px", "letter-spacing:0.16em", "font-weight:700",
+        "pointer-events:none", "transition:opacity 200ms ease",
+      ].join(";");
+      document.body.appendChild(el);
+    }
+    if (realtimeStatus === "SUBSCRIBED") {
+      el.style.opacity = "0";
+      el.textContent = "";
+    } else {
+      const label = realtimeStatus === "connecting" ? "CONNECTING…"
+                  : realtimeStatus === "CHANNEL_ERROR" ? "OFFLINE · REALTIME ERROR"
+                  : realtimeStatus === "TIMED_OUT" ? "OFFLINE · TIMED OUT"
+                  : realtimeStatus === "CLOSED" ? "OFFLINE"
+                  : `OFFLINE · ${realtimeStatus}`;
+      el.style.opacity = "1";
+      el.style.background = "#fff8f0";
+      el.style.border = "1px solid #f0c080";
+      el.style.borderLeft = "3px solid #c08030";
+      el.style.color = "#8a4f1a";
+      el.textContent = label;
+    }
+  }, [realtimeStatus]);
 
   // ── Load coach's workout templates once ──
   useEffect(() => {
