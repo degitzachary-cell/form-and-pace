@@ -423,7 +423,7 @@ export default function App() {
   const [logEarly, setLogEarly] = useState(false);
   // Wellness — manually entered each session log. Stored in analysis.wellness.
   const [sessionRpe,       setSessionRpe]       = useState(null);  // 1–10
-  const [sessionSleepHrs,  setSessionSleepHrs]  = useState("");    // free number
+  const [sessionSleepHours,  setSessionSleepHours]  = useState("");    // free number
   const [sessionSoreness,  setSessionSoreness]  = useState(null);  // 1–5
   const [sessionMood,      setSessionMood]      = useState(null);  // 1–5
 
@@ -452,7 +452,7 @@ export default function App() {
   // be wired here, not at every navigation site.
   const resetSessionWellness = () => {
     setSessionRpe(null);
-    setSessionSleepHrs("");
+    setSessionSleepHours("");
     setSessionSoreness(null);
     setSessionMood(null);
     setNoStravaConfirmed(false);
@@ -978,7 +978,7 @@ export default function App() {
       const isLogged = sessionIsLogged(todays.log, todaysAct);
       setActiveSession({ ...todays.s, weekStart: monStr });
       setFeedbackText(""); setSessionDistKm(""); setSessionDurMin("");
-      setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+      setSessionRpe(null); setSessionSleepHours(""); setSessionSoreness(null); setSessionMood(null);
       setNoStravaConfirmed(false); setLogEarly(false);
       setSessionDateOverride(todays.log?.analysis?.actual_date || todaysAct?.activity_date || today);
       setScreen(isLogged ? "result" : "session");
@@ -1101,7 +1101,7 @@ export default function App() {
     setActiveMonday(null); setCoachActiveMonday(null); setHoveredWeekIdx(null);
     setCoachReply(""); setFeedbackText("");
     setSessionDistKm(""); setSessionDurMin(""); setSessionDateOverride(null);
-    setSessionRpe(null); setSessionSleepHrs(""); setSessionSoreness(null); setSessionMood(null);
+    setSessionRpe(null); setSessionSleepHours(""); setSessionSoreness(null); setSessionMood(null);
     setScreen("today"); setCoachScreen("dashboard");
     setDashAthlete(null);
   };
@@ -1377,7 +1377,7 @@ export default function App() {
       const sessionDate = stravaDate || sessionDateOverride || scheduledDate || todayStr();
       const wellness = {
         ...(sessionRpe       != null ? { rpe:         sessionRpe       } : {}),
-        ...(sessionSleepHrs  !== ""  ? { sleep_hours: parseFloat(sessionSleepHrs) } : {}),
+        ...(sessionSleepHours  !== ""  ? { sleep_hours: parseFloat(sessionSleepHours) } : {}),
         ...(sessionSoreness  != null ? { soreness:    sessionSoreness  } : {}),
         ...(sessionMood      != null ? { mood:        sessionMood      } : {}),
       };
@@ -6975,10 +6975,10 @@ export default function App() {
         )}
         {!formHidden && <>
         <SectionCard label="How it felt">
-          {(sessionRpe || sessionSleepHrs || sessionSoreness || sessionMood) && (
+          {(sessionRpe || sessionSleepHours || sessionSoreness || sessionMood) && (
             <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.55, color:"var(--c-ink)", margin:"0 0 18px" }}>
               {sessionRpe ? <>That run felt like a <em style={{ color: rpeColor(sessionRpe) || "var(--c-hot)", fontStyle:"italic" }}>{sessionRpe}/10</em>. </> : <>That run felt like a <em style={{ color:"var(--c-mute)", fontStyle:"italic" }}>—/10</em>. </>}
-              {sessionSleepHrs ? <>I slept <em style={{ color:"var(--c-accent)", fontStyle:"italic" }}>{sessionSleepHrs}h</em>, </> : null}
+              {sessionSleepHours ? <>I slept <em style={{ color:"var(--c-accent)", fontStyle:"italic" }}>{sessionSleepHours}h</em>, </> : null}
               {sessionSoreness ? <>legs are <em style={{ color:"var(--c-cool)", fontStyle:"italic" }}>{["nothing","barely","bit sore","tight","wrecked"][sessionSoreness-1]}</em>, </> : null}
               {sessionMood ? <>and I'm <em style={{ color:"var(--c-warn)", fontStyle:"italic" }}>{["awful","rough","ok","good","flying"][sessionMood-1]}</em>.</> : null}
             </p>
@@ -7005,7 +7005,7 @@ export default function App() {
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>Sleep last night (hours)</div>
             <input type="number" step="0.5" min="0" max="14" placeholder="e.g. 7.5"
-              value={sessionSleepHrs} onChange={e=>setSessionSleepHrs(e.target.value)}
+              value={sessionSleepHours} onChange={e=>setSessionSleepHours(e.target.value)}
               style={{ ...S.input, width:120 }}/>
           </div>
           <div style={{ marginBottom:14 }}>
@@ -7268,7 +7268,7 @@ export default function App() {
             setSessionDurMin(an?.duration_min?.toString() || "");
             setSessionDateOverride(an?.actual_date || resultLinkedAct?.activity_date || sessionDateStr(activeSession.weekStart, activeSession.day));
             setSessionRpe(w.rpe ?? null);
-            setSessionSleepHrs(w.sleep_hours != null ? String(w.sleep_hours) : "");
+            setSessionSleepHours(w.sleep_hours != null ? String(w.sleep_hours) : "");
             setSessionSoreness(w.soreness ?? null);
             setSessionMood(w.mood ?? null);
             if (log?.strava_data) setStravaDetail(log.strava_data);
