@@ -577,6 +577,10 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [newWeekLabel, setNewWeekLabel] = useState('');
   const [newWeekStart, setNewWeekStart] = useState('');
   const [showAddWeek, setShowAddWeek] = useState(false);
+  // Excel import is a power-user/migration tool — kept available but
+  // tucked behind a disclosure at the bottom of the page so the main
+  // flow (athlete picker → edit weeks) doesn't get pushed off-screen.
+  const [showExcelImport, setShowExcelImport] = useState(false);
   const [uploadTarget, setUploadTarget] = useState('');
   const [uploadMode, setUploadMode] = useState('append');
   const [uploading, setUploading] = useState(false);
@@ -784,36 +788,6 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   return (
     <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px 16px 80px', fontFamily: S.bodyFont, color: C.navy }}>
       <StatusBanner status={status} onDismiss={() => setStatus(null)} />
-
-      {/* ── Excel Upload ── */}
-      <div style={cardStyle}>
-        <div style={{ fontSize: 10, letterSpacing: 2, color: C.crimson, textTransform: 'uppercase', marginBottom: 10 }}>Import from Excel</div>
-        <select style={{ ...inputStyle, marginBottom: 10 }} value={uploadTarget} onChange={e => setUploadTarget(e.target.value)}>
-          <option value="">Select athlete to import into…</option>
-          {athleteList.map(a => <option key={a.email} value={a.email}>{a.name}</option>)}
-        </select>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          {['append', 'replace'].map(mode => (
-            <button key={mode} type="button" onClick={() => setUploadMode(mode)}
-              style={{
-                flex: 1, padding: '8px 10px', borderRadius: 2, fontSize: 12, cursor: 'pointer',
-                background: uploadMode === mode ? C.navy   : C.white,
-                color:      uploadMode === mode ? C.cream  : C.mid,
-                border: `1px solid ${uploadMode === mode ? C.navy : C.rule}`,
-                letterSpacing: 0.5, fontWeight: 600,
-              }}>
-              {mode === 'append' ? '+ Append weeks' : '↻ Replace all'}
-            </button>
-          ))}
-        </div>
-        <input ref={fileInputRef} type="file" accept=".xlsx" style={{ display: 'none' }} onChange={handleExcelUpload} />
-        <button type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={!uploadTarget || uploading}
-          style={S.primaryBtn(C.navy, !uploadTarget || uploading)}>
-          {uploading ? 'Importing…' : 'Choose Excel file (.xlsx)'}
-        </button>
-      </div>
 
       {/* ── Athlete picker ── */}
       <div style={cardStyle}>
@@ -1092,6 +1066,54 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
           Select an athlete to view and edit their training plan.
         </div>
       )}
+
+      {/* ── Excel import (advanced) ──
+          Tucked behind a disclosure at the bottom. Useful for migrating
+          a season's plan in one go; not part of the day-to-day flow. */}
+      <div style={{ marginTop: 32, paddingTop: 16, borderTop: `1px dashed ${C.rule}` }}>
+        <button type="button" onClick={() => setShowExcelImport(v => !v)}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: C.mute, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase',
+            fontFamily: 'var(--f-mono)', padding: '4px 0',
+          }}>
+          {showExcelImport ? '▾' : '▸'} Advanced · Import from Excel
+        </button>
+        {showExcelImport && (
+          <div style={{ ...cardStyle, marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: C.mid, marginBottom: 12, lineHeight: 1.5 }}>
+              Bulk-import a season's worth of weeks from a spreadsheet.
+              Mostly useful for migrating an existing plan; for new
+              athletes, build the plan above instead.
+            </div>
+            <select style={{ ...inputStyle, marginBottom: 10 }} value={uploadTarget} onChange={e => setUploadTarget(e.target.value)}>
+              <option value="">Select athlete to import into…</option>
+              {athleteList.map(a => <option key={a.email} value={a.email}>{a.name}</option>)}
+            </select>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {['append', 'replace'].map(mode => (
+                <button key={mode} type="button" onClick={() => setUploadMode(mode)}
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: 2, fontSize: 12, cursor: 'pointer',
+                    background: uploadMode === mode ? C.navy   : C.white,
+                    color:      uploadMode === mode ? C.cream  : C.mid,
+                    border: `1px solid ${uploadMode === mode ? C.navy : C.rule}`,
+                    letterSpacing: 0.5, fontWeight: 600,
+                  }}>
+                  {mode === 'append' ? '+ Append weeks' : '↻ Replace all'}
+                </button>
+              ))}
+            </div>
+            <input ref={fileInputRef} type="file" accept=".xlsx" style={{ display: 'none' }} onChange={handleExcelUpload} />
+            <button type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!uploadTarget || uploading}
+              style={S.primaryBtn(C.navy, !uploadTarget || uploading)}>
+              {uploading ? 'Importing…' : 'Choose Excel file (.xlsx)'}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
