@@ -14,7 +14,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, expandZonePace, displayPace } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, expandZonePace, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor } from "./lib/load.js";
 import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
 import { matchActivitiesToSessions } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
@@ -347,6 +347,31 @@ function ProfileForm({ form, setForm, email }) {
         </div>
       </div>
 
+      <div style={{ marginBottom: 18 }}>
+        <div style={labelStyle}>Pace unit</div>
+        <div style={{ display:"flex", gap:6 }}>
+          {[
+            { v: "km", label: "MIN/KM" },
+            { v: "mi", label: "MIN/MI" },
+          ].map(opt => {
+            const sel = (form.pace_unit || "km") === opt.v;
+            return (
+              <button key={opt.v} type="button" onClick={() => setForm(f => ({ ...f, pace_unit: opt.v }))}
+                style={{
+                  background: sel ? C.ink : C.white,
+                  color: sel ? C.paper : C.ink,
+                  border:`1px solid ${sel ? C.ink : C.rule}`,
+                  borderRadius:2, padding:"8px 16px", fontSize:11, letterSpacing:1.5,
+                  fontWeight: sel ? 700 : 500, cursor:"pointer", fontFamily:"var(--f-mono)",
+                }}>{opt.label}</button>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 11, color: C.mid, marginTop: 6, lineHeight: 1.5 }}>
+          How paces and distances are shown to you. Threshold pace and PBs are stored in km internally; this only affects what you see.
+        </div>
+      </div>
+
       <div style={{ fontSize: 10, letterSpacing: 2, color: C.crimson, textTransform: "uppercase", marginBottom: 4 }}>PBs &amp; Goals</div>
       <div style={{ fontSize: 11, color: C.mid, marginBottom: 10, lineHeight: 1.5 }}>
         Leave any field blank if you don't have a PB or goal for that distance.
@@ -418,6 +443,10 @@ export default function App() {
   // remembers which one their Today card is currently focused on.
   // Reset whenever the date or plan changes.
   const [todayFocusSessionId, setTodayFocusSessionId] = useState(null);
+  // Day-offset for the Today screen's hero. 0 = today, -1 = yesterday,
+  // +1 = tomorrow. Lets the athlete chevron / swipe through the week
+  // without leaving the Today screen.
+  const [dayOffset, setDayOffset] = useState(0);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
   // Calendar (month view): YYYY-MM-01 string anchoring the displayed month.
@@ -430,7 +459,7 @@ export default function App() {
 
   // Profile editor state — used by both athlete (self-edit) and coach
   // (edit-on-behalf). The form is populated when entering either profile screen.
-  const [profileForm, setProfileForm] = useState({ name: "", avatar: "", threshold_pace: "", pbs: { ...EMPTY_PB_GOAL }, goals: { ...EMPTY_PB_GOAL } });
+  const [profileForm, setProfileForm] = useState({ name: "", avatar: "", threshold_pace: "", pace_unit: "km", pbs: { ...EMPTY_PB_GOAL }, goals: { ...EMPTY_PB_GOAL } });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileStatus, setProfileStatus] = useState(null);
 
@@ -501,7 +530,7 @@ export default function App() {
       // Now enrich with profile data — only for emails that are in the roster.
       const { data: profiles, error: profErr } = await supabase
         .from('profiles')
-        .select('email, name, goal, current_pb, avatar, role, threshold_pace, pbs, goals');
+        .select('email, name, goal, current_pb, avatar, role, threshold_pace, pace_unit, pbs, goals');
       if (profErr) { console.error('Failed to load athlete profiles:', profErr); }
 
       (profiles || []).forEach(p => {
@@ -517,6 +546,7 @@ export default function App() {
           ...(p.pbs             ? { pbs:              p.pbs             } : {}),
           ...(p.goals           ? { goals:            p.goals           } : {}),
           ...(p.threshold_pace  ? { threshold_pace:   p.threshold_pace  } : {}),
+          ...(p.pace_unit       ? { pace_unit:        p.pace_unit       } : {}),
         };
       });
 
@@ -1406,6 +1436,7 @@ export default function App() {
         name: profile.name || "",
         avatar: profile.avatar || "",
         threshold_pace: profile.threshold_pace || "",
+        pace_unit: profile.pace_unit || "km",
         pbs:   { ...EMPTY_PB_GOAL, ...(profile.pbs   || {}) },
         goals: { ...EMPTY_PB_GOAL, ...(profile.goals || {}) },
       });
@@ -1420,6 +1451,7 @@ export default function App() {
         name: ap.name || "",
         avatar: ap.avatar || "",
         threshold_pace: ap.threshold_pace || "",
+        pace_unit: ap.pace_unit || "km",
         pbs:   { ...EMPTY_PB_GOAL, ...(ap.pbs   || {}) },
         goals: { ...EMPTY_PB_GOAL, ...(ap.goals || {}) },
       });
@@ -1440,6 +1472,7 @@ export default function App() {
         name: profileForm.name.trim() || null,
         avatar: profileForm.avatar.trim() || null,
         threshold_pace: profileForm.threshold_pace?.trim() || null,
+        pace_unit: profileForm.pace_unit || "km",
         pbs:   cleanedPbs,
         goals: cleanedGoals,
         // Keep legacy text columns in sync for screens that still read them.
@@ -3917,7 +3950,7 @@ export default function App() {
                     return (
                       <SectionCard label="Wellness">
                         <div style={{ display:"flex", gap:14, flexWrap:"wrap", fontSize:13, color:C.navy }}>
-                          {an.wellness.rpe        != null && <div><b>RPE</b> {an.wellness.rpe}/10</div>}
+                          {an.wellness.rpe        != null && <div><b>RPE</b> <span style={{ color: rpeColor(an.wellness.rpe), fontWeight:700 }}>{an.wellness.rpe}</span>/10</div>}
                           {an.wellness.sleep_hours != null && <div><b>Sleep</b> {an.wellness.sleep_hours}h</div>}
                           {an.wellness.soreness   != null && <div><b>Soreness</b> {an.wellness.soreness}/5</div>}
                           {an.wellness.mood       != null && <div><b>Mood</b> {["awful","rough","ok","good","flying"][an.wellness.mood-1]} {an.wellness.mood}/5</div>}
@@ -4946,9 +4979,50 @@ export default function App() {
   if (role === "athlete" && screen === "today") {
     const myActs = activitiesByEmail.get(user.email?.toLowerCase()) || [];
     const today = todayStr();
-    const t = new Date(); t.setHours(0,0,0,0);
+    const paceUnit = profile?.pace_unit || "km";
+    const distUnit = distanceUnitLabel(paceUnit);
+    // The "viewed" date = today + dayOffset. The hero rebinds to this
+    // date; supplementary cards (readiness, race countdown, wellness
+    // check-in, Strava unimported) stay anchored to today.
+    const tActual = new Date(); tActual.setHours(0,0,0,0);
+    const t = new Date(tActual); t.setDate(tActual.getDate() + dayOffset);
+    const viewedDate = ymd(t);
+    const isToday = dayOffset === 0;
     const dow = t.getDay();
     const dayLabel = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dow];
+    // Smart label: TODAY · SAT / YESTERDAY · FRI / TOMORROW · SUN /
+    // MON · MAY 5 (day-name + date) for anything beyond ±1 day.
+    const monthShort = t.toLocaleDateString(undefined, { month:"short" }).toUpperCase();
+    const dateNum = t.getDate();
+    const dayLabelLong = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dow].toUpperCase();
+    const heroDateLabel = dayOffset === 0  ? `TODAY · ${dayLabel.toUpperCase()}`
+                       : dayOffset === -1 ? `YESTERDAY · ${dayLabel.toUpperCase()}`
+                       : dayOffset === 1  ? `TOMORROW · ${dayLabel.toUpperCase()}`
+                       : `${dayLabelLong} · ${monthShort} ${dateNum}`;
+    // Bound the chevron range to the program weeks that are loaded so
+    // the athlete can't navigate into empty territory. ±14 days as a
+    // safety floor for athletes whose program is bare.
+    const allWeekStarts = (programEntry?.weeks || []).map(w => w.weekStart).sort();
+    const programMin = allWeekStarts[0] || today;
+    const programMaxStart = allWeekStarts[allWeekStarts.length - 1] || today;
+    const programMaxDate = (() => {
+      const d = new Date(programMaxStart + "T00:00:00");
+      d.setDate(d.getDate() + 6);
+      return ymd(d);
+    })();
+    const offsetMin = (() => {
+      const d = new Date(programMin + "T00:00:00");
+      const diff = Math.round((d.getTime() - tActual.getTime()) / 86400000);
+      return Math.min(-14, diff);
+    })();
+    const offsetMax = (() => {
+      const d = new Date(programMaxDate + "T00:00:00");
+      const diff = Math.round((d.getTime() - tActual.getTime()) / 86400000);
+      return Math.max(14, diff);
+    })();
+    const canGoBack = dayOffset > offsetMin;
+    const canGoForward = dayOffset < offsetMax;
+    // Pick the week containing the viewed date.
     const monOff = dow === 0 ? -6 : 1 - dow;
     const monDate = new Date(t); monDate.setDate(t.getDate() + monOff);
     const monStr = ymd(monDate);
@@ -4959,12 +5033,12 @@ export default function App() {
       const onDate = overrideDate || sessionDateStr(monStr, s.day);
       return { s, log, onDate };
     });
-    // All non-REST sessions scheduled (or moved) onto today. With doubles
-    // (e.g. AM easy + PM strength) there can be more than one.
+    // All non-REST sessions scheduled (or moved) onto the viewed date.
+    // With doubles (e.g. AM easy + PM strength) there can be more than one.
     const allTodaysSessions = allWithMoves.filter(x =>
-      x.onDate === today && (x.s.type || "").toUpperCase() !== "REST"
+      x.onDate === viewedDate && (x.s.type || "").toUpperCase() !== "REST"
     );
-    const allTodaysActivities = myActs.filter(a => a.activity_date === today);
+    const allTodaysActivities = myActs.filter(a => a.activity_date === viewedDate);
     // Match activities to sessions using sport type, time-of-day, and
     // distance/duration proximity (lib/sessionMatching.js). Without this,
     // both sessions would naively claim the first activity of the day.
@@ -5016,7 +5090,7 @@ export default function App() {
     const nextRace = upcomingRaces[0] || null;
     const raceDaysLeft = nextRace ? (() => {
       const r = new Date(nextRace.marker_date + "T00:00:00");
-      const ms = r.getTime() - t.getTime();
+      const ms = r.getTime() - tActual.getTime();
       return Math.max(0, Math.round(ms / 86400000));
     })() : null;
     const raceDateStr = nextRace ? new Date(nextRace.marker_date + "T00:00:00").toLocaleDateString(undefined, { day:"numeric", month:"short" }) : null;
@@ -5195,7 +5269,7 @@ export default function App() {
             <div onClick={openMostRecentUnread}
               style={{
                 margin:"16px 16px 0", padding:"12px 14px",
-                background:"#3b82f6", color:"#fffdf8",
+                background: C.cool, color: "#fffdf8",
                 borderRadius:2, cursor:"pointer", display:"flex",
                 alignItems:"center", justifyContent:"space-between", gap:10,
               }}>
@@ -5263,7 +5337,7 @@ export default function App() {
                       <div style={{ fontSize:22, fontWeight:900, color:C.navy, fontFamily:S.displayFont, lineHeight:1.15, marginBottom:6 }}>
                         {todaysSession.s.type}
                       </div>
-                      {(todaysSession.s.pace || todaysSession.s.duration_min) && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{[todaysSession.s.duration_min && `${todaysSession.s.duration_min}min`, displayPace(todaysSession.s.pace)].filter(Boolean).join(' · ')}</div>}
+                      {(todaysSession.s.pace || todaysSession.s.duration_min) && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{[todaysSession.s.duration_min && `${todaysSession.s.duration_min}min`, displayPace(todaysSession.s.pace, paceUnit)].filter(Boolean).join(' · ')}</div>}
                       {(todaysSession.s.desc || todaysSession.s.description) && (
                         <div style={{ fontSize:13, color:C.mid, marginTop:8, lineHeight:1.5, whiteSpace:"pre-wrap" }}>
                           {todaysSession.s.desc || todaysSession.s.description}
@@ -5405,11 +5479,57 @@ export default function App() {
               setSessionDateOverride(todaysSession.log?.analysis?.actual_date || todaysActivity?.activity_date || today);
               setScreen(isLogged ? "result" : "session");
             };
+            // Touch handlers for left/right swipe to navigate days. Tracks
+            // start X on touchstart and triggers on touchend if the
+            // horizontal delta is past the threshold and dominates over
+            // any vertical scroll motion.
+            let touchStartX = 0, touchStartY = 0;
+            const onHeroTouchStart = (e) => {
+              const t0 = e.touches[0];
+              touchStartX = t0.clientX; touchStartY = t0.clientY;
+            };
+            const onHeroTouchEnd = (e) => {
+              const t1 = e.changedTouches[0];
+              const dx = t1.clientX - touchStartX;
+              const dy = t1.clientY - touchStartY;
+              if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+              if (dx < 0 && canGoForward) setDayOffset(o => o + 1);
+              else if (dx > 0 && canGoBack) setDayOffset(o => o - 1);
+            };
             return (
-              <div style={{ padding:"32px 24px 24px" }}>
+              <div style={{ position:"relative", padding:"32px 48px 24px" }}
+                   onTouchStart={onHeroTouchStart} onTouchEnd={onHeroTouchEnd}>
+                {/* Gutter chevrons — vertically spanning the hero so the
+                    tap targets are large. Disabled state when there's
+                    nothing in that direction within the program range. */}
+                <button type="button" onClick={() => canGoBack && setDayOffset(o => o - 1)} disabled={!canGoBack}
+                  aria-label="Previous day"
+                  style={{
+                    position:"absolute", left:0, top:0, bottom:0, width:40,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    background:"transparent", border:"none",
+                    color: canGoBack ? "var(--c-ink)" : "var(--c-rule)",
+                    fontSize:30, lineHeight:1, fontFamily:"var(--f-display)",
+                    cursor: canGoBack ? "pointer" : "default", padding:0,
+                  }}>‹</button>
+                <button type="button" onClick={() => canGoForward && setDayOffset(o => o + 1)} disabled={!canGoForward}
+                  aria-label="Next day"
+                  style={{
+                    position:"absolute", right:0, top:0, bottom:0, width:40,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    background:"transparent", border:"none",
+                    color: canGoForward ? "var(--c-ink)" : "var(--c-rule)",
+                    fontSize:30, lineHeight:1, fontFamily:"var(--f-display)",
+                    cursor: canGoForward ? "pointer" : "default", padding:0,
+                  }}>›</button>
                 <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:24 }}>
-                  <Eyebrow style={{ color:"var(--c-ink)" }}>Today &nbsp;·&nbsp; {dayLabel}</Eyebrow>
-                  <span className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.1em" }}>{dateNice.toUpperCase()}</span>
+                  <div className="t-mono" style={{
+                    fontSize:13, letterSpacing:"0.18em", fontWeight:700,
+                    color: isToday ? "var(--c-crimson)" : "var(--c-ink)",
+                  }}>{heroDateLabel}</div>
+                  {isToday && (
+                    <span className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.1em" }}>{dateNice.toUpperCase()}</span>
+                  )}
                 </div>
 
                 {s ? (
@@ -5428,7 +5548,7 @@ export default function App() {
                     <h1 className="t-display" style={{ fontSize:52, lineHeight:0.95, margin:"4px 0 0", fontWeight:400, letterSpacing:"-0.02em" }}>
                       {s.type}
                       {(() => {
-                        const p = displayPace(dominantPace(s));
+                        const p = displayPace(dominantPace(s), paceUnit);
                         return p ? <><br/><span className="t-display-italic" style={{ color:"var(--c-mute)" }}>at {p}</span></> : null;
                       })()}
                     </h1>
@@ -5495,8 +5615,16 @@ export default function App() {
             const timeMin = ps.duration_min || (agg.duration_min > 0 ? agg.duration_min : null);
             // Prefer the work-block pace from steps when sections exist;
             // fall back to the top-level prescribed pace.
-            const paceShown = displayPace(dominantPace(ps));
+            const paceForCalc = dominantPace(ps);
+            const paceShown = displayPace(paceForCalc, paceUnit);
             const rpeShown = ps.rpe_target || ps.rpe || defaultRpeTarget(ps.type);
+            // Predicted volume: when the coach prescribed time + pace but
+            // no distance, derive distance ≈ time / pace. Marked with "≈"
+            // so it doesn't masquerade as a coach-set target.
+            const predictedKm = volKm == null ? predictDistanceKm(timeMin, paceForCalc) : null;
+            const volShown = volKm != null
+              ? displayDistance(volKm, paceUnit)
+              : predictedKm != null ? displayDistance(predictedKm, paceUnit) : null;
             return (
               <div className="fp-pace-strip">
                 <div>
@@ -5505,8 +5633,8 @@ export default function App() {
                 </div>
                 <div>
                   <Eyebrow style={{ marginBottom:6 }}>Volume</Eyebrow>
-                  <Num size={17}>{volKm || "—"}</Num>
-                  {volKm && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> km</span>}
+                  <Num size={17}>{volShown != null ? `${predictedKm != null && volKm == null ? "≈" : ""}${volShown}` : "—"}</Num>
+                  {volShown != null && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> {distUnit}</span>}
                 </div>
                 <div>
                   <Eyebrow style={{ marginBottom:6 }}>Time</Eyebrow>
@@ -5515,7 +5643,7 @@ export default function App() {
                 </div>
                 <div>
                   <Eyebrow style={{ marginBottom:6 }}>RPE</Eyebrow>
-                  <Num size={17}>{rpeShown || "—"}</Num>
+                  <Num size={17} color={rpeColor(rpeShown) || undefined}>{rpeShown || "—"}</Num>
                   {rpeShown && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> /10</span>}
                 </div>
               </div>
@@ -5547,7 +5675,9 @@ export default function App() {
             const w = log?.analysis?.wellness || {};
             const hasAny = w.rpe != null || w.sleep_hours != null || w.soreness != null || w.mood != null;
             const loggedToday = !!log?.analysis?.distance_km || !!todaysActivity;
-            if (!loggedToday || hasAny) return null;
+            // Only prompt the check-in for today's runs; navigating to
+            // a past or future day shouldn't suggest logging wellness.
+            if (!isToday || !loggedToday || hasAny) return null;
             const submit = async () => {
               if (!todaysSession?.s?.id) return;
               setQuickSaving(true);
@@ -5565,21 +5695,26 @@ export default function App() {
               } catch (e) { console.error("quick wellness save failed", e); }
               finally { setQuickSaving(false); }
             };
-            const PickRow = ({ label, options, value, onChange }) => (
+            const PickRow = ({ label, options, value, onChange, colorBy }) => (
               <div style={{ marginBottom:12 }}>
                 <Eyebrow style={{ marginBottom:6 }}>{label}</Eyebrow>
                 <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                  {options.map(n => (
-                    <button key={n} type="button" onClick={() => onChange(value === n ? null : n)}
-                      style={{
-                        flex:`1 0 ${100 / options.length - 1}%`, minWidth:30, padding:"8px 4px",
-                        background: value === n ? "var(--c-ink)" : "transparent",
-                        color:      value === n ? "var(--c-paper)" : "var(--c-ink)",
-                        border:`1px solid ${value === n ? "var(--c-ink)" : "var(--c-rule)"}`,
-                        borderRadius:2, fontFamily:"var(--f-mono)", fontSize:12, fontWeight:500, cursor:"pointer",
-                        fontVariantNumeric:"tabular-nums",
-                      }}>{n}</button>
-                  ))}
+                  {options.map(n => {
+                    const sel = value === n;
+                    const tint = colorBy ? colorBy(n) : null;
+                    const bg = sel ? (tint || "var(--c-ink)") : "transparent";
+                    const fg = sel ? "var(--c-paper)" : "var(--c-ink)";
+                    const bd = sel ? (tint || "var(--c-ink)") : "var(--c-rule)";
+                    return (
+                      <button key={n} type="button" onClick={() => onChange(sel ? null : n)}
+                        style={{
+                          flex:`1 0 ${100 / options.length - 1}%`, minWidth:30, padding:"8px 4px",
+                          background: bg, color: fg, border:`1px solid ${bd}`,
+                          borderRadius:2, fontFamily:"var(--f-mono)", fontSize:12, fontWeight:500, cursor:"pointer",
+                          fontVariantNumeric:"tabular-nums",
+                        }}>{n}</button>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -5589,7 +5724,7 @@ export default function App() {
                   <Eyebrow style={{ color:"var(--c-accent)" }}>How did it feel?</Eyebrow>
                   <span className="t-display-italic" style={{ fontSize:13, color:"var(--c-mute)" }}>30 sec check-in</span>
                 </div>
-                <PickRow label="Effort (RPE)"     options={[1,2,3,4,5,6,7,8,9,10]} value={quickRpe}      onChange={setQuickRpe}/>
+                <PickRow label="Effort (RPE)"     options={[1,2,3,4,5,6,7,8,9,10]} value={quickRpe}      onChange={setQuickRpe} colorBy={rpeColor}/>
                 <PickRow label="Soreness · 1–5"   options={[1,2,3,4,5]}            value={quickSoreness} onChange={setQuickSoreness}/>
                 <PickRow label="Mood · 1–5"       options={[1,2,3,4,5]}            value={quickMood}     onChange={setQuickMood}/>
                 <div style={{ marginBottom:14 }}>
@@ -6805,7 +6940,7 @@ export default function App() {
         <SectionCard label="How it felt">
           {(sessionRpe || sessionSleepHrs || sessionSoreness || sessionMood) && (
             <p style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.55, color:"var(--c-ink)", margin:"0 0 18px" }}>
-              {sessionRpe ? <>That run felt like a <em style={{ color:"var(--c-hot)", fontStyle:"italic" }}>{sessionRpe}/10</em>. </> : <>That run felt like a <em style={{ color:"var(--c-mute)", fontStyle:"italic" }}>—/10</em>. </>}
+              {sessionRpe ? <>That run felt like a <em style={{ color: rpeColor(sessionRpe) || "var(--c-hot)", fontStyle:"italic" }}>{sessionRpe}/10</em>. </> : <>That run felt like a <em style={{ color:"var(--c-mute)", fontStyle:"italic" }}>—/10</em>. </>}
               {sessionSleepHrs ? <>I slept <em style={{ color:"var(--c-accent)", fontStyle:"italic" }}>{sessionSleepHrs}h</em>, </> : null}
               {sessionSoreness ? <>legs are <em style={{ color:"var(--c-cool)", fontStyle:"italic" }}>{["nothing","barely","bit sore","tight","wrecked"][sessionSoreness-1]}</em>, </> : null}
               {sessionMood ? <>and I'm <em style={{ color:"var(--c-warn)", fontStyle:"italic" }}>{["awful","rough","ok","good","flying"][sessionMood-1]}</em>.</> : null}
@@ -6814,16 +6949,20 @@ export default function App() {
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, letterSpacing:2, color:C.mid, textTransform:"uppercase", marginBottom:6 }}>RPE — Effort 1–10</div>
             <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-              {[1,2,3,4,5,6,7,8,9,10].map(n => (
-                <button key={n} type="button" onClick={() => setSessionRpe(sessionRpe === n ? null : n)}
-                  style={{
-                    flex:"1 0 38px", minWidth:38, padding:"8px 0",
-                    background: sessionRpe===n ? C.crimson : C.white,
-                    color:      sessionRpe===n ? "#fffdf8" : C.navy,
-                    border:`1px solid ${sessionRpe===n ? C.crimson : C.rule}`,
-                    borderRadius:2, fontSize:12, fontWeight:700, cursor:"pointer",
-                  }}>{n}</button>
-              ))}
+              {[1,2,3,4,5,6,7,8,9,10].map(n => {
+                const sel = sessionRpe === n;
+                const tint = rpeColor(n) || C.crimson;
+                return (
+                  <button key={n} type="button" onClick={() => setSessionRpe(sel ? null : n)}
+                    style={{
+                      flex:"1 0 38px", minWidth:38, padding:"8px 0",
+                      background: sel ? tint : C.white,
+                      color:      sel ? "#fffdf8" : C.navy,
+                      border:`1px solid ${sel ? tint : C.rule}`,
+                      borderRadius:2, fontSize:12, fontWeight:700, cursor:"pointer",
+                    }}>{n}</button>
+                );
+              })}
             </div>
           </div>
           <div style={{ marginBottom:14 }}>
@@ -7038,7 +7177,7 @@ export default function App() {
               <div style={{ marginBottom:24 }}>
                 <SectionHead label="How it felt"/>
                 <p style={{ fontFamily:"var(--f-display)", fontSize:19, lineHeight:1.55, margin:"16px 0 0", color:"var(--c-ink)" }}>
-                  {an.wellness.rpe != null && <>Felt like a <em style={{ color:"var(--c-hot)", fontStyle:"italic" }}>{an.wellness.rpe}/10</em>. </>}
+                  {an.wellness.rpe != null && <>Felt like a <em style={{ color: rpeColor(an.wellness.rpe) || "var(--c-hot)", fontStyle:"italic" }}>{an.wellness.rpe}/10</em>. </>}
                   {an.wellness.sleep_hours != null && <>Slept <em style={{ color:"var(--c-accent)", fontStyle:"italic" }}>{an.wellness.sleep_hours}h</em>, </>}
                   {an.wellness.soreness != null && <>legs <em style={{ color:"var(--c-cool)", fontStyle:"italic" }}>{["nothing","barely","bit sore","tight","wrecked"][an.wellness.soreness-1] || `${an.wellness.soreness}/5`}</em>, </>}
                   {an.wellness.mood != null && <>mood <em style={{ color:"var(--c-warn)", fontStyle:"italic" }}>{["awful","rough","ok","good","flying"][an.wellness.mood-1] || `${an.wellness.mood}/5`}</em>.</>}
