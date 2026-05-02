@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { C, S } from './styles.js';
-import { newId, snapToMonday, ymd } from './lib/helpers.js';
+import { newId, snapToMonday, ymd, parseLocalDate } from './lib/helpers.js';
 import { DAY_LABELS } from './lib/constants.js';
 import { formatStep } from './lib/load.js';
 import { PaceRangeInput, PaceInput } from './components.jsx';
@@ -681,7 +681,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     const src = weeks.find(w => w.id === weekId);
     if (!src) return;
     // Default the new weekStart to the Monday after the source week.
-    const next = new Date((src.weekStart || todayMondayFallback()) + 'T00:00:00');
+    const next = parseLocalDate(src.weekStart || todayMondayFallback());
     next.setDate(next.getDate() + 7);
     const newWeek = {
       id: newId(),
@@ -725,7 +725,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
         .sort()
         .pop();
       if (latest) {
-        const next = new Date(latest + 'T00:00:00');
+        const next = parseLocalDate(latest);
         next.setDate(next.getDate() + 7);
         weekStart = ymd(next);
       }
@@ -931,7 +931,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                           const latest = [...existing].map(w => w.weekStart).filter(Boolean).sort().pop();
                           let weekStart;
                           if (latest) {
-                            const next = new Date(latest + 'T00:00:00');
+                            const next = parseLocalDate(latest);
                             next.setDate(next.getDate() + 7);
                             weekStart = ymd(next);
                           } else {

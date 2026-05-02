@@ -7,7 +7,7 @@ import { checkStravaConnection, connectStrava, fetchStravaActivities, fetchStrav
 import {
   weekKm, stravaWeekKm, sessionDateStr, weekEndStr, getWeekBounds,
   prettyEmailName, todayStr, newId, ymd,
-  snapToMonday, thisMonday,
+  snapToMonday, thisMonday, parseLocalDate,
 } from "./lib/helpers.js";
 import { C, S, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
 import {
@@ -1850,7 +1850,7 @@ export default function App() {
     const dpExtras = dpWk ? dpActs.filter(a => isExtraDisplay(a) && a.activity_date >= dpWk.weekStart && a.activity_date <= dpWkEnd) : [];
     const dpSnapMonday = (dateStr) => {
       if (!dateStr) return;
-      const d = new Date(dateStr + "T00:00:00");
+      const d = parseLocalDate(dateStr);
       if (isNaN(d)) return;
       const dow = d.getDay();
       d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
@@ -2167,7 +2167,7 @@ export default function App() {
 
                   {/* Week picker */}
                   {coachActiveMonday && (() => {
-                    const monD = new Date(coachActiveMonday + "T00:00:00");
+                    const monD = parseLocalDate(coachActiveMonday);
                     const sunD = new Date(monD); sunD.setDate(monD.getDate() + 6); sunD.setHours(23,59,59,999);
                     const isCurr = new Date() >= monD && new Date() <= sunD;
                     return (
@@ -2291,7 +2291,7 @@ export default function App() {
     const existingWeeks = (meta.weeks || []).map(w => ({ ...w, sessions: [...(w.sessions || [])] }));
     let week = existingWeeks.find(w => w.weekStart === weekStart);
     if (!week) {
-      const m = new Date(weekStart + "T00:00:00");
+      const m = parseLocalDate(weekStart);
       const sun = new Date(m); sun.setDate(m.getDate() + 6);
       const monthLabel = m.toLocaleString("en-AU", { month: "short" });
       const sunMonthLabel = sun.toLocaleString("en-AU", { month: "short" });
@@ -2327,7 +2327,7 @@ export default function App() {
     const existingWeeks = (meta.weeks || []).map(w => ({ ...w, dayNotes: { ...(w.dayNotes || {}) } }));
     let week = existingWeeks.find(w => w.weekStart === weekStart);
     if (!week) {
-      const m = new Date(weekStart + "T00:00:00");
+      const m = parseLocalDate(weekStart);
       const sun = new Date(m); sun.setDate(m.getDate() + 6);
       const ml = m.toLocaleString("en-AU", { month:"short" });
       const sl = sun.toLocaleString("en-AU", { month:"short" });
@@ -2852,8 +2852,8 @@ export default function App() {
     // from weeks-to-race; otherwise show "Base" everywhere.
     const phaseFor = (weekStart) => {
       if (!raceDate) return "BASE";
-      const d = new Date(weekStart + "T00:00:00");
-      const r = new Date(raceDate + "T00:00:00");
+      const d = parseLocalDate(weekStart);
+      const r = parseLocalDate(raceDate);
       const weeksToRace = Math.round((r - d) / (7 * 86400000));
       if (weeksToRace < 0) return "POST";
       if (weeksToRace <= 2) return "TAPER";
@@ -3028,7 +3028,7 @@ export default function App() {
     const today = todayStr();
     // Generate the last NUM_WEEKS Monday dates descending.
     const weekStarts = (() => {
-      const d = new Date(today + "T00:00:00");
+      const d = parseLocalDate(today);
       const dow = d.getDay(); const off = dow === 0 ? -6 : 1 - dow;
       const arr = [];
       for (let i = 0; i < NUM_WEEKS; i++) {
@@ -3079,7 +3079,7 @@ export default function App() {
                 <tr>
                   <th style={{ textAlign:"left", padding:"8px 10px", borderBottom:`2px solid ${C.rule}`, fontSize:10, letterSpacing:2, color:C.mid, fontWeight:700, minWidth:140 }}>ATHLETE</th>
                   {weekStarts.map(ws => {
-                    const d = new Date(ws + "T00:00:00");
+                    const d = parseLocalDate(ws);
                     const label = d.toLocaleDateString(undefined, { month:"short", day:"numeric" });
                     return (
                       <th key={ws} style={{ textAlign:"center", padding:"8px 6px", borderBottom:`2px solid ${C.rule}`, fontSize:10, letterSpacing:1.5, color:C.mid, fontWeight:700, minWidth:64 }}>{label}</th>
@@ -3589,7 +3589,7 @@ export default function App() {
           {coachAthleteTab === "plan" && coachActiveMonday && (() => {
             const athActs = activitiesByEmail.get(dashAthlete?.toLowerCase()) || [];
             const today = new Date(); today.setHours(0,0,0,0);
-            const monDate = new Date(coachActiveMonday + "T00:00:00");
+            const monDate = parseLocalDate(coachActiveMonday);
             const sunDate = new Date(monDate); sunDate.setDate(monDate.getDate() + 6); sunDate.setHours(23,59,59,999);
             const isCurrent = today >= monDate && today <= sunDate;
             const isPast = today > sunDate;
@@ -4202,7 +4202,7 @@ export default function App() {
     const actByDate = new Map();
     for (const a of athActs) actByDate.set(a.activity_date, a);
 
-    const monthDate = new Date(calendarMonth + "T00:00:00");
+    const monthDate = parseLocalDate(calendarMonth);
     const monthLabel = monthDate.toLocaleString(undefined, { month:"long", year:"numeric" });
     const firstDow = monthDate.getDay() === 0 ? 6 : monthDate.getDay() - 1;
     const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
@@ -4214,7 +4214,7 @@ export default function App() {
     while (cells.length % 7 !== 0) cells.push(null);
 
     const stepMonth = (delta) => {
-      const d = new Date(calendarMonth + "T00:00:00");
+      const d = parseLocalDate(calendarMonth);
       d.setMonth(d.getMonth() + delta);
       setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`);
     };
@@ -5036,17 +5036,17 @@ export default function App() {
     const programMin = allWeekStarts[0] || today;
     const programMaxStart = allWeekStarts[allWeekStarts.length - 1] || today;
     const programMaxDate = (() => {
-      const d = new Date(programMaxStart + "T00:00:00");
+      const d = parseLocalDate(programMaxStart);
       d.setDate(d.getDate() + 6);
       return ymd(d);
     })();
     const offsetMin = (() => {
-      const d = new Date(programMin + "T00:00:00");
+      const d = parseLocalDate(programMin);
       const diff = Math.round((d.getTime() - tActual.getTime()) / 86400000);
       return Math.min(-14, diff);
     })();
     const offsetMax = (() => {
-      const d = new Date(programMaxDate + "T00:00:00");
+      const d = parseLocalDate(programMaxDate);
       const diff = Math.round((d.getTime() - tActual.getTime()) / 86400000);
       return Math.max(14, diff);
     })();
@@ -5119,11 +5119,11 @@ export default function App() {
       });
     const nextRace = upcomingRaces[0] || null;
     const raceDaysLeft = nextRace ? (() => {
-      const r = new Date(nextRace.marker_date + "T00:00:00");
+      const r = parseLocalDate(nextRace.marker_date);
       const ms = r.getTime() - tActual.getTime();
       return Math.max(0, Math.round(ms / 86400000));
     })() : null;
-    const raceDateStr = nextRace ? new Date(nextRace.marker_date + "T00:00:00").toLocaleDateString(undefined, { day:"numeric", month:"short" }) : null;
+    const raceDateStr = nextRace ? parseLocalDate(nextRace.marker_date).toLocaleDateString(undefined, { day:"numeric", month:"short" }) : null;
 
     // Renders a slim countdown ribbon. Shared between desktop/mobile layouts.
     const RaceCountdown = nextRace ? (
@@ -6155,7 +6155,7 @@ export default function App() {
           {/* Week picker — date input snaps to the Monday of any chosen day */}
           {activeMonday && (() => {
             const today = new Date(); today.setHours(0,0,0,0);
-            const monDate = new Date(activeMonday + "T00:00:00");
+            const monDate = parseLocalDate(activeMonday);
             const sunDate = new Date(monDate); sunDate.setDate(monDate.getDate() + 6); sunDate.setHours(23,59,59,999);
             const isCurrent = today >= monDate && today <= sunDate;
             const isPast = today > sunDate;
@@ -6342,7 +6342,7 @@ export default function App() {
 
     // Build the visible grid: leading blanks + days of month + trailing blanks
     // so we always render full weeks (Mon-start).
-    const monthDate = new Date(calendarMonth + "T00:00:00");
+    const monthDate = parseLocalDate(calendarMonth);
     const monthLabel = monthDate.toLocaleString(undefined, { month:"long", year:"numeric" });
     const firstDow = monthDate.getDay() === 0 ? 6 : monthDate.getDay() - 1; // Mon=0
     const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
@@ -6355,7 +6355,7 @@ export default function App() {
     while (cells.length % 7 !== 0) cells.push(null);
 
     const stepMonth = (delta) => {
-      const d = new Date(calendarMonth + "T00:00:00");
+      const d = parseLocalDate(calendarMonth);
       d.setMonth(d.getMonth() + delta);
       setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`);
     };
@@ -6570,7 +6570,7 @@ export default function App() {
                       const dateLabel = m.end_date && m.end_date !== m.marker_date
                         ? `${m.marker_date.slice(5)} – ${m.end_date.slice(5)}`
                         : m.marker_date.slice(5);
-                      const daysAway = Math.ceil((new Date(m.marker_date+"T00:00:00") - new Date(todayStr()+"T00:00:00")) / 86400000);
+                      const daysAway = Math.ceil((parseLocalDate(m.marker_date) - parseLocalDate(todayStr())) / 86400000);
                       return (
                         <div key={m.id} style={{ display:"flex", alignItems:"center", gap:10 }}>
                           <span style={{ width:8, height:8, borderRadius:999, background:ms.dot, flexShrink:0 }}/>
@@ -6831,11 +6831,11 @@ export default function App() {
     const isFutureSession = scheduledDateStr && scheduledDateStr > todayStr();
     const formHidden = isFutureSession && !logEarly;
     const daysUntil = isFutureSession ? (() => {
-      const target = new Date(scheduledDateStr + "T00:00:00");
+      const target = parseLocalDate(scheduledDateStr);
       const today = new Date(); today.setHours(0,0,0,0);
       return Math.round((target.getTime() - today.getTime()) / 86400000);
     })() : 0;
-    const niceDate = scheduledDateStr ? new Date(scheduledDateStr + "T00:00:00").toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" }) : null;
+    const niceDate = scheduledDateStr ? parseLocalDate(scheduledDateStr).toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" }) : null;
   return (
     <div style={S.page}>
       <div style={S.grain}/>
@@ -7384,7 +7384,7 @@ export default function App() {
       .sort((a, b) => b.weekStart.localeCompare(a.weekStart));
 
     const fmtRange = (mon) => {
-      const m = new Date(mon + "T00:00:00");
+      const m = parseLocalDate(mon);
       const sun = new Date(m); sun.setDate(m.getDate() + 6);
       const fm = (d) => d.toLocaleDateString(undefined, { month:"short", day:"numeric" });
       return `${fm(m)} – ${fm(sun)}`;
@@ -7448,7 +7448,7 @@ export default function App() {
                     const isLogged = sessionIsLogged(log, linkedAct);
                     const distKm = an?.distance_km ?? linkedAct?.distance_km;
                     const ts = typeStyle(s.type);
-                    const dayLabel = new Date(onDate + "T00:00:00").toLocaleDateString(undefined, { weekday:"short", day:"numeric" });
+                    const dayLabel = parseLocalDate(onDate).toLocaleDateString(undefined, { weekday:"short", day:"numeric" });
                     const compHist = effectiveCompliance({ session: s, log, linkedAct, isPastDate: onDate < todayStr(), profile });
                     return (
                       <div key={s.id}
@@ -7470,7 +7470,7 @@ export default function App() {
                     );
                   })}
                   {wk.extras.map(a => {
-                    const dayLabel = new Date(a.activity_date + "T00:00:00").toLocaleDateString(undefined, { weekday:"short", day:"numeric" });
+                    const dayLabel = parseLocalDate(a.activity_date).toLocaleDateString(undefined, { weekday:"short", day:"numeric" });
                     const durMin = a.duration_seconds ? Math.round(a.duration_seconds / 60) : null;
                     return (
                       <div key={a.id}
