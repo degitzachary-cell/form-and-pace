@@ -14,7 +14,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, expandZonePace } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, expandZonePace, displayPace } from "./lib/load.js";
 import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
 import { matchActivitiesToSessions } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
@@ -3827,7 +3827,7 @@ export default function App() {
             {/* Terrain + duration + target pace + target RPE footer */}
             {(() => {
               const targetRpe = activeSession.rpe_target || defaultRpeTarget(activeSession.type);
-              const paceShown = dominantPace(activeSession);
+              const paceShown = displayPace(dominantPace(activeSession));
               const anyFooter = activeSession.terrain || activeSession.duration_min || paceShown || targetRpe;
               if (!anyFooter) return null;
               return (
@@ -4686,7 +4686,7 @@ export default function App() {
               type,
               tag: tagFor(type),
               desc: (f.desc || "").trim(),
-              pace: (f.pace || "").trim(),
+              pace: displayPace((f.pace || "").trim()),
               terrain: (f.terrain || "").trim(),
               rpe_target: (f.rpe_target || "").toString().trim() || null,
               duration_min: f.duration_min ? Number(f.duration_min) : null,
@@ -4714,7 +4714,7 @@ export default function App() {
               type,
               tag: tagFor(type),
               description: (f.desc || "").trim(),
-              pace: (f.pace || "").trim(),
+              pace: displayPace((f.pace || "").trim()),
               terrain: (f.terrain || "").trim(),
               steps: Array.isArray(f.steps) && f.steps.length > 0 ? f.steps : null,
               exercises: Array.isArray(f.exercises) && f.exercises.length > 0 ? f.exercises : null,
@@ -5263,7 +5263,7 @@ export default function App() {
                       <div style={{ fontSize:22, fontWeight:900, color:C.navy, fontFamily:S.displayFont, lineHeight:1.15, marginBottom:6 }}>
                         {todaysSession.s.type}
                       </div>
-                      {(todaysSession.s.pace || todaysSession.s.duration_min) && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{[todaysSession.s.duration_min && `${todaysSession.s.duration_min}min`, todaysSession.s.pace].filter(Boolean).join(' · ')}</div>}
+                      {(todaysSession.s.pace || todaysSession.s.duration_min) && <div style={{ fontSize:13, color:C.mid, fontFamily:"monospace" }}>{[todaysSession.s.duration_min && `${todaysSession.s.duration_min}min`, displayPace(todaysSession.s.pace)].filter(Boolean).join(' · ')}</div>}
                       {(todaysSession.s.desc || todaysSession.s.description) && (
                         <div style={{ fontSize:13, color:C.mid, marginTop:8, lineHeight:1.5, whiteSpace:"pre-wrap" }}>
                           {todaysSession.s.desc || todaysSession.s.description}
@@ -5428,7 +5428,7 @@ export default function App() {
                     <h1 className="t-display" style={{ fontSize:52, lineHeight:0.95, margin:"4px 0 0", fontWeight:400, letterSpacing:"-0.02em" }}>
                       {s.type}
                       {(() => {
-                        const p = dominantPace(s);
+                        const p = displayPace(dominantPace(s));
                         return p ? <><br/><span className="t-display-italic" style={{ color:"var(--c-mute)" }}>at {p}</span></> : null;
                       })()}
                     </h1>
@@ -5495,7 +5495,7 @@ export default function App() {
             const timeMin = ps.duration_min || (agg.duration_min > 0 ? agg.duration_min : null);
             // Prefer the work-block pace from steps when sections exist;
             // fall back to the top-level prescribed pace.
-            const paceShown = dominantPace(ps);
+            const paceShown = displayPace(dominantPace(ps));
             const rpeShown = ps.rpe_target || ps.rpe || defaultRpeTarget(ps.type);
             return (
               <div className="fp-pace-strip">
