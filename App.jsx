@@ -5425,10 +5425,11 @@ export default function App() {
                       onClick={async () => {
                         if (todaysSession) {
                           const s = todaysSession.s;
+                          const stravaActDate = todaysStrava.start_date_local?.split("T")[0] || today;
                           setActiveSession({ ...s, weekStart: monStr });
                           setFeedbackText("");
                           resetSessionWellness();
-                          setSessionDateOverride(today);
+                          setSessionDateOverride(stravaActDate);
                           setSelectedStravaId(todaysStrava.id);
                           // Pre-fill from list data immediately so fields aren't blank while detail loads.
                           setSessionDistKm((todaysStrava.distance / 1000).toFixed(2));
@@ -5436,7 +5437,8 @@ export default function App() {
                           loadStravaDetail(todaysStrava.id); // sets stravaDetail async
                           setScreen("session");
                         } else {
-                          setLogForm({ date: today, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
+                          const stravaActDate = todaysStrava.start_date_local?.split("T")[0] || today;
+                          setLogForm({ date: stravaActDate, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
                           setEditingActivityId(null);
                           setSelectedStravaId(todaysStrava.id);
                           loadStravaDetail(todaysStrava.id); // sets stravaDetail async
@@ -5809,18 +5811,24 @@ export default function App() {
                 {(todaysStrava.distance/1000).toFixed(1)} km · {Math.round(todaysStrava.moving_time/60)} min
               </div>
               <button onClick={async () => {
+                // The Strava activity's real local date wins over `today`
+                // — protects against late-uploaded runs being stamped to
+                // the day the athlete pressed Import. todaysStrava is
+                // filtered by start_date_local so the value is always
+                // present, but fall back to today defensively.
+                const stravaActDate = todaysStrava.start_date_local?.split("T")[0] || today;
                 if (todaysSession) {
                   setActiveSession({ ...todaysSession.s, weekStart: monStr });
                   setFeedbackText("");
                   resetSessionWellness();
-                  setSessionDateOverride(today);
+                  setSessionDateOverride(stravaActDate);
                   setSelectedStravaId(todaysStrava.id);
                   setSessionDistKm((todaysStrava.distance / 1000).toFixed(2));
                   setSessionDurMin(Math.round(todaysStrava.moving_time / 60).toString());
                   loadStravaDetail(todaysStrava.id);
                   setScreen("session");
                 } else {
-                  setLogForm({ date: today, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
+                  setLogForm({ date: stravaActDate, distanceKm: (todaysStrava.distance/1000).toFixed(2), durationMin: (todaysStrava.moving_time/60).toFixed(1), type: "Run", notes: "" });
                   setEditingActivityId(null);
                   setSelectedStravaId(todaysStrava.id);
                   loadStravaDetail(todaysStrava.id);
