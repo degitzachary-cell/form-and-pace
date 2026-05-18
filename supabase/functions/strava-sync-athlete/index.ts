@@ -163,11 +163,19 @@ serve(async (req) => {
 
     let inserted = 0;
     if (rows.length) {
-      // Insert in chunks to avoid request size limits.
+      // Insert in chunks. The DB has a partial UNIQUE index on
+      // (athlete_email, strava_activity_id) so two concurrent syncs
+      // can't race-double-insert the same Strava activity — the second
+      // chunk's conflicting rows are quietly skipped by ignoreDuplicates.
       for (let i = 0; i < rows.length; i += 100) {
         const chunk = rows.slice(i, i + 100);
         const { error, count } = await supabase
-          .from("activities").insert(chunk).select("id", { count: "exact" });
+          .from("activities")
+          .upsert(chunk, {
+            onConflict: "athlete_email,strava_activity_id",
+            ignoreDuplicates: true,
+          })
+          .select("id", { count: "exact" });
         if (error) throw new Error(`Insert failed: ${error.message}`);
         inserted += count ?? chunk.length;
       }
