@@ -245,24 +245,34 @@ function PlanScoreGrid({ weeks }) {
   if (upcoming.length === 0) return null;
   const blockLabel = `${upcoming.length} ${upcoming.length === 1 ? 'week' : 'weeks'} ahead`;
 
-  // Best-effort km for a single session: stored distance first, then
-  // aggregated from structured steps, then predicted from duration ÷
-  // pace. Mirrors the Volume prediction in the athlete Today view.
+  // Best-effort km for a single session. Order:
+  //   1. coach-stored top-level distance (wins outright)
+  //   2. structured-step aggregate (steps describe the whole run)
+  //   3. PLUS predicted km for any leftover duration when the session's
+  //      top-level duration_min is greater than the steps' summed time
+  //      — common pattern is "80 min long run, last 10 min quality"
+  //      where the steps cover just the 10 min and the remaining 70 min
+  //      runs at the session's top-level pace.
+  //   4. Whole-session predict from duration × pace as a final fallback.
   const sessionKm = (s) => {
     const stored = parseFloat(s.distance_km || s.distance || 0);
     if (stored > 0) return stored;
+    const totalDur = Number(s.duration_min) || Number(s.duration) || 0;
     if (isStructured(s)) {
       const agg = aggregateSteps(s.steps);
-      if (agg.distance_km > 0) return agg.distance_km;
-      const aggDur = agg.duration_min;
-      if (aggDur > 0 && s.pace) {
-        const pred = predictDistanceKm(aggDur, s.pace);
-        if (pred) return pred;
+      let km = agg.distance_km || 0;
+      // Cover the uncovered tail of the run.
+      if (totalDur > agg.duration_min && s.pace) {
+        const remainingMin = totalDur - agg.duration_min;
+        const tail = predictDistanceKm(remainingMin, s.pace);
+        if (tail) km += tail;
       }
+      if (km > 0) return km;
+      // Steps exist but produced no distance and no pace context — fall
+      // through to whole-session predict below.
     }
-    const dur = s.duration_min || s.duration || null;
-    if (dur && s.pace) {
-      const pred = predictDistanceKm(dur, s.pace);
+    if (totalDur && s.pace) {
+      const pred = predictDistanceKm(totalDur, s.pace);
       if (pred) return pred;
     }
     return 0;

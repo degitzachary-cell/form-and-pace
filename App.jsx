@@ -5835,17 +5835,35 @@ export default function App() {
             // Roll structured-steps numbers up so the strip isn't blank when
             // the coach built the workout out of sections only.
             const agg = isStructured(ps) ? aggregateSteps(ps.steps) : { distance_km: 0, duration_min: 0 };
-            const volKm = ps.distance_km || ps.distance || (agg.distance_km > 0 ? agg.distance_km : null);
-            const timeMin = ps.duration_min || (agg.duration_min > 0 ? agg.duration_min : null);
+            const storedKm = ps.distance_km || ps.distance || null;
+            const totalDur = Number(ps.duration_min) || Number(ps.duration) || 0;
+            const timeMin = totalDur || (agg.duration_min > 0 ? agg.duration_min : null);
             // Prefer the work-block pace from steps when sections exist;
             // fall back to the top-level prescribed pace.
             const paceForCalc = dominantPace(ps);
             const paceShown = displayPace(paceForCalc, paceUnit);
             const rpeShown = ps.rpe_target || ps.rpe || defaultRpeTarget(ps.type);
-            // Predicted volume: when the coach prescribed time + pace but
-            // no distance, derive distance ≈ time / pace. Marked with "≈"
-            // so it doesn't masquerade as a coach-set target.
-            const predictedKm = volKm == null ? predictDistanceKm(timeMin, paceForCalc) : null;
+            // Volume prediction, in three layers:
+            //   1. Stored coach-set distance wins.
+            //   2. Otherwise: steps' aggregate distance PLUS predicted
+            //      km for any uncovered tail of the run (e.g. an 80-min
+            //      long run with the last 10 min defined as steps —
+            //      the other 70 min run at the session's top-level pace).
+            //   3. No steps: predict the whole thing from duration × pace.
+            let predictedKm = null;
+            let volKm = storedKm;
+            if (volKm == null) {
+              if (isStructured(ps)) {
+                let km = agg.distance_km || 0;
+                if (totalDur > agg.duration_min && ps.pace) {
+                  const tail = predictDistanceKm(totalDur - agg.duration_min, ps.pace);
+                  if (tail) km += tail;
+                }
+                if (km > 0) predictedKm = km;
+              } else if (totalDur && ps.pace) {
+                predictedKm = predictDistanceKm(totalDur, ps.pace);
+              }
+            }
             const volShown = volKm != null
               ? displayDistance(volKm, paceUnit)
               : predictedKm != null ? displayDistance(predictedKm, paceUnit) : null;
