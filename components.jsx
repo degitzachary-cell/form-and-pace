@@ -35,6 +35,7 @@ export function PaceInput({ value, onChange, placeholder = "0:00", style, ariaLa
       value={value || ""}
       onChange={(e) => handleChange(e.target.value)}
       placeholder={placeholder}
+      title="Type digits — colon auto-inserts (e.g. 435 → 4:35)"
       style={{
         width: 60,
         background: "var(--c-paper)",
@@ -342,8 +343,38 @@ export function CoachLeftRail({ current, onNav, unread = 0, coachName = "Coach",
 export function MobileTabBar({ current, onTab, onTapLog, isDesktop }) {
   if (isDesktop) return null;
 
-  const Item = ({ name, label, glyph, onClick }) => {
+  const Item = ({ name, label, glyph, onClick, primary }) => {
     const active = current === name;
+    if (primary) {
+      // Log is an action, not a screen — render it as a filled crimson
+      // circle so users don't tap it expecting to navigate. Visually
+      // anchors the centre of the bar like a standard mobile pattern.
+      return (
+        <button
+          onClick={onClick}
+          aria-label={label}
+          style={{
+            flex: 1, background: "transparent", border: 0,
+            padding: "6px 4px 8px",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+            cursor: "pointer",
+          }}>
+          <div style={{
+            display:"flex", alignItems:"center", justifyContent:"center",
+            width: 40, height: 40, borderRadius: 999,
+            background: "var(--c-crimson, var(--c-hot))",
+            color: "var(--c-paper)",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
+          }}>
+            {glyph}
+          </div>
+          <span className="t-mono" style={{
+            fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase",
+            color: "var(--c-mute)", fontWeight: 500,
+          }}>{label}</span>
+        </button>
+      );
+    }
     return (
       <button
         onClick={onClick}
@@ -426,7 +457,7 @@ export function MobileTabBar({ current, onTab, onTapLog, isDesktop }) {
         <Item name="today"    label="Today"    glyph={Today}    onClick={() => onTab("today")}/>
         <Item name="home"     label="Week"     glyph={Week}     onClick={() => onTab("home")}/>
         <Item name="calendar" label="Calendar" glyph={Calendar} onClick={() => onTab("calendar")}/>
-        <Item name="log"      label="Log"      glyph={Log}      onClick={onTapLog}/>
+        <Item name="log"      label="Log"      glyph={Log}      onClick={onTapLog} primary/>
         <Item name="profile"  label="Profile"  glyph={Profile}  onClick={() => onTab("profile")}/>
       </div>
     </div>

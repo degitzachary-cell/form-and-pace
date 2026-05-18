@@ -85,6 +85,12 @@
       .fp-btn--accent { background: var(--c-accent); border-color: var(--c-accent); color: var(--c-accentInk); }
       .fp-btn--hot    { background: var(--c-hot); border-color: var(--c-hot); color: var(--c-hotInk); }
 
+      /* Drag-handle grip on coach session cards — fades up on hover so
+         coaches discover the affordance instead of stumbling on it. */
+      .fp-drag-grip:hover { opacity: 1 !important; background: var(--c-ruleSoft, rgba(0,0,0,0.04)); cursor: grab; }
+      .fp-drag-grip:active { cursor: grabbing; }
+      @media (hover: none) { .fp-drag-grip { opacity: 0.55 !important; } }
+
       /* Tabular pace strip — 4 cells separated by rules */
       .fp-pace-strip {
         display: grid; grid-template-columns: repeat(4, 1fr);

@@ -196,10 +196,13 @@ function CoachDraggableSession({ session, children }) {
       <div
         ref={setActivatorNodeRef}
         {...listeners}
+        title="Drag to move this session to a different day"
+        className="fp-drag-grip"
         style={{
-          position: "absolute", bottom: 6, right: 6,
+          position: "absolute", bottom: 4, right: 4,
           display: "flex", flexDirection: "column", gap: 3,
-          padding: "6px", cursor: "grab", touchAction: "none", zIndex: 2, opacity: 0.4,
+          padding: "8px", cursor: "grab", touchAction: "none", zIndex: 2, opacity: 0.6,
+          borderRadius: 4, transition: "opacity 120ms ease, background-color 120ms ease",
         }}>
         {[0,1,2].map(i => (
           <div key={i} style={{ display: "flex", gap: 3 }}>
@@ -449,6 +452,24 @@ export default function App() {
   // +1 = tomorrow. Lets the athlete chevron / swipe through the week
   // without leaving the Today screen.
   const [dayOffset, setDayOffset] = useState(0);
+
+  // Keyboard arrow-key day navigation on the Today screen — power users
+  // on desktop don't have to mouse-click the gutter chevrons. Skips when
+  // focus is in an input/textarea so date pickers and notes still get
+  // their arrows.
+  useEffect(() => {
+    if (screen !== "today" || role !== "athlete") return;
+    const onKey = (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      e.preventDefault();
+      setDayOffset(o => o + (e.key === "ArrowLeft" ? -1 : 1));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [screen, role]);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
 
@@ -5280,10 +5301,29 @@ export default function App() {
       });
       const verdict = readinessScore({ pmcTail, hooper, drift });
 
-      // Stay silent when there's nothing useful to say. Either we don't
-      // have enough data (neutral=true) or all signals agree on "go".
+      // Stay silent when we don't have enough signals to say anything
+      // meaningful (neutral). When verdict is "go" and we DID consult
+      // at least two confident signals, surface a quiet "all clear"
+      // pill so the athlete sees the system working rather than dead
+      // air on a normal day.
       if (verdict.neutral) return null;
-      if (verdict.severity === 0) return null;
+      if (verdict.severity === 0) {
+        return (
+          <div style={{
+            margin:"12px 16px 0", padding:"10px 14px",
+            background:"transparent", border:"none",
+            display:"flex", alignItems:"center", gap:8,
+          }}>
+            <span style={{ width:8, height:8, borderRadius:999, background:C.accent, display:"inline-block" }}/>
+            <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.mute, fontWeight:600 }}>
+              READINESS · ALL CLEAR
+            </span>
+            <span style={{ fontSize:12, color:C.mute, fontStyle:"italic", fontFamily:S.displayFont }}>
+              {verdict.inputsUsed.length} signals agree · train as planned
+            </span>
+          </div>
+        );
+      }
 
       const palette = verdict.severity === 2
         ? { fg: C.hot,  bg: "#fff0ec", border: "#f0a890", label: "READINESS · BACK OFF" }
@@ -5707,6 +5747,70 @@ export default function App() {
                       </p>
                     )}
                   </div>
+                ) : (programEntry?.weeks?.length ?? 0) === 0 ? (
+                  // First-run / no-plan state. Athlete is enrolled but no
+                  // coach plan exists yet (or it's empty). Steer them to
+                  // the setup steps instead of pretending today's a rest
+                  // day.
+                  <div>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                      <span className="fp-dot" style={{ background:"var(--c-accent)", width:8, height:8 }}/>
+                      <span className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:"var(--c-accent)" }}>GETTING STARTED</span>
+                    </div>
+                    <h1 className="t-display" style={{ fontSize:42, lineHeight:1.0, margin:"4px 0 0", fontWeight:400 }}>
+                      Welcome aboard.
+                    </h1>
+                    <p style={{ fontFamily:"var(--f-display)", fontStyle:"italic", fontSize:16, lineHeight:1.5, color:"var(--c-mute)", margin:"14px 0 22px" }}>
+                      Your coach is building your training plan. In the meantime, set yourself up.
+                    </p>
+                    <ol style={{ listStyle:"none", padding:0, margin:0, borderLeft:"2px solid var(--c-rule)" }}>
+                      {[
+                        {
+                          label: "Set your threshold pace",
+                          done: !!profile?.threshold_pace,
+                          hint: profile?.threshold_pace
+                            ? `${profile.threshold_pace}/${paceUnit}`
+                            : "Drives rTSS, pace zones, and the fitness curve. Profile tab.",
+                          onClick: () => setScreen("profile"),
+                        },
+                        {
+                          label: "Connect Strava",
+                          done: stravaConnected,
+                          hint: stravaConnected
+                            ? "Connected — runs sync automatically."
+                            : "Auto-imports your runs so the coach can see them. Profile tab.",
+                          onClick: stravaConnected ? null : () => setScreen("profile"),
+                        },
+                        {
+                          label: "Wait for your coach to publish your plan",
+                          done: false,
+                          hint: "Once they're done, sessions will appear here each day.",
+                          onClick: null,
+                        },
+                      ].map((step, i) => (
+                        <li key={i} style={{
+                          position:"relative", paddingLeft:18, marginLeft:8, marginBottom:14,
+                          cursor: step.onClick ? "pointer" : "default",
+                          opacity: step.done ? 0.55 : 1,
+                        }} onClick={step.onClick || undefined}>
+                          <span style={{
+                            position:"absolute", left:-8, top:6, width:12, height:12, borderRadius:999,
+                            background: step.done ? "var(--c-accent)" : "var(--c-paper)",
+                            border:`2px solid ${step.done ? "var(--c-accent)" : "var(--c-rule)"}`,
+                          }}/>
+                          <div style={{
+                            fontFamily:"var(--f-display)", fontSize:17, color:"var(--c-ink)",
+                            textDecoration: step.done ? "line-through" : "none",
+                          }}>
+                            {step.label}
+                          </div>
+                          <div style={{ fontSize:12, color:"var(--c-mute)", marginTop:3, lineHeight:1.4 }}>
+                            {step.hint}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
                 ) : (
                   <div>
                     <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
@@ -5751,7 +5855,7 @@ export default function App() {
                   <Eyebrow style={{ marginBottom:6 }}>Pace</Eyebrow>
                   <Num size={17}>{paceShown || "—"}</Num>
                 </div>
-                <div>
+                <div title={predictedKm != null && volKm == null ? "≈ predicted from time × pace (no explicit distance set)" : undefined}>
                   <Eyebrow style={{ marginBottom:6 }}>Volume</Eyebrow>
                   <Num size={17}>{volShown != null ? `${predictedKm != null && volKm == null ? "≈" : ""}${volShown}` : "—"}</Num>
                   {volShown != null && <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }}> {distUnit}</span>}

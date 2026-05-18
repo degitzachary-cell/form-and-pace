@@ -350,6 +350,9 @@ function PlanScoreGrid({ weeks }) {
           </div>
         );
       })}
+      <div style={{ marginTop: 8, fontSize: 10, color: C.mute, fontStyle: 'italic', letterSpacing: '0.04em' }}>
+        ≈ marks volume predicted from time × pace when the coach didn't set an explicit distance.
+      </div>
     </div>
   );
 }
@@ -1224,10 +1227,23 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
             </div>
           )}
 
-          <button type="button" onClick={handleSave} disabled={saving || !isDirty}
-            style={{ ...S.primaryBtn(C.crimson, saving || !isDirty), marginTop: 16 }}>
-            {saving ? 'Saving…' : isDirty ? '● Save plan (unsaved changes)' : 'Saved'}
-          </button>
+          {isDirty ? (
+            <button type="button" onClick={handleSave} disabled={saving}
+              style={{ ...S.primaryBtn(C.crimson, saving), marginTop: 16 }}>
+              {saving ? 'Saving…' : '● Save plan (unsaved changes)'}
+            </button>
+          ) : (
+            <button type="button" disabled
+              style={{
+                marginTop: 16, width: '100%', padding: '12px 16px',
+                background: 'transparent', color: C.accent,
+                border: `1px solid ${C.accent}40`, borderRadius: 2,
+                fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase',
+                fontWeight: 600, cursor: 'default',
+              }}>
+              ✓ Saved
+            </button>
+          )}
         </>
       ) : (
         <div style={{ ...cardStyle, textAlign: 'center', color: C.mid, fontSize: 13 }}>
