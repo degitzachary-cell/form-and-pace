@@ -40,6 +40,23 @@ const getTagFromType = (type) => {
   return 'easy';
 };
 
+// Derive a human display label from a week's weekStart ISO date.
+// "2026-05-18" → "Week of 18–24 May". Falls back to any stored
+// weekLabel for legacy plans that don't have weekStart yet.
+function deriveWeekLabel(week) {
+  if (!week?.weekStart) return week?.weekLabel || 'Untitled week';
+  const start = new Date(week.weekStart + 'T00:00:00');
+  if (isNaN(start)) return week.weekLabel || week.weekStart;
+  const end = new Date(start); end.setDate(start.getDate() + 6);
+  const sM = start.toLocaleString(undefined, { month: 'short' });
+  const eM = end.toLocaleString(undefined, { month: 'short' });
+  const sD = start.getDate();
+  const eD = end.getDate();
+  return sM === eM
+    ? `Week of ${sD}–${eD} ${sM}`
+    : `Week of ${sD} ${sM} – ${eD} ${eM}`;
+}
+
 // Accepts: Date object, ISO YYYY-MM-DD, "10-apr"/"10 apr"/"10/apr",
 // "apr 10"/"april 10", "10/04"/"04/10"/"10-04" (DD/MM by default; auto-swaps
 // when one part > 12), and "10/04/2026" / "10-04-26". Returns Date or null.
@@ -696,8 +713,14 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   // Save this week's shape as the athlete's default. Strips IDs and the
   // weekStart/weekLabel since those are per-week. Sessions keep their
   // type/desc/pace/etc so the next added week starts pre-populated.
-  const handleSaveAsDefaultWeek = (weekId) => {
-    const src = weeks.find(w => w.id === weekId);
+  // All week-level handlers look up by weekStart (the natural unique key
+  // per athlete) rather than by id. Legacy plans imported from Excel
+  // didn't always carry stable ids, so id-based lookup was returning
+  // the first week with a missing/duplicate id — which is the "duplicate
+  // copies the wrong week" bug. weekStart is an ISO date and inherently
+  // unique within a plan, so this is the more robust key.
+  const handleSaveAsDefaultWeek = (weekStart) => {
+    const src = weeks.find(w => w.weekStart === weekStart);
     if (!src) return;
     if (!(src.sessions || []).length) {
       setStatus({ kind: 'error', message: 'This week has no sessions to save as a default.' });
@@ -720,8 +743,8 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     setStatus({ kind: 'success', message: 'Default week cleared.' });
   };
 
-  const handleDuplicateWeek = (weekId) => {
-    const src = weeks.find(w => w.id === weekId);
+  const handleDuplicateWeek = (weekStart) => {
+    const src = weeks.find(w => w.weekStart === weekStart);
     if (!src) return;
     // Walk forward week-by-week from the source until we find a Monday
     // that doesn't already exist in the plan. Avoids collisions when
@@ -753,8 +776,8 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
 
   // Copy a week to the cross-athlete clipboard. Strips IDs and dates — the
   // skeleton (label, sessions with their day/type/pace/desc) is what travels.
-  const handleCopyWeek = (weekId) => {
-    const src = weeks.find(w => w.id === weekId);
+  const handleCopyWeek = (weekStart) => {
+    const src = weeks.find(w => w.weekStart === weekStart);
     if (!src) return;
     writeClipboard({
       weekLabel: src.weekLabel || 'Copied week',
@@ -794,18 +817,18 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     setStatus({ kind: 'success', message: `Pasted week (${newWeek.sessions.length} sessions) into ${athleteName || selectedEmail}.` });
   };
 
-  const handleDeleteWeek = (weekId) => {
-    setWeeks(weeks.filter(w => w.id !== weekId));
+  const handleDeleteWeek = (weekStart) => {
+    setWeeks(weeks.filter(w => w.weekStart !== weekStart));
   };
 
-  const handleAddSession = (weekId) => {
+  const handleAddSession = (weekStart) => {
     const newSession = { id: newId(), day: '', type: 'EASY', tag: 'easy', pace: '', terrain: '', desc: '' };
-    setWeeks(weeks.map(w => w.id === weekId ? { ...w, sessions: [...w.sessions, newSession] } : w));
+    setWeeks(weeks.map(w => w.weekStart === weekStart ? { ...w, sessions: [...w.sessions, newSession] } : w));
   };
 
-  const handleSessionChange = (weekId, sessionId, field, value) => {
+  const handleSessionChange = (weekStart, sessionId, field, value) => {
     setWeeks(weeks.map(w => {
-      if (w.id !== weekId) return w;
+      if (w.weekStart !== weekStart) return w;
       const sessions = w.sessions.map(s => {
         if (s.id !== sessionId) return s;
         const updates = { [field]: value };
@@ -816,8 +839,8 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     }));
   };
 
-  const handleDeleteSession = (weekId, sessionId) => {
-    setWeeks(weeks.map(w => w.id === weekId ? { ...w, sessions: w.sessions.filter(s => s.id !== sessionId) } : w));
+  const handleDeleteSession = (weekStart, sessionId) => {
+    setWeeks(weeks.map(w => w.weekStart === weekStart ? { ...w, sessions: w.sessions.filter(s => s.id !== sessionId) } : w));
   };
 
   const handleSave = async () => {
@@ -992,26 +1015,26 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
           )}
 
           {weeks.map(week => (
-            <div key={week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}` }}>
+            <div key={week.weekStart || week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                 <div>
-                  <div style={{ fontWeight: 700, color: C.navy, fontFamily: S.displayFont, fontSize: 16 }}>{week.weekLabel || 'Untitled week'}</div>
+                  <div style={{ fontWeight: 700, color: C.navy, fontFamily: S.displayFont, fontSize: 16 }}>{deriveWeekLabel(week)}</div>
                   <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{week.weekStart}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => handleCopyWeek(week.id)} style={{
+                  <button type="button" onClick={() => handleCopyWeek(week.weekStart)} style={{
                     background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                   }} title="Copy this week to clipboard — paste into any athlete">Copy</button>
-                  <button type="button" onClick={() => handleSaveAsDefaultWeek(week.id)} style={{
+                  <button type="button" onClick={() => handleSaveAsDefaultWeek(week.weekStart)} style={{
                     background: C.white, color: C.accent, border: `1px solid ${C.accent}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600,
                   }} title="Use this week's shape as the default starting point for new weeks for this athlete">Save as default</button>
-                  <button type="button" onClick={() => handleDuplicateWeek(week.id)} style={{
+                  <button type="button" onClick={() => handleDuplicateWeek(week.weekStart)} style={{
                     background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                   }}>Duplicate</button>
-                  <button type="button" onClick={() => handleDeleteWeek(week.id)} style={{
+                  <button type="button" onClick={() => handleDeleteWeek(week.weekStart)} style={{
                     background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                   }}>Delete week</button>
@@ -1029,7 +1052,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       <select
                         style={{ ...inputStyle, flex: '0 0 90px' }}
                         value={DAY_LABELS.includes(session.day?.slice(0, 3)) ? session.day.slice(0, 3) : ''}
-                        onChange={e => handleSessionChange(week.id, session.id, 'day', e.target.value)}
+                        onChange={e => handleSessionChange(week.weekStart, session.id, 'day', e.target.value)}
                       >
                         <option value="">Day…</option>
                         {DAY_LABELS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -1037,7 +1060,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       <select
                         style={{ ...inputStyle, flex: '1 1 140px', color: accent, fontWeight: 600 }}
                         value={session.type}
-                        onChange={e => handleSessionChange(week.id, session.id, 'type', e.target.value)}
+                        onChange={e => handleSessionChange(week.weekStart, session.id, 'type', e.target.value)}
                       >
                         {SESSION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
@@ -1046,13 +1069,13 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       <PaceRangeInput
                         label="Pace"
                         value={session.pace}
-                        onChange={(v) => handleSessionChange(week.id, session.id, 'pace', v)}
+                        onChange={(v) => handleSessionChange(week.weekStart, session.id, 'pace', v)}
                       />
                       <input
                         style={{ ...inputStyle, flex: 1 }}
                         placeholder="Terrain"
                         value={session.terrain}
-                        onChange={e => handleSessionChange(week.id, session.id, 'terrain', e.target.value)}
+                        onChange={e => handleSessionChange(week.weekStart, session.id, 'terrain', e.target.value)}
                       />
                     </div>
                     <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 6 }}>Coach notes</div>
@@ -1060,15 +1083,15 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       style={{ ...S.textarea, minHeight: 64, marginBottom: 8 }}
                       placeholder="Anything the athlete should know — context, focus, cues."
                       value={session.desc}
-                      onChange={e => handleSessionChange(week.id, session.id, 'desc', e.target.value)}
+                      onChange={e => handleSessionChange(week.weekStart, session.id, 'desc', e.target.value)}
                     />
 
                     <StepsEditor
                       session={session}
-                      onChange={(steps) => handleSessionChange(week.id, session.id, 'steps', steps)}
+                      onChange={(steps) => handleSessionChange(week.weekStart, session.id, 'steps', steps)}
                     />
 
-                    <button type="button" onClick={() => handleDeleteSession(week.id, session.id)} style={{
+                    <button type="button" onClick={() => handleDeleteSession(week.weekStart, session.id)} style={{
                       background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
                       borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                     }}>Delete session</button>
@@ -1076,7 +1099,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                 );
               })}
 
-              <button type="button" onClick={() => handleAddSession(week.id)} style={{
+              <button type="button" onClick={() => handleAddSession(week.weekStart)} style={{
                 ...S.ghostBtn, marginTop: 4,
               }}>+ Add session</button>
             </div>
