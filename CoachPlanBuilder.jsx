@@ -253,23 +253,50 @@ function PlanScoreGrid({ weeks }) {
   //      — common pattern is "80 min long run, last 10 min quality"
   //      where the steps cover just the 10 min and the remaining 70 min
   //      runs at the session's top-level pace.
-  //   4. Whole-session predict from duration × pace as a final fallback.
+  //   4. PLUS implicit warm-up + cool-down for workout sessions (tempo,
+  //      speed, hyrox) when the coach built from scratch and didn't add
+  //      explicit warmup/cooldown steps — athletes do them anyway, so
+  //      they belong in the predicted volume.
+  //   5. Whole-session predict from duration × pace as a final fallback.
+  const WORKOUT_TYPES_WITH_IMPLICIT_PADDING = new Set(["TEMPO", "SPEED", "HYROX", "INTERVAL"]);
+  const IMPLICIT_PAD_MIN = 15;        // standard 15-min warm-up / cool-down
+  const FALLBACK_EASY_PACE = "5:30";  // if athlete has no threshold pace to derive from
+  const easyPaceStr = (() => {
+    const thr = athletes[selectedEmail]?.threshold_pace;
+    if (!thr || !/^\d{1,2}:\d{2}$/.test(thr.trim())) return FALLBACK_EASY_PACE;
+    // Easy ≈ threshold pace × 1.3 (Daniels' E zone lower bound).
+    const [m, sec] = thr.trim().split(":").map(Number);
+    const totalSec = Math.round((m * 60 + sec) * 1.3);
+    return `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, "0")}`;
+  })();
+  const implicitPadKm = predictDistanceKm(IMPLICIT_PAD_MIN, easyPaceStr) || 0;
+
   const sessionKm = (s) => {
     const stored = parseFloat(s.distance_km || s.distance || 0);
     if (stored > 0) return stored;
     const totalDur = Number(s.duration_min) || Number(s.duration) || 0;
+    const isPaddedType = WORKOUT_TYPES_WITH_IMPLICIT_PADDING.has(String(s.type || "").toUpperCase());
+    let km = 0;
+    let predicted = false;
     if (isStructured(s)) {
       const agg = aggregateSteps(s.steps);
-      let km = agg.distance_km || 0;
+      km = agg.distance_km || 0;
+      if (km > 0) predicted = true;
       // Cover the uncovered tail of the run.
       if (totalDur > agg.duration_min && s.pace) {
         const remainingMin = totalDur - agg.duration_min;
         const tail = predictDistanceKm(remainingMin, s.pace);
-        if (tail) km += tail;
+        if (tail) { km += tail; predicted = true; }
       }
-      if (km > 0) return km;
-      // Steps exist but produced no distance and no pace context — fall
-      // through to whole-session predict below.
+      // Implicit warm-up + cool-down for workout-type sessions that
+      // were built without explicit WU/CD steps.
+      if (isPaddedType && implicitPadKm > 0) {
+        const hasWarmup = s.steps.some(st => st.kind === "warmup");
+        const hasCooldown = s.steps.some(st => st.kind === "cooldown");
+        if (!hasWarmup) { km += implicitPadKm; predicted = true; }
+        if (!hasCooldown) { km += implicitPadKm; predicted = true; }
+      }
+      if (predicted) return km;
     }
     if (totalDur && s.pace) {
       const pred = predictDistanceKm(totalDur, s.pace);

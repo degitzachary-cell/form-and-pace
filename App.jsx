@@ -5843,13 +5843,26 @@ export default function App() {
             const paceForCalc = dominantPace(ps);
             const paceShown = displayPace(paceForCalc, paceUnit);
             const rpeShown = ps.rpe_target || ps.rpe || defaultRpeTarget(ps.type);
-            // Volume prediction, in three layers:
+            // Volume prediction layers:
             //   1. Stored coach-set distance wins.
-            //   2. Otherwise: steps' aggregate distance PLUS predicted
-            //      km for any uncovered tail of the run (e.g. an 80-min
-            //      long run with the last 10 min defined as steps —
-            //      the other 70 min run at the session's top-level pace).
-            //   3. No steps: predict the whole thing from duration × pace.
+            //   2. Steps' aggregate distance PLUS predicted km for any
+            //      uncovered tail of the run.
+            //   3. PLUS implicit warm-up + cool-down for workout-type
+            //      sessions (TEMPO/SPEED/HYROX) when the steps don't
+            //      include explicit warmup/cooldown — athletes do them
+            //      anyway, so they count toward total volume.
+            //   4. No steps: predict the whole thing from duration × pace.
+            const WORKOUT_PAD_TYPES = new Set(["TEMPO", "SPEED", "HYROX", "INTERVAL"]);
+            const easyPaceStr = (() => {
+              const thr = profile?.threshold_pace;
+              if (!thr || !/^\d{1,2}:\d{2}$/.test(thr.trim())) return "5:30";
+              const [m, sec] = thr.trim().split(":").map(Number);
+              const totalSec = Math.round((m * 60 + sec) * 1.3);
+              return `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, "0")}`;
+            })();
+            const implicitPadKm = predictDistanceKm(15, easyPaceStr) || 0;
+            const isPaddedType = WORKOUT_PAD_TYPES.has(String(ps.type || "").toUpperCase());
+
             let predictedKm = null;
             let volKm = storedKm;
             if (volKm == null) {
@@ -5858,6 +5871,12 @@ export default function App() {
                 if (totalDur > agg.duration_min && ps.pace) {
                   const tail = predictDistanceKm(totalDur - agg.duration_min, ps.pace);
                   if (tail) km += tail;
+                }
+                if (isPaddedType && implicitPadKm > 0) {
+                  const hasWarmup = ps.steps.some(st => st.kind === "warmup");
+                  const hasCooldown = ps.steps.some(st => st.kind === "cooldown");
+                  if (!hasWarmup) km += implicitPadKm;
+                  if (!hasCooldown) km += implicitPadKm;
                 }
                 if (km > 0) predictedKm = km;
               } else if (totalDur && ps.pace) {
