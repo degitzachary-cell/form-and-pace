@@ -603,6 +603,18 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   // tucked behind a disclosure at the bottom of the page so the main
   // flow (athlete picker → edit weeks) doesn't get pushed off-screen.
   const [showExcelImport, setShowExcelImport] = useState(false);
+  // Which week cards are currently expanded (showing their sessions).
+  // Past weeks default to collapsed so the editor focuses on this/next
+  // week. Click on a week's header to toggle.
+  const [expandedWeeks, setExpandedWeeks] = useState(() => new Set());
+  const toggleWeekExpanded = (weekStart) => {
+    setExpandedWeeks(prev => {
+      const next = new Set(prev);
+      if (next.has(weekStart)) next.delete(weekStart);
+      else next.add(weekStart);
+      return next;
+    });
+  };
   const [uploadTarget, setUploadTarget] = useState('');
   const [uploadMode, setUploadMode] = useState('append');
   const [uploading, setUploading] = useState(false);
@@ -662,6 +674,11 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     setAthletePb(p);
     setDefaultWeek(dw);
     setBaseline(JSON.stringify({ weeks: w, athleteName: n, athleteGoal: g, athletePb: p, defaultWeek: dw }));
+    // Pre-expand current + future weeks; past weeks stay collapsed so
+    // the editor's vertical real estate goes to the work that's still
+    // ahead. Coach can click to expand any past week.
+    const monStr = snapToMonday(new Date().toISOString().slice(0, 10));
+    setExpandedWeeks(new Set((w || []).filter(x => (x.weekStart || '') >= monStr).map(x => x.weekStart)));
   }, [selectedEmail, athletes]);
 
   const buildMeta = () => ({
@@ -1014,14 +1031,31 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
             </div>
           )}
 
-          {weeks.map(week => (
-            <div key={week.weekStart || week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                <div>
-                  <div style={{ fontWeight: 700, color: C.navy, fontFamily: S.displayFont, fontSize: 16 }}>{deriveWeekLabel(week)}</div>
-                  <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{week.weekStart}</div>
+          {weeks.map(week => {
+            const isExpanded = expandedWeeks.has(week.weekStart);
+            const sessionCount = week.sessions?.length || 0;
+            return (
+            <div key={week.weekStart || week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}`, paddingBottom: isExpanded ? undefined : 12 }}>
+              <div
+                onClick={() => toggleWeekExpanded(week.weekStart)}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  marginBottom: isExpanded ? 12 : 0, flexWrap: 'wrap', gap: 8,
+                  cursor: 'pointer', userSelect: 'none',
+                }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: C.mute, width: 12, display: 'inline-block' }}>
+                    {isExpanded ? '▾' : '▸'}
+                  </span>
+                  <div>
+                    <div style={{ fontWeight: 700, color: C.navy, fontFamily: S.displayFont, fontSize: 16 }}>{deriveWeekLabel(week)}</div>
+                    <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>
+                      {week.weekStart}
+                      {!isExpanded && sessionCount > 0 && <span> · {sessionCount} session{sessionCount === 1 ? '' : 's'}</span>}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button type="button" onClick={() => handleCopyWeek(week.weekStart)} style={{
                     background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
@@ -1041,7 +1075,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                 </div>
               </div>
 
-              {week.sessions.map(session => {
+              {isExpanded && week.sessions.map(session => {
                 const accent = TYPE_ACCENT[session.type] || C.mid;
                 return (
                   <div key={session.id} style={{
@@ -1099,11 +1133,14 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                 );
               })}
 
-              <button type="button" onClick={() => handleAddSession(week.weekStart)} style={{
-                ...S.ghostBtn, marginTop: 4,
-              }}>+ Add session</button>
+              {isExpanded && (
+                <button type="button" onClick={() => handleAddSession(week.weekStart)} style={{
+                  ...S.ghostBtn, marginTop: 4,
+                }}>+ Add session</button>
+              )}
             </div>
-          ))}
+            );
+          })}
 
           {showAddWeek ? (
             <div style={cardStyle}>
