@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { C, S } from './styles.js';
 import { newId, snapToMonday, ymd, parseLocalDate } from './lib/helpers.js';
 import { DAY_LABELS } from './lib/constants.js';
-import { formatStep } from './lib/load.js';
+import { formatStep, predictDistanceKm, aggregateSteps, isStructured } from './lib/load.js';
 import { PaceRangeInput, PaceInput } from './components.jsx';
 
 // ─── EXCEL PARSER ────────────────────────────────────────────
@@ -235,13 +235,44 @@ const scoreTypeColor = (t) => SCORE_TYPE_COLOR[String(t || "").toUpperCase()] ||
 // row with seven day cells (Mon-Sun) showing the type dot + total km. Lets
 // the coach see the rhythm of the plan at a glance before drilling into the
 // editor below. Renders nothing if no weeks exist yet.
-function PlanScoreGrid({ weeks, blockLabel }) {
+function PlanScoreGrid({ weeks }) {
   if (!Array.isArray(weeks) || weeks.length === 0) return null;
+  // Show only weeks at or beyond the current Monday — the coach is
+  // looking forward, not back. Past weeks live in the edit list above
+  // (collapsed by default) where they can still be inspected if needed.
+  const monStr = snapToMonday(new Date().toISOString().slice(0, 10));
+  const upcoming = weeks.filter(w => (w.weekStart || '') >= monStr);
+  if (upcoming.length === 0) return null;
+  const blockLabel = `${upcoming.length} ${upcoming.length === 1 ? 'week' : 'weeks'} ahead`;
+
+  // Best-effort km for a single session: stored distance first, then
+  // aggregated from structured steps, then predicted from duration ÷
+  // pace. Mirrors the Volume prediction in the athlete Today view.
+  const sessionKm = (s) => {
+    const stored = parseFloat(s.distance_km || s.distance || 0);
+    if (stored > 0) return stored;
+    if (isStructured(s)) {
+      const agg = aggregateSteps(s.steps);
+      if (agg.distance_km > 0) return agg.distance_km;
+      const aggDur = agg.duration_min;
+      if (aggDur > 0 && s.pace) {
+        const pred = predictDistanceKm(aggDur, s.pace);
+        if (pred) return pred;
+      }
+    }
+    const dur = s.duration_min || s.duration || null;
+    if (dur && s.pace) {
+      const pred = predictDistanceKm(dur, s.pace);
+      if (pred) return pred;
+    }
+    return 0;
+  };
+
   return (
     <div style={{ marginBottom: 28 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 8px", borderBottom: `1px solid ${C.rule}` }}>
         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: C.mute }}>The score</span>
-        {blockLabel && <span style={{ fontFamily: S.monoFont || "JetBrains Mono, monospace", fontSize: 11, letterSpacing: "0.1em", color: C.mute, textTransform: "uppercase" }}>{blockLabel}</span>}
+        <span style={{ fontFamily: S.monoFont || "JetBrains Mono, monospace", fontSize: 11, letterSpacing: "0.1em", color: C.mute, textTransform: "uppercase" }}>{blockLabel}</span>
       </div>
       {/* Header row — day initials */}
       <div style={{ display: "grid", gridTemplateColumns: "100px 80px repeat(7, 1fr)", padding: "10px 0", borderBottom: `1px solid ${C.rule}` }}>
@@ -251,11 +282,13 @@ function PlanScoreGrid({ weeks, blockLabel }) {
           <span key={d} style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: C.mute, textAlign: "center" }}>{d}</span>
         ))}
       </div>
-      {weeks.map((w, i) => {
+      {upcoming.map((w, i) => {
         const sessions = Array.isArray(w.sessions) ? w.sessions : [];
+        let predictedOnly = true;
         const totalKm = sessions.reduce((acc, s) => {
-          const km = parseFloat(s.distance_km || s.distance || 0);
-          return acc + (isNaN(km) ? 0 : km);
+          const stored = parseFloat(s.distance_km || s.distance || 0);
+          if (stored > 0) predictedOnly = false;
+          return acc + sessionKm(s);
         }, 0);
         // Pick a phase label heuristically: largest km week in a run of >=3 == BUILD,
         // others fall back to the week's existing weekLabel hint.
@@ -268,10 +301,10 @@ function PlanScoreGrid({ weeks, blockLabel }) {
         })();
         const phaseColor = phase === "RECOVER" ? C.cool : phase === "TAPER" ? C.cool : phase === "PEAK" ? C.hot : C.accent;
         return (
-          <div key={w.id || i} style={{ display: "grid", gridTemplateColumns: "100px 80px repeat(7, 1fr)", padding: "12px 0", borderBottom: `1px solid ${C.ruleSoft}`, alignItems: "stretch" }}>
+          <div key={w.weekStart || w.id || i} style={{ display: "grid", gridTemplateColumns: "100px 80px repeat(7, 1fr)", padding: "12px 0", borderBottom: `1px solid ${C.ruleSoft}`, alignItems: "stretch" }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: S.displayFont, fontSize: 18, lineHeight: 1, color: C.ink }}>
-                {w.weekLabel || `WK ${String(i + 1).padStart(2, "0")}`}
+                {deriveWeekLabel(w)}
               </div>
               <div style={{ marginTop: 4, display: "inline-flex", padding: "2px 7px", border: `1px solid ${phaseColor}`, color: phaseColor, fontSize: 9, letterSpacing: "0.14em", fontWeight: 600 }}>
                 {phase}
@@ -279,7 +312,7 @@ function PlanScoreGrid({ weeks, blockLabel }) {
             </div>
             <div style={{ textAlign: "right", paddingRight: 8 }}>
               <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, color: C.ink, fontVariantNumeric: "tabular-nums" }}>
-                {Math.round(totalKm)}
+                {predictedOnly && totalKm > 0 ? '≈ ' : ''}{Math.round(totalKm)}
               </span>
             </div>
             {DAY_LABELS.map(dayInitial => {
@@ -294,7 +327,9 @@ function PlanScoreGrid({ weeks, blockLabel }) {
                 );
               }
               const dot = scoreTypeColor(found.type);
-              const km = parseFloat(found.distance_km || found.distance || 0);
+              const stored = parseFloat(found.distance_km || found.distance || 0);
+              const km = stored > 0 ? stored : sessionKm(found);
+              const predicted = stored <= 0 && km > 0;
               return (
                 <div key={dayInitial} style={{ borderLeft: `1px solid ${C.ruleSoft}`, padding: "4px 6px", minHeight: 48 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
@@ -305,7 +340,7 @@ function PlanScoreGrid({ weeks, blockLabel }) {
                   </div>
                   {km > 0 && (
                     <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: C.ink, fontVariantNumeric: "tabular-nums" }}>
-                      {km}
+                      {predicted ? '≈ ' : ''}{Math.round(km * 10) / 10}
                       <span style={{ color: C.mute, fontSize: 9 }}>km</span>
                     </span>
                   )}
@@ -921,7 +956,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
           </div>
 
           {selectedEmail && weeks.length > 0 && (
-            <PlanScoreGrid weeks={weeks} blockLabel={`${weeks.length} ${weeks.length === 1 ? "week" : "weeks"} planned`} />
+            <PlanScoreGrid weeks={weeks} />
           )}
 
           {clipboardWeek && selectedEmail && (
