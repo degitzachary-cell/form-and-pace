@@ -3868,7 +3868,7 @@ export default function App() {
                   <li key={i} style={{ position:"relative", paddingLeft:16, marginLeft:8, marginBottom:10 }}>
                     <span style={{ position:"absolute", left:-7, top:6, width:10, height:10, borderRadius:999, background:C.accent, border:`2px solid ${C.bg}` }}/>
                     <div style={{ fontSize:10, letterSpacing:2, color:C.accent, fontWeight:700, textTransform:"uppercase", marginBottom:2 }}>
-                      {step.kind === "steady" ? "Workout" : step.kind === "warmup" ? "Warm Up" : step.kind === "cooldown" ? "Cool Down" : step.kind === "recovery" ? "Recovery" : step.kind}
+                      {step.kind === "steady" ? "Workout" : step.kind === "interval" ? "Workout" : step.kind === "warmup" ? "Warm Up" : step.kind === "cooldown" ? "Cool Down" : step.kind === "recovery" ? "Recovery" : step.kind === "strides" ? "Strides" : step.kind}
                     </div>
                     <div style={{ fontFamily:S.displayFont, fontSize:16, color:C.ink, lineHeight:1.35 }}>
                       {formatStep(step)}
@@ -5622,7 +5622,7 @@ export default function App() {
                           <li key={i} style={{ position:"relative", paddingLeft:18, marginLeft:8, marginBottom:14 }}>
                             <span style={{ position:"absolute", left:-7, top:6, width:10, height:10, borderRadius:999, background:"var(--c-accent)", border:"2px solid var(--c-bg)" }}/>
                             <div className="t-mono" style={{ fontSize:10, letterSpacing:"0.16em", color:"var(--c-accent)", textTransform:"uppercase", fontWeight:700, marginBottom:3 }}>
-                              {step.kind === "steady" ? "Workout" : step.kind === "warmup" ? "Warm Up" : step.kind === "cooldown" ? "Cool Down" : step.kind === "recovery" ? "Recovery" : step.kind}
+                              {step.kind === "steady" ? "Workout" : step.kind === "interval" ? "Workout" : step.kind === "warmup" ? "Warm Up" : step.kind === "cooldown" ? "Cool Down" : step.kind === "recovery" ? "Recovery" : step.kind === "strides" ? "Strides" : step.kind}
                             </div>
                             <div style={{ fontFamily:"var(--f-display)", fontSize:18, lineHeight:1.4, color:"var(--c-ink)" }}>
                               {formatStep(step)}

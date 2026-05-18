@@ -723,17 +723,27 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const handleDuplicateWeek = (weekId) => {
     const src = weeks.find(w => w.id === weekId);
     if (!src) return;
-    // Default the new weekStart to the Monday after the source week.
-    const next = parseLocalDate(src.weekStart || todayMondayFallback());
-    next.setDate(next.getDate() + 7);
+    // Walk forward week-by-week from the source until we find a Monday
+    // that doesn't already exist in the plan. Avoids collisions when
+    // the next slot is already taken — e.g. duplicating week 18/05
+    // lands at 25/05 if free, else 01/06, else 08/06, …
+    const existingStarts = new Set(weeks.map(w => w.weekStart));
+    const cursor = parseLocalDate(src.weekStart || todayMondayFallback());
+    cursor.setDate(cursor.getDate() + 7);
+    let safety = 0;
+    while (existingStarts.has(ymd(cursor)) && safety++ < 260) {
+      cursor.setDate(cursor.getDate() + 7);
+    }
+    const newWeekStart = ymd(cursor);
     const newWeek = {
       id: newId(),
       weekLabel: `${src.weekLabel || 'Week'} (copy)`,
-      weekStart: ymd(next),
+      weekStart: newWeekStart,
       sessions: src.sessions.map(s => ({ ...s, id: newId() })),
     };
-    const idx = weeks.findIndex(w => w.id === weekId);
-    setWeeks([...weeks.slice(0, idx + 1), newWeek, ...weeks.slice(idx + 1)]);
+    // Insert in chronological order so the calendar list stays sorted.
+    const next = [...weeks, newWeek].sort((a, b) => (a.weekStart || '').localeCompare(b.weekStart || ''));
+    setWeeks(next);
   };
 
   const todayMondayFallback = () => {
