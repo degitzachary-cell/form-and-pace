@@ -2181,6 +2181,7 @@ export default function App() {
                       <div style={{ marginBottom:22 }}>
                         <input type="date" value={coachActiveMonday}
                           onChange={e => dpSnapMonday(e.target.value)}
+                          onClick={e => e.currentTarget.showPicker?.()}
                           style={{ ...S.input, background:isCurr?C.crimson:C.white, color:isCurr?"#fffdf8":C.navy, border:`1px solid ${isCurr?C.accent:C.rule}`, fontWeight:700, letterSpacing:0.5, fontFamily:S.bodyFont, cursor:"pointer", colorScheme:isCurr?"dark":"light", maxWidth:280 }}/>
                         <div style={{ fontSize:10, color:C.mid, marginTop:6, paddingLeft:2, letterSpacing:1 }}>
                           {isCurr ? "THIS WEEK" : new Date() > sunD ? "PAST" : "UPCOMING"}
@@ -3648,6 +3649,7 @@ export default function App() {
                     type="date"
                     value={coachActiveMonday}
                     onChange={(e) => snapCoachMonday(e.target.value)}
+                    onClick={e => e.currentTarget.showPicker?.()}
                     style={{
                       display:"block",
                       width:"100%",
@@ -6224,6 +6226,7 @@ export default function App() {
                     type="date"
                     value={activeMonday}
                     onChange={(e) => snapAthleteMonday(e.target.value)}
+                    onClick={e => e.currentTarget.showPicker?.()}
                     style={{
                       display:"block",
                       width:"100%",

@@ -1188,8 +1188,9 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                 />
                 <input
                   type="date"
-                  style={{ ...inputStyle, flex: 1 }}
+                  style={{ ...inputStyle, flex: 1, cursor: 'pointer' }}
                   value={newWeekStart}
+                  onClick={e => e.currentTarget.showPicker?.()}
                   onChange={e => setNewWeekStart(e.target.value)}
                 />
               </div>
