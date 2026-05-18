@@ -465,6 +465,21 @@ export default function App() {
     setNoStravaConfirmed(false);
     setLogEarly(false);
   };
+  // Global toast (replaces native alert() for non-blocking error/success
+  // messages). One slot, auto-dismisses after 4s. Use via the showToast
+  // helper below — `kind` is "error" | "success" | "info".
+  const [toast, setToast] = useState(null);
+  const showToast = (message, kind = "info") => {
+    setToast({ message, kind, id: Date.now() });
+  };
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), kindForToast(toast.kind));
+    return () => clearTimeout(t);
+  }, [toast?.id]);
+  function kindForToast(kind) {
+    return kind === "error" ? 6000 : 3500;
+  }
   // Calendar (month view): YYYY-MM-01 string anchoring the displayed month.
   // Initialised to the first day of the current month on first render.
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -750,6 +765,44 @@ export default function App() {
       el.textContent = label;
     }
   }, [realtimeStatus]);
+
+  // Toast renderer — same imperative pattern as the realtime pill, for
+  // the same reason: the App component has many early returns and a JSX
+  // toast would need duplicating into each. Fixed bottom-centre, fades
+  // out via the auto-dismiss effect above.
+  useEffect(() => {
+    const id = "fp-toast";
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = id;
+      el.style.cssText = [
+        "position:fixed", "bottom:84px", "left:50%", "transform:translateX(-50%)",
+        "z-index:99998", "max-width:88vw", "padding:12px 18px", "border-radius:2px",
+        "font-family:var(--f-display, ui-serif, Georgia, serif)",
+        "font-size:14px", "line-height:1.4", "font-weight:500",
+        "box-shadow:0 6px 20px rgba(0,0,0,0.15)",
+        "pointer-events:none", "transition:opacity 200ms ease",
+      ].join(";");
+      document.body.appendChild(el);
+    }
+    if (!toast) {
+      el.style.opacity = "0";
+      el.textContent = "";
+    } else {
+      const palette = toast.kind === "error"
+        ? { bg: "#fff0ec", border: "#f0a890", color: "#a83a1a" }
+        : toast.kind === "success"
+        ? { bg: "#eef6ec", border: "#9bbf91", color: "#3a6f33" }
+        : { bg: "#fff8f0", border: "#f0c080", color: "#8a4f1a" };
+      el.style.background = palette.bg;
+      el.style.border = `1px solid ${palette.border}`;
+      el.style.borderLeft = `3px solid ${palette.color}`;
+      el.style.color = palette.color;
+      el.style.opacity = "1";
+      el.textContent = toast.message;
+    }
+  }, [toast]);
 
   // ── Load coach's workout templates once ──
   useEffect(() => {
@@ -1524,6 +1577,7 @@ export default function App() {
         };
       });
       setProfileStatus({ kind: "success", message: "Profile saved." });
+      showToast("Profile saved.", "success");
       setTimeout(() => {
         if (role === "athlete") setScreen("today");
         else setCoachScreen("athlete");
@@ -2034,7 +2088,7 @@ export default function App() {
               else if (k === "atp")          setCoachScreen("atp");
             }}
             onSignOut={signOut}
-            onSettings={() => alert("Coach settings — coming soon.")}
+            onSettings={null}
           />
         )}
         <div style={{ ...(isDesktop ? { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" } : {}) }}>
@@ -2399,7 +2453,7 @@ export default function App() {
     if (!email) return;
     const key = email.toLowerCase();
     const { error } = await supabase.from("coach_plans").delete().eq("athlete_email", key);
-    if (error) { alert("Couldn't remove athlete: " + error.message); return false; }
+    if (error) { showToast("Couldn't remove athlete: " + error.message, "error"); return false; }
     setAthletePrograms(prev => {
       const next = { ...prev };
       delete next[key];
@@ -2441,7 +2495,7 @@ export default function App() {
               else if (k === "atp")          setCoachScreen("atp");
             }}
             onSignOut={signOut}
-            onSettings={() => alert("Coach settings — coming soon.")}
+            onSettings={null}
           />
         )}
         <div style={{ ...(isDesktop ? { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" } : {}) }}>
@@ -2585,7 +2639,7 @@ export default function App() {
               }
               const results = await Promise.all(updates);
               for (const r of results) {
-                if (r.error) { alert("Mark-as-read failed: " + r.error.message); return; }
+                if (r.error) { showToast("Mark-as-read failed: " + r.error.message, "error"); return; }
               }
               // Refresh local state from results
               if (actIds.length) {
@@ -2640,11 +2694,11 @@ export default function App() {
                   const ts = new Date().toISOString();
                   if (it.kind === "activity") {
                     const { data, error } = await supabase.from("activities").update({ coach_read_at: ts }).eq("id", it.act.id).select().single();
-                    if (error) { alert("Mark read failed: " + error.message); return; }
+                    if (error) { showToast("Mark read failed: " + error.message, "error"); return; }
                     if (data) setActivities(prev => prev.map(a => a.id === data.id ? data : a));
                   } else {
                     const { data, error } = await supabase.from("session_logs").update({ coach_read_at: ts }).eq("session_id", it.log.session_id).select().single();
-                    if (error) { alert("Mark read failed: " + error.message); return; }
+                    if (error) { showToast("Mark read failed: " + error.message, "error"); return; }
                     if (data) setLogs(prev => ({ ...prev, [data.session_id]: data }));
                     if (it.linkedAct?.id) {
                       await supabase.from("activities").update({ coach_read_at: ts }).eq("id", it.linkedAct.id);
@@ -4111,7 +4165,7 @@ export default function App() {
                             distance_km: dist,
                             duration_seconds: durMin != null ? Math.round(durMin * 60) : null,
                           }).eq("id", linkedAthAct.id).select().single();
-                          if (error) { alert("Activity save failed: " + error.message); return; }
+                          if (error) { showToast("Activity save failed: " + error.message, "error"); return; }
                           if (data) setActivities(prev => prev.map(a => a.id === data.id ? data : a));
                         }
                         // Update session_log analysis fields.
@@ -4124,7 +4178,7 @@ export default function App() {
                           };
                           if (draft.date === coachSDate) delete nextAnalysis.actual_date;
                           try { await saveLog(activeSession.id, { analysis: nextAnalysis }); }
-                          catch (e) { alert("Log save failed: " + e.message); return; }
+                          catch (e) { showToast("Log save failed: " + e.message, "error"); return; }
                         }
                         setCoachEditLog(null);
                       }} style={S.primaryBtn(C.crimson, false)}>Save changes</button>
@@ -4155,7 +4209,7 @@ export default function App() {
                   const { data: updated } = await supabase
                     .from("session_logs").update({ messages: next, coach_reply: body, updated_at: ts }).eq("session_id", activeSession.id).select().maybeSingle();
                   if (updated) { setLogs(prev => ({ ...prev, [activeSession.id]: updated })); wroteAnywhere = true; }
-                  if (!wroteAnywhere) alert("No session log or activity found for this session.");
+                  if (!wroteAnywhere) showToast("No session log or activity found for this session.", "error");
                   if (wroteAnywhere && activeSession?.athleteEmail) {
                     sendPush({
                       recipientEmails: [activeSession.athleteEmail],
@@ -4468,7 +4522,7 @@ export default function App() {
                       duration_seconds: draft.duration ? Math.round(parseFloat(draft.duration) * 60) : null,
                     };
                     const { data, error } = await supabase.from("activities").update(payload).eq("id", act.id).select().single();
-                    if (error) { alert("Save failed: " + error.message); return; }
+                    if (error) { showToast("Save failed: " + error.message, "error"); return; }
                     if (data) {
                       setActivities(prev => prev.map(a => a.id === data.id ? data : a));
                       setActiveExtraActivity(data);
@@ -4792,7 +4846,7 @@ export default function App() {
               setEditingWorkout(null);
               setCoachScreen("athlete");
             } catch (err) {
-              alert("Save failed: " + (err.message || err));
+              showToast("Save failed: " + (err.message || err), "error");
             }
           }} style={{ ...S.primaryBtn(C.crimson, !canSave), width:"100%", marginBottom:8 }}>
             {isNew ? "Add Workout" : "Save Changes"}
@@ -4812,9 +4866,9 @@ export default function App() {
               steps: Array.isArray(f.steps) && f.steps.length > 0 ? f.steps : null,
               exercises: Array.isArray(f.exercises) && f.exercises.length > 0 ? f.exercises : null,
             }).select().single();
-            if (error) { alert("Save template failed: " + error.message); return; }
+            if (error) { showToast("Save template failed: " + error.message, "error"); return; }
             if (data) setWorkoutTemplates(prev => [data, ...prev]);
-            alert("Template saved.");
+            showToast("Template saved.", "success");
           }} style={{ ...S.ghostBtn, marginBottom:8 }}>Save as template</button>
           {!isNew && (
             <button onClick={async () => {
@@ -4824,7 +4878,7 @@ export default function App() {
                 setEditingWorkout(null);
                 setCoachScreen("athlete");
               } catch (err) {
-                alert("Delete failed: " + (err.message || err));
+                showToast("Delete failed: " + (err.message || err), "error");
               }
             }} style={{ ...S.ghostBtn, marginBottom:8, color:C.crimson, borderColor:C.crimson }}>Delete workout</button>
           )}
@@ -4894,18 +4948,18 @@ export default function App() {
     // sign-out and a mono version footer. Tap rows that have a screen route
     // somewhere; placeholders flash a transient notice for now.
     const SettingsRow = ({ label, value, onClick, danger }) => (
-      <button onClick={onClick}
+      <button onClick={onClick} disabled={!onClick}
         style={{
           width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
           background:"transparent", border:"none",
           borderBottom:`1px solid ${C.ruleSoft}`,
-          padding:"14px 0", cursor:"pointer", textAlign:"left",
+          padding:"14px 0", cursor: onClick ? "pointer" : "default", textAlign:"left",
           fontFamily:S.bodyFont,
         }}>
         <span style={{ fontFamily:S.displayFont, fontSize:17, color: danger ? C.hot : C.ink }}>{label}</span>
         <span style={{ display:"flex", alignItems:"center", gap:10 }}>
           {value && <span className="t-mono" style={{ fontSize:11, color:C.mute, letterSpacing:"0.06em" }}>{value}</span>}
-          <span style={{ color: danger ? C.hot : C.mute, fontFamily:S.displayFont, fontSize:18 }}>→</span>
+          {onClick && <span aria-hidden style={{ color: danger ? C.hot : C.mute, fontFamily:S.displayFont, fontSize:18 }}>→</span>}
         </span>
       </button>
     );
@@ -4919,7 +4973,7 @@ export default function App() {
           <SettingsRow
             label="Strava"
             value={stravaConnected ? "Connected" : "Not connected"}
-            onClick={() => stravaConnected ? flashSoon("Disconnect Strava") : connectStrava()}
+            onClick={stravaConnected ? null : connectStrava}
           />
           <SettingsRow
             label="Notifications"
@@ -4955,7 +5009,6 @@ export default function App() {
               }
             }}
           />
-          <SettingsRow label="Units" value="Kilometres" onClick={() => flashSoon("Units")} />
           <SettingsRow label="Help"  onClick={() => { window.location.href = "mailto:hello@formandpace.app?subject=Form%20%26%20Pace%20support"; }} />
         </div>
         <button onClick={signOut}
@@ -5055,10 +5108,15 @@ export default function App() {
     const monthShort = t.toLocaleDateString(undefined, { month:"short" }).toUpperCase();
     const dateNum = t.getDate();
     const dayLabelLong = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dow].toUpperCase();
+    // Past/future dates show a relative suffix so they can't be mistaken
+    // for the today/tomorrow labels at a glance.
+    const offsetSuffix = Math.abs(dayOffset) >= 2
+      ? ` · ${Math.abs(dayOffset)} DAYS ${dayOffset < 0 ? "AGO" : "AHEAD"}`
+      : "";
     const heroDateLabel = dayOffset === 0  ? `TODAY · ${dayLabel.toUpperCase()}`
                        : dayOffset === -1 ? `YESTERDAY · ${dayLabel.toUpperCase()}`
                        : dayOffset === 1  ? `TOMORROW · ${dayLabel.toUpperCase()}`
-                       : `${dayLabelLong} · ${monthShort} ${dateNum}`;
+                       : `${dayLabelLong} · ${monthShort} ${dateNum}${offsetSuffix}`;
     // Bound the chevron range to the program weeks that are loaded so
     // the athlete can't navigate into empty territory. ±14 days as a
     // safety floor for athletes whose program is bare.
@@ -5329,7 +5387,7 @@ export default function App() {
             <div onClick={openMostRecentUnread}
               style={{
                 margin:"16px 16px 0", padding:"12px 14px",
-                background: C.cool, color: "#fffdf8",
+                background: C.cool, color: "#ffffff",
                 borderRadius:2, cursor:"pointer", display:"flex",
                 alignItems:"center", justifyContent:"space-between", gap:10,
               }}>
@@ -5770,9 +5828,9 @@ export default function App() {
                     return (
                       <button key={n} type="button" onClick={() => onChange(sel ? null : n)}
                         style={{
-                          flex:`1 0 ${100 / options.length - 1}%`, minWidth:30, padding:"8px 4px",
+                          flex:`1 0 ${100 / options.length - 1}%`, minWidth:36, minHeight:44, padding:"10px 4px",
                           background: bg, color: fg, border:`1px solid ${bd}`,
-                          borderRadius:2, fontFamily:"var(--f-mono)", fontSize:12, fontWeight:500, cursor:"pointer",
+                          borderRadius:2, fontFamily:"var(--f-mono)", fontSize:13, fontWeight:500, cursor:"pointer",
                           fontVariantNumeric:"tabular-nums",
                         }}>{n}</button>
                     );
@@ -5795,12 +5853,25 @@ export default function App() {
                     value={quickSleep} onChange={e => setQuickSleep(e.target.value)}
                     style={{ ...S.input, width:120, fontFamily:"var(--f-mono)" }}/>
                 </div>
-                <button onClick={submit}
-                  disabled={quickSaving || (quickRpe == null && !quickSleep && quickSoreness == null && quickMood == null)}
-                  className="fp-btn fp-btn--accent"
-                  style={{ width:"100%", padding:"12px", fontSize:11, opacity:(quickSaving || (quickRpe == null && !quickSleep && quickSoreness == null && quickMood == null)) ? 0.5 : 1 }}>
-                  {quickSaving ? "Saving…" : "Save check-in"}
-                </button>
+                {(() => {
+                  const nothingPicked = quickRpe == null && !quickSleep && quickSoreness == null && quickMood == null;
+                  const disabled = quickSaving || nothingPicked;
+                  return (
+                    <>
+                      <button onClick={submit}
+                        disabled={disabled}
+                        className="fp-btn fp-btn--accent"
+                        style={{ width:"100%", padding:"12px", fontSize:11, opacity: disabled ? 0.5 : 1 }}>
+                        {quickSaving ? "Saving…" : "Save check-in"}
+                      </button>
+                      {nothingPicked && !quickSaving && (
+                        <div style={{ fontSize:11, color:"var(--c-mute)", fontStyle:"italic", marginTop:6, textAlign:"center" }}>
+                          Pick at least one to save.
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             );
           })()}
@@ -7037,11 +7108,11 @@ export default function App() {
                 return (
                   <button key={n} type="button" onClick={() => setSessionRpe(sel ? null : n)}
                     style={{
-                      flex:"1 0 38px", minWidth:38, padding:"8px 0",
+                      flex:"1 0 44px", minWidth:44, minHeight:44, padding:"8px 0",
                       background: sel ? tint : C.white,
                       color:      sel ? "#fffdf8" : C.navy,
                       border:`1px solid ${sel ? tint : C.rule}`,
-                      borderRadius:2, fontSize:12, fontWeight:700, cursor:"pointer",
+                      borderRadius:2, fontSize:13, fontWeight:700, cursor:"pointer",
                     }}>{n}</button>
                 );
               })}

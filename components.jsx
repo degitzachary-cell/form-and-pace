@@ -314,10 +314,12 @@ export function CoachLeftRail({ current, onNav, unread = 0, coachName = "Coach",
       </nav>
 
       <div style={{ paddingTop: 22, borderTop: "1px solid var(--c-inkSoft)", display: "flex", flexDirection: "column", gap: 6 }}>
-        <button onClick={onSettings}
-          style={{ background: "transparent", border: 0, color: "var(--c-mute)", padding: "8px 12px", fontFamily: "var(--f-body)", fontSize: 12, textAlign: "left", cursor: "pointer", letterSpacing: "0.04em" }}>
-          Settings
-        </button>
+        {onSettings && (
+          <button onClick={onSettings}
+            style={{ background: "transparent", border: 0, color: "var(--c-mute)", padding: "8px 12px", fontFamily: "var(--f-body)", fontSize: 12, textAlign: "left", cursor: "pointer", letterSpacing: "0.04em" }}>
+            Settings
+          </button>
+        )}
         <button onClick={onSignOut}
           style={{ background: "transparent", border: 0, color: "var(--c-hot)", padding: "8px 12px", fontFamily: "var(--f-body)", fontSize: 12, textAlign: "left", cursor: "pointer", letterSpacing: "0.04em" }}>
           Sign out

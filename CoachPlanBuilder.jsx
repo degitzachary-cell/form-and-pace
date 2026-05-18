@@ -467,9 +467,12 @@ export function StepsEditor({ session, onChange }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: 10, letterSpacing: 1.5, color: C.accent, fontWeight: 700, textTransform: 'uppercase' }}>{kindLabel(step.kind)}</span>
             <span style={{ fontSize: 12, color: C.mute, fontStyle: 'italic', flex: 1, fontFamily: S.displayFont }}>{formatStep(step)}</span>
-            <button type="button" onClick={() => move(i, -1)} disabled={i === 0} style={{ background: 'transparent', border: 'none', color: i === 0 ? C.rule : C.mute, cursor: i === 0 ? 'default' : 'pointer', fontSize: 14 }}>↑</button>
-            <button type="button" onClick={() => move(i, 1)} disabled={i === steps.length - 1} style={{ background: 'transparent', border: 'none', color: i === steps.length - 1 ? C.rule : C.mute, cursor: i === steps.length - 1 ? 'default' : 'pointer', fontSize: 14 }}>↓</button>
-            <button type="button" onClick={() => remove(i)} style={{ background: 'transparent', border: 'none', color: C.hot, cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>×</button>
+            <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
+              style={{ background:'transparent', border:'none', color: i === 0 ? C.rule : C.mute, opacity: i === 0 ? 0.4 : 1, cursor: i === 0 ? 'default' : 'pointer', fontSize:16, minWidth:32, minHeight:32, padding:0 }}>↑</button>
+            <button type="button" onClick={() => move(i, 1)} disabled={i === steps.length - 1}
+              style={{ background:'transparent', border:'none', color: i === steps.length - 1 ? C.rule : C.mute, opacity: i === steps.length - 1 ? 0.4 : 1, cursor: i === steps.length - 1 ? 'default' : 'pointer', fontSize:16, minWidth:32, minHeight:32, padding:0 }}>↓</button>
+            <button type="button" onClick={() => remove(i)}
+              style={{ background:'transparent', border:'none', color: C.hot, cursor:'pointer', fontSize:16, lineHeight:1, minWidth:32, minHeight:32, padding:0 }}>×</button>
           </div>
 
           {(step.kind === 'warmup' || step.kind === 'cooldown') && (
