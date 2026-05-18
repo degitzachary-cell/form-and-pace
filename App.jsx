@@ -3354,7 +3354,8 @@ export default function App() {
             return (
               <div style={{ ...S.card, marginBottom:20 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
-                <PMCChart dailyRtss={dailyRtss} fromDate={fromStr} toDate={toStr} height={220} displayDays={90}/>
+                <PMCChart dailyRtss={dailyRtss} fromDate={fromStr} toDate={toStr} height={220} displayDays={90}
+                  emptyHint={!da?.threshold_pace ? "Set this athlete's threshold pace in their profile to unlock the curve." : null}/>
                 {tail && (f7 || f14) && (
                   <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${C.rule}` }}>
                     <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6 }}>
@@ -6682,7 +6683,8 @@ export default function App() {
             return (
               <div style={{ ...S.card, marginTop:18 }}>
                 <Eyebrow style={{ marginBottom:8 }}>Performance · 90 days</Eyebrow>
-                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(t)} height={200} displayDays={90}/>
+                <PMCChart dailyRtss={dailyRtss} fromDate={fmt(from)} toDate={fmt(t)} height={200} displayDays={90}
+                  emptyHint={!profile?.threshold_pace ? "Set your threshold pace in your profile to unlock the curve." : null}/>
                 {tail && (f7 || f14) && (
                   <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${C.rule}` }}>
                     <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6 }}>

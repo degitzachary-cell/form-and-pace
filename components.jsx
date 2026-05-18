@@ -530,7 +530,22 @@ export function ThreadPanel({ thread = [], viewerRole = "athlete", onSend }) {
 // you want at least 4–6 months of data feeding in (CTL has a 42-day time
 // constant and needs ~3× to warm up). Pass a fromDate that's 6 months before
 // the visible window and the chart slices it for display automatically.
-export function PMCChart({ dailyRtss, fromDate, toDate, displayDays = 90, height = 200 }) {
+export function PMCChart({ dailyRtss, fromDate, toDate, displayDays = 90, height = 200, emptyHint }) {
+  // Detect "nothing computable" up front. dailyRtss being missing or
+  // all-zero means densify will produce a flat-zero series and the
+  // chart would paint deceptive flat lines that look like real data.
+  // Common causes: athlete has no threshold pace + no PBs (rTSS can't
+  // be derived), or activities exist but aren't tagged as runs, or
+  // the activity list hasn't loaded yet.
+  const hasAnyLoad = Array.isArray(dailyRtss) && dailyRtss.some(d => Number(d?.rtss) > 0);
+  if (!hasAnyLoad) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "var(--c-mute)", fontFamily: "var(--f-display)", fontStyle: "italic", fontSize: 14, lineHeight: 1.5 }}>
+        Not enough data yet — fitness curve needs a threshold pace plus a few weeks of logged runs to draw.
+        {emptyHint && <div style={{ fontSize: 12, marginTop: 6, fontStyle: "normal" }}>{emptyHint}</div>}
+      </div>
+    );
+  }
   const dense = densifyDailyRtss(dailyRtss || [], fromDate, toDate);
   const pmcAll = computePMC(dense);
   const pmc = pmcAll.length > displayDays ? pmcAll.slice(-displayDays) : pmcAll;
