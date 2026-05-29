@@ -3147,17 +3147,22 @@ export default function App() {
     const weekCompliance = (ap, email, wkStart) => {
       const wk = ap.weeks?.find(w => w.weekStart === wkStart);
       if (!wk) return null;
-      const actsMap = {};
-      for (const a of activitiesByEmail.get(email.toLowerCase()) || []) actsMap[a.activity_date] = a;
+      // Per-day matcher (any source) so a strava-auto run grades its
+      // session, and on double days each session gets the right activity
+      // by sport/distance/duration rather than last-write-wins by date.
+      const wkActs = activitiesByEmail.get(email.toLowerCase()) || [];
+      const cMatch = linkedActsBySession(
+        wk.sessions.map(s => ({ session: s, date: logs[s.id]?.analysis?.actual_date || sessionDateStr(wkStart, s.day) })),
+        wkActs, logs
+      );
       let planned = 0, done = 0;
-      const wkEnd = weekEndStr(wkStart);
       for (const s of wk.sessions) {
         if ((s.type || "").toUpperCase() === "REST") continue;
         const sDate = sessionDateStr(wkStart, s.day);
         if (!sDate || sDate > today) continue;
         planned++;
         const log = logs[s.id];
-        const linkedAct = actsMap[log?.analysis?.actual_date || sDate];
+        const linkedAct = cMatch.get(s.id) || null;
         const g = effectiveCompliance({ session: s, log, linkedAct, isPastDate: true, profile: athletePrograms[email.toLowerCase()] });
         if (g === "completed" || g === "partial") done++;
       }
@@ -3712,9 +3717,6 @@ export default function App() {
             };
             const wk = planned || { weekStart: coachActiveMonday, weekLabel: fmtRange(), sessions: [] };
             const wkEnd = weekEndStr(wk.weekStart);
-            const extraActs = athActs.filter(a => isExtraDisplay(a) && a.activity_date >= wk.weekStart && a.activity_date <= wkEnd);
-            const actByDate = {};
-            for (const a of athActs) if (a.source === "session") actByDate[a.activity_date] = a;
 
             const snapCoachMonday = (dateStr) => {
               const mon = snapToMonday(dateStr);
@@ -3860,7 +3862,7 @@ export default function App() {
                             {sessionsHere.map(s => {
                               const log    = logs[s.id];
                               const sDate  = log?.analysis?.actual_date || sessionDateStr(wk.weekStart, s.day);
-                              const linkedAct = dayMatchCoach.bySessionId.get(s.id) || actByDate[sDate] || null;
+                              const linkedAct = dayMatchCoach.bySessionId.get(s.id) || null;
                               const isPastDate = sDate && sDate < todayStr();
                               const comply = effectiveCompliance({ session: s, log, linkedAct, isPastDate, profile: da });
                               const cts = typeStyle(s.type);
