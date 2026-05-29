@@ -6328,11 +6328,11 @@ export default function App() {
                     const d = new Date(); d.setHours(0,0,0,0);
                     const dow = d.getDay(); const off = dow === 0 ? -6 : 1 - dow;
                     const mon = new Date(d); mon.setDate(d.getDate() + off - ago * 7);
-                    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59);
-                    return { monday: mon, sunday: sun };
+                    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+                    return { monday: ymd(mon), sunday: ymd(sun) };
                   })();
-                  const ad = new Date(a.activity_date);
-                  return ad >= monday && ad <= sunday ? s + parseFloat(a.distance_km || 0) : s;
+                  const ad = a.activity_date;
+                  return ad && ad >= monday && ad <= sunday ? s + parseFloat(a.distance_km || 0) : s;
                 }, 0);
                 km += localKm;
               } else {
