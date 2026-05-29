@@ -1225,16 +1225,22 @@ export default function App() {
     const myEmail = user.email.toLowerCase();
     const myActivities = activities.filter(a => a.athlete_email?.toLowerCase() === myEmail);
     const existingStravaIds = new Set(myActivities.map(a => a.strava_data?.id).filter(Boolean));
-    // Dedupe by (date, sport, distance) so a manually-logged activity that
-    // wasn't tagged with strava_data still suppresses an auto-sync row, but
-    // a 5km run on the same day as a 5km bike ride still BOTH sync.
-    const matchesExistingByDateAndDist = (date, type, distKm) => myActivities.some(a => {
-      if (a.activity_date !== date) return false;
-      if ((a.activity_type || "Run") !== type) return false;
-      const ad = parseFloat(a.distance_km);
-      if (!ad) return false;
-      return Math.abs(ad - distKm) / Math.max(ad, distKm) < 0.1;
-    });
+    // Suppress an auto-sync row only when an UNTAGGED manual/session row
+    // (no strava_data.id) might be the same physical run. Rows that
+    // already carry a different strava id are genuinely different
+    // activities and must both sync — so two real Strava runs of similar
+    // distance on the same day are never collapsed. Each untagged row can
+    // absorb at most one auto-sync candidate (consume-once), so same-day
+    // doubles survive.
+    const untaggedRuns = myActivities
+      .filter(a => !a.strava_data?.id && parseFloat(a.distance_km))
+      .map(a => ({ date: a.activity_date, type: a.activity_type || "Run", km: parseFloat(a.distance_km), used: false }));
+    const claimsUntagged = (date, type, distKm) => {
+      const m = untaggedRuns.find(u => !u.used && u.date === date && u.type === type
+        && Math.abs(u.km - distKm) / Math.max(u.km, distKm) < 0.1);
+      if (m) { m.used = true; return true; }
+      return false;
+    };
     const rows = stravaActivities
       .map(a => {
         if (existingStravaIds.has(a.id)) return null;
@@ -1243,7 +1249,7 @@ export default function App() {
         const durSec = a.moving_time || null;
         if (!date || !durSec) return null; // distance can be null for strength
         const activityType = normaliseSportType(a.sport_type, a.type);
-        if (date && distKm && matchesExistingByDateAndDist(date, activityType, distKm)) return null;
+        if (date && distKm && claimsUntagged(date, activityType, distKm)) return null;
         return {
           athlete_email: myEmail,
           athlete_name: athleteData?.name || user.email,

@@ -7,11 +7,11 @@
 // invoked manually) to refresh every athlete's token and pull recent
 // activities regardless of whether anyone opened the app.
 //
-// Auth: NOT a user-JWT function. Guarded by a shared secret that lives
-// ONLY in this function's source (server-side on Supabase) and in Vault
-// — never in the client bundle. pg_cron reads it from Vault and passes
-// it in the x-cron-secret header. verify_jwt is disabled at deploy time
-// precisely so this custom guard is the gate.
+// Auth: NOT a user-JWT function. Guarded by a shared secret (CRON_SECRET)
+// baked into this server-side source and into the pg_cron job's
+// x-cron-secret header — never in the client bundle. verify_jwt is
+// disabled at deploy time precisely so this custom guard is the gate.
+// Rotate by changing CRON_SECRET here + the cron job, then redeploying.
 //
 // Body (optional): { daysBack?: number }  — defaults to 30.
 
@@ -26,8 +26,7 @@ const corsHeaders = {
 const STRAVA_PAGE_SIZE = 200;
 
 // Shared secret — gate for cron/manual invocation. Lives only here +
-// in Vault (cron reads it), never in the client bundle. Rotating it
-// means redeploying this function and updating the Vault secret.
+// in the cron job's header, never in the client bundle.
 const CRON_SECRET = "5de24f8d9aaf0843b0c5878cb91e1d8a47de7bf284e10c70c2a4be40bf7a8b32";
 
 function normaliseSportType(sportType?: string, fallbackType?: string): string {
@@ -107,18 +106,39 @@ async function syncOne(supabase: any, tokenRow: any, daysBack: number) {
       .from("profiles").select("name").eq("email", email).maybeSingle();
     const athleteName = profileRow?.name || email;
 
+    // Suppress an auto-sync row only against UNTAGGED manual/session rows
+    // (no strava id) that might be the same run — runs with a strava id
+    // are deduped by the unique index. Consume-once so doubles survive.
+    const sinceDate = new Date(Date.now() - daysBack * 86400000).toISOString().slice(0, 10);
+    const { data: existing } = await supabase
+      .from("activities")
+      .select("strava_data, activity_date, activity_type, distance_km")
+      .eq("athlete_email", email)
+      .gte("activity_date", sinceDate);
+    const untagged = (existing || [])
+      .filter((r: any) => !r.strava_data?.id && parseFloat(r.distance_km))
+      .map((r: any) => ({ date: r.activity_date, type: r.activity_type || "Run", km: parseFloat(r.distance_km), used: false }));
+    const claimsUntagged = (date: string, type: string, distKm: number) => {
+      const m = untagged.find((u: any) => !u.used && u.date === date && u.type === type
+        && Math.abs(u.km - distKm) / Math.max(u.km, distKm) < 0.1);
+      if (m) { m.used = true; return true; }
+      return false;
+    };
+
     const rows = acts.map((a: any) => {
       const date = a.start_date_local?.split("T")[0];
       const durSec = a.moving_time || null;
       if (!date || !durSec) return null;
       const distKm = a.distance ? +(a.distance / 1000).toFixed(2) : null;
+      const activityType = normaliseSportType(a.sport_type, a.type);
+      if (date && distKm && claimsUntagged(date, activityType, distKm)) return null;
       return {
         athlete_email: email,
         athlete_name: athleteName,
         activity_date: date,
         distance_km: distKm,
         duration_seconds: durSec,
-        activity_type: normaliseSportType(a.sport_type, a.type),
+        activity_type: activityType,
         source: "strava-auto",
         strava_data: {
           id: a.id, name: a.name,
