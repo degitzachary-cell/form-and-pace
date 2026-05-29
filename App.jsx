@@ -16,7 +16,7 @@ import {
 } from "./lib/constants.js";
 import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor, maskPaceInput } from "./lib/load.js";
 import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
-import { matchActivitiesToSessions } from "./lib/sessionMatching.js";
+import { matchActivitiesToSessions, linkedActsBySession } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
 import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
@@ -2286,7 +2286,12 @@ export default function App() {
                           if (override && dayDate) return override === dayDate;
                           return s.day?.slice(0,3) === dayLabel;
                         });
-                        const extrasHere = dayDate ? dpExtras.filter(a => a.activity_date === dayDate) : [];
+                        // Match all the day's activities (any source) to its
+                        // sessions so auto-synced Strava runs mark the
+                        // prescribed session done. See coach drilldown.
+                        const dpDayActs = dayDate ? dpActs.filter(a => a.activity_date === dayDate) : [];
+                        const dpDayMatch = matchActivitiesToSessions({ sessions: sessionsHere, activities: dpDayActs, logs });
+                        const extrasHere = dpDayActs.filter(a => isExtraDisplay(a) && dpDayMatch.unmatchedActs.includes(a));
                         const datePart = dayDate ? dayDate.slice(5).replace("-","/") : "";
                         return (
                           <CoachDroppableDay key={dayLabel} dateStr={dayDate}>
@@ -2301,7 +2306,7 @@ export default function App() {
                                 {sessionsHere.map(s => {
                                   const log = logs[s.id];
                                   const sDate = log?.analysis?.actual_date || sessionDateStr(dpWk.weekStart, s.day);
-                                  const linkedAct = dpActByDate[sDate];
+                                  const linkedAct = dpDayMatch.bySessionId.get(s.id) || dpActByDate[sDate] || null;
                                   const isPastDate = sDate && sDate < todayStr();
                                   const comply = effectiveCompliance({ session: s, log, linkedAct, isPastDate, profile: dpAthlete });
                                   const cts = typeStyle(s.type);
@@ -3769,7 +3774,19 @@ export default function App() {
                       if (overrideDate && dayDate) return overrideDate === dayDate;
                       return s.day?.slice(0, 3) === dayLabel;
                     });
-                    const extrasHere = dayDate ? extraActs.filter(a => a.activity_date === dayDate) : [];
+                    // Match ALL of the day's activities (any source —
+                    // strava-auto, strava, manual, session) to the day's
+                    // sessions. Athletes whose runs auto-sync from Strava
+                    // never create a source="session" row, so the old
+                    // session-only actByDate lookup left every prescribed
+                    // session showing "missed" and hid the run entirely.
+                    const dayActsCoach = dayDate ? athActs.filter(a => a.activity_date === dayDate) : [];
+                    const dayMatchCoach = matchActivitiesToSessions({
+                      sessions: sessionsHere,
+                      activities: dayActsCoach,
+                      logs,
+                    });
+                    const extrasHere = dayActsCoach.filter(a => isExtraDisplay(a) && dayMatchCoach.unmatchedActs.includes(a));
                     const datePart = dayDate ? dayDate.slice(5).replace("-", "/") : "";
                     const dayMarkersCoach = dayDate ? markersOnDate(markersByEmail[dashAthlete?.toLowerCase()] || [], dayDate) : [];
                     return (
@@ -3843,7 +3860,7 @@ export default function App() {
                             {sessionsHere.map(s => {
                               const log    = logs[s.id];
                               const sDate  = log?.analysis?.actual_date || sessionDateStr(wk.weekStart, s.day);
-                              const linkedAct = actByDate[sDate];
+                              const linkedAct = dayMatchCoach.bySessionId.get(s.id) || actByDate[sDate] || null;
                               const isPastDate = sDate && sDate < todayStr();
                               const comply = effectiveCompliance({ session: s, log, linkedAct, isPastDate, profile: da });
                               const cts = typeStyle(s.type);
@@ -7608,6 +7625,18 @@ export default function App() {
       if (!byMonday.has(mon)) byMonday.set(mon, { weekStart: mon, plannedTotal: 0, plannedDone: 0, sessions: [], extras: [] });
       return byMonday.get(mon);
     };
+    // Match every session to a same-day activity (any source) so
+    // auto-synced Strava runs count toward completion, not just
+    // manually-logged source="session" rows.
+    const histMatch = linkedActsBySession(
+      (programEntry?.weeks || []).flatMap(w =>
+        w.sessions.map(s => ({
+          session: s,
+          date: logs[s.id]?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day),
+        }))
+      ),
+      myActsHist, logs
+    );
     // Plan weeks (count planned totals + assign sessions to their week).
     for (const w of (programEntry?.weeks || [])) {
       const bucket = ensureWk(w.weekStart);
@@ -7616,15 +7645,19 @@ export default function App() {
         bucket.plannedTotal++;
         const log = logs[s.id];
         const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
-        const linkedAct = myActsHist.find(a => a.activity_date === onDate && a.source === "session");
+        const linkedAct = histMatch.get(s.id) || null;
         const isLogged = sessionIsLogged(log, linkedAct);
         if (isLogged) bucket.plannedDone++;
         bucket.sessions.push({ s, log, linkedAct, onDate, weekStart: w.weekStart });
       }
     }
-    // Extras (manual or strava runs not tied to a session).
+    // Extras (manual or strava runs not tied to a session). Exclude any
+    // activity that the matcher already attached to a session above, so
+    // a matched run doesn't show twice (as completion + as extra).
+    const matchedActIds = new Set([...histMatch.values()].filter(Boolean).map(a => a.id));
     for (const a of myActsHist) {
       if (!isExtraDisplay(a)) continue;
+      if (matchedActIds.has(a.id)) continue;
       const mon = snapToMonday(a.activity_date);
       if (!mon) continue;
       ensureWk(mon).extras.push(a);
