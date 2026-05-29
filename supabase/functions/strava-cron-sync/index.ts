@@ -7,10 +7,11 @@
 // invoked manually) to refresh every athlete's token and pull recent
 // activities regardless of whether anyone opened the app.
 //
-// Auth: NOT a user-JWT function. Guarded by requiring the caller to send
-// the project's service-role key as the bearer. pg_cron supplies it from
-// Vault. verify_jwt is disabled at deploy time precisely so this custom
-// guard is the gate.
+// Auth: NOT a user-JWT function. Guarded by a shared secret that lives
+// ONLY in this function's source (server-side on Supabase) and in Vault
+// — never in the client bundle. pg_cron reads it from Vault and passes
+// it in the x-cron-secret header. verify_jwt is disabled at deploy time
+// precisely so this custom guard is the gate.
 //
 // Body (optional): { daysBack?: number }  — defaults to 30.
 
@@ -23,6 +24,11 @@ const corsHeaders = {
 };
 
 const STRAVA_PAGE_SIZE = 200;
+
+// Shared secret — gate for cron/manual invocation. Lives only here +
+// in Vault (cron reads it), never in the client bundle. Rotating it
+// means redeploying this function and updating the Vault secret.
+const CRON_SECRET = "5de24f8d9aaf0843b0c5878cb91e1d8a47de7bf284e10c70c2a4be40bf7a8b32";
 
 function normaliseSportType(sportType?: string, fallbackType?: string): string {
   const s = String(sportType || fallbackType || "").toLowerCase();
@@ -148,21 +154,21 @@ async function syncOne(supabase: any, tokenRow: any, daysBack: number) {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    // Guard: caller must present the service-role key as bearer.
-    const bearer = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    if (!serviceKey || bearer !== serviceKey) {
+    // Guard: caller must present the shared secret (header or body).
+    let body: any = {};
+    try { body = await req.json(); } catch (_) { /* no body */ }
+    const provided = req.headers.get("x-cron-secret") || body?.secret || "";
+    if (provided !== CRON_SECRET) {
       return new Response(JSON.stringify({ error: "unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    let daysBack = 30;
-    try { const b = await req.json(); if (b?.daysBack) daysBack = Number(b.daysBack); } catch (_) { /* no body */ }
+    const daysBack = body?.daysBack ? Number(body.daysBack) : 30;
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      serviceKey,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
     const { data: tokens, error } = await supabase.from("strava_tokens").select("*");

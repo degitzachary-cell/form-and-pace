@@ -6442,7 +6442,13 @@ export default function App() {
             const w = planned || { weekStart: activeMonday, weekLabel: fmtRange(), sessions: [] };
             const wkEnd = weekEndStr(w.weekStart);
             const extraActs = myActs.filter(a => isExtraDisplay(a) && a.activity_date >= w.weekStart && a.activity_date <= wkEnd);
-            const sessionsDone = w.sessions.filter(s => sessionIsLogged(logs[s.id], actByDate[sessionDateStr(w.weekStart, s.day)])).length;
+            // "X/Y logged" must count any-source runs (auto-synced Strava
+            // included), matched per-day, or it disagrees with the day cards.
+            const hdrMatch = linkedActsBySession(
+              w.sessions.map(s => ({ session: s, date: logs[s.id]?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day) })),
+              myActs, logs
+            );
+            const sessionsDone = w.sessions.filter(s => sessionIsLogged(logs[s.id], hdrMatch.get(s.id))).length;
 
             const snapAthleteMonday = (dateStr) => {
               const mon = snapToMonday(dateStr);
