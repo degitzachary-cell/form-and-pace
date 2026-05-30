@@ -44,7 +44,6 @@ export const S = {
   bodyFont:    BODY,
   monoFont:    MONO,
   page:       { minHeight:"100vh", background:C.bg, fontFamily:BODY, color:C.ink, position:"relative", WebkitFontSmoothing:"antialiased" },
-  grain:      { display:"none" },
   card:       { background:C.paper, border:`1px solid ${C.rule}`, borderRadius:2, padding:"16px 18px" },
   statBox:    { flex:1, background:C.paper, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 10px", textAlign:"center" },
   textarea:   { width:"100%", background:C.paper, border:`1px solid ${C.rule}`, borderRadius:2, padding:"14px 16px", color:C.ink, fontSize:16, lineHeight:1.55, resize:"none", minHeight:130, boxSizing:"border-box", fontFamily:DISPLAY, marginBottom:14, display:"block", outline:"none" },

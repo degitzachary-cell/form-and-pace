@@ -1805,7 +1805,6 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   if (role === "athlete" && !athleteData) return (
     <div style={S.page}>
-      <div style={S.grain}/>
       <div style={{ maxWidth:400, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
         <div style={{ fontFamily:"var(--f-display)", fontSize:64, color:C.accent, marginBottom:20, fontStyle:"italic", fontWeight:400 }}>✻</div>
         <div style={{ fontSize:20, fontWeight:700, marginBottom:12, fontFamily:S.displayFont, color:C.navy }}>You're not enrolled yet</div>
@@ -2163,7 +2162,6 @@ export default function App() {
           />
         )}
         <div style={{ ...(isDesktop ? { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" } : {}) }}>
-        <div style={S.grain}/>
         <Header
           title="Athletes"
           subtitle={user.user_metadata?.full_name || user.email}
@@ -2696,7 +2694,6 @@ export default function App() {
 
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title="Reply Inbox" subtitle={`${items.length} awaiting reply`} onBack={() => setCoachScreen("dashboard")} />
         <div style={{ maxWidth: isDesktop ? 800 : 520, margin:"0 auto", padding:"24px 16px 80px" }}>
           {items.length > 0 && (
@@ -2807,7 +2804,6 @@ export default function App() {
     });
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title="Workout Templates"
           subtitle={onLibraryTab ? `Library · ${WORKOUT_SEEDS.length} canonical workouts` : `${workoutTemplates.length} saved`}
           onBack={() => setCoachScreen("dashboard")} />
@@ -3018,7 +3014,6 @@ export default function App() {
 
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title="Season View" subtitle={`Next ${N_WEEKS} weeks`} onBack={() => setCoachScreen("dashboard")} />
         <div style={{ maxWidth: isDesktop ? 1100 : 540, margin:"0 auto", padding:"24px 16px 80px" }}>
           {sortedAthletes.length === 0 ? (
@@ -3224,7 +3219,6 @@ export default function App() {
 
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title="Compliance Report" subtitle={`Last ${NUM_WEEKS} weeks`} onBack={() => setCoachScreen("dashboard")}/>
         <div style={{ maxWidth: isDesktop ? 960 : 520, margin:"0 auto", padding:"24px 16px 80px", overflowX:"auto" }}>
           {athletes.length === 0 ? (
@@ -3290,7 +3284,6 @@ export default function App() {
   if (role === "coach" && coachScreen === "plan-builder") {
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header
           title="Plan Builder"
           subtitle="Edit athlete training plans"
@@ -3318,7 +3311,6 @@ export default function App() {
   // ────────────────────────────────────────────────────────────
   const renderProfileScreen = ({ title, subtitle, email, onBack, headerRight, tabBar = null, statsBlock = null, settingsBlock = null, predictorBlock = null }) => (
     <div style={S.page}>
-      <div style={S.grain}/>
       <Header title={title} subtitle={subtitle} onBack={onBack} right={headerRight} />
       <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px 96px" }}>
         {statsBlock}
@@ -3400,7 +3392,6 @@ export default function App() {
     const daGoal = da.goal || "—";
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title={daName} subtitle={`Goal: ${daGoal}`} onBack={()=>setCoachScreen("dashboard")}
           right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
@@ -3993,7 +3984,6 @@ export default function App() {
     const sessionLogged = sessionIsLogged(log, linkedAthAct);
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>setCoachScreen("athlete")}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
 
@@ -4413,7 +4403,6 @@ export default function App() {
 
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title={ap.name || prettyEmailName(dashAthlete)} subtitle="Month calendar" onBack={() => setCoachScreen("athlete")}/>
         <div style={{ maxWidth: isDesktop ? 880 : 540, margin:"0 auto", padding:"16px 16px 80px" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
@@ -4527,7 +4516,6 @@ export default function App() {
     const da = athletePrograms[dashAthlete];
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ fontSize:13, color:C.mid, marginBottom:16 }}>{da?.name}</div>
@@ -4661,7 +4649,6 @@ export default function App() {
     const isAerobicType = ["EASY", "RECOVERY", "LONG RUN"].includes(f.type || "EASY");
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title={isNew ? "Add Workout" : "Edit Workout"} subtitle={`${ew.athleteEmail} · ${dayDisplay}`} onBack={()=>{ setEditingWorkout(null); setCoachScreen("athlete"); }}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
           <div style={{ marginBottom:14 }}>
@@ -5500,7 +5487,6 @@ export default function App() {
 
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header
           title={athleteData.name}
           subtitle={dateNice}
@@ -6349,7 +6335,6 @@ export default function App() {
     }
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header
           title="This Week"
           subtitle={athleteData.name}
@@ -6726,7 +6711,6 @@ export default function App() {
 
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title="Calendar" subtitle={athleteData.name} onBack={() => setScreen("home")}/>
         <div style={{ maxWidth: isDesktop ? 880 : 540, margin:"0 auto", padding:"16px 16px 80px" }}>
 
@@ -7044,7 +7028,6 @@ export default function App() {
     const canSubmit = logForm.distanceKm && parseFloat(logForm.distanceKm) > 0 && logForm.date;
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title={editingActivityId ? "Edit Run" : "Log Activity"} subtitle={editingActivityId ? "Update entry" : "Manual Entry"} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setEditingActivityId(null); setScreen("home"); }}/>
         <form
           onSubmit={(e) => { e.preventDefault(); if (canSubmit && !logSaving) saveActivity(logForm, stravaDetail); }}
@@ -7185,7 +7168,6 @@ export default function App() {
     const niceDate = scheduledDateStr ? parseLocalDate(scheduledDateStr).toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" }) : null;
   return (
     <div style={S.page}>
-      <div style={S.grain}/>
       <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setScreen("home"); }}/>
       <form
         onSubmit={(e) => { e.preventDefault(); if (sessionDistKm && !isSaving && !formHidden) handleSubmitFeedback(); }}
@@ -7435,7 +7417,6 @@ export default function App() {
     const resultLinkedAct = resultSDate ? findAthAct(user.email, resultSDate) : null;
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title={activeSession.type} subtitle={`Logged · ${activeSession.day}`} onBack={()=>setScreen("home")} right={<Tick size={16}/>}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 22px 80px" }}>
 
@@ -7641,7 +7622,6 @@ export default function App() {
     const dateLabel = act.activity_date ? act.activity_date.slice(5).replace("-", " ") : "";
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setScreen("home"); }}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ textAlign:"center", fontFamily:"var(--f-display)", fontSize:64, fontWeight:400, color:C.accent, margin:"20px 0 8px", lineHeight:1 }}>+</div>
@@ -7762,7 +7742,6 @@ export default function App() {
 
     return (
       <div style={S.page}>
-        <div style={S.grain}/>
         <Header title="My Progress" subtitle="Last 4 weeks" onBack={()=>setScreen("home")}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
           <div style={{ display:"flex", gap:10, marginBottom:24 }}>
