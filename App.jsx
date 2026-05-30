@@ -604,6 +604,28 @@ export default function App() {
         };
       });
 
+      // Strava token health per athlete. Coaches can't fix a revoked
+      // refresh token, but they can SEE that an athlete is stuck and
+      // nudge them to reconnect, instead of wondering why "no runs
+      // are syncing". Used by the roster status badge.
+      const { data: tokenRows } = await supabase
+        .from('strava_tokens')
+        .select('athlete_email, expires_at');
+      const nowSec = Math.floor(Date.now() / 1000);
+      (tokenRows || []).forEach(t => {
+        const key = t.athlete_email?.toLowerCase();
+        if (!key || !roster[key]) return;
+        roster[key].strava = {
+          connected: true,
+          expires_at: t.expires_at,
+          token_valid: t.expires_at > nowSec,
+        };
+      });
+      // Anyone in the roster without a token row is simply "not connected".
+      for (const key of Object.keys(roster)) {
+        if (!roster[key].strava) roster[key].strava = { connected: false };
+      }
+
       setAthletePrograms(prev => {
         const updated = { ...prev };
         Object.entries(roster).forEach(([key, val]) => {
@@ -2076,6 +2098,28 @@ export default function App() {
                     {repliesNeeded} REPLY
                   </span>
                 )}
+                {(() => {
+                  // Strava-token health badge. The cron now refreshes
+                  // tokens automatically, but if Strava revokes the
+                  // refresh token (athlete revoked access on Strava's
+                  // side) no code path can fix it — they have to reconnect.
+                  // Surface this so the coach can nudge them.
+                  const sv = data?.strava;
+                  if (!sv) return null;
+                  if (!sv.connected) return (
+                    <span className="t-mono" title="Athlete hasn't connected Strava"
+                      style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.14em", fontWeight:600, flexShrink:0 }}>
+                      NO STRAVA
+                    </span>
+                  );
+                  if (sv.token_valid === false) return (
+                    <span className="t-mono" title="Strava token expired — athlete must reconnect to resume syncing"
+                      style={{ fontSize:10, color:"var(--c-warn)", letterSpacing:"0.14em", fontWeight:600, flexShrink:0 }}>
+                      STRAVA · RECONNECT
+                    </span>
+                  );
+                  return null;
+                })()}
                 {!isDesktop && <div style={{ color:"var(--c-mute)", fontSize:18, flexShrink:0, marginLeft:6 }}>›</div>}
               </div>
               <div style={{ display:"flex", gap:3, marginTop:12, paddingLeft:58 }}>
@@ -5016,11 +5060,28 @@ export default function App() {
       <div style={{ marginTop:36 }}>
         <div className="t-eyebrow" style={{ marginBottom:8, color:C.ink }}>Account</div>
         <div style={{ borderTop:`1px solid ${C.rule}` }}>
-          <SettingsRow
-            label="Strava"
-            value={stravaConnected ? "Connected" : "Not connected"}
-            onClick={stravaConnected ? null : connectStrava}
-          />
+          {(() => {
+            // Strava-token health check: if the cached `expires_at` for
+            // the logged-in athlete is in the past, the row prompts
+            // reconnect. The cron auto-refreshes valid tokens; only a
+            // revoked refresh-token (athlete revoked access on Strava's
+            // side) requires manual action.
+            const myEmail = user?.email?.toLowerCase();
+            const myAp = athletePrograms[myEmail] || null;
+            const sv = myAp?.strava || null;
+            const tokenInvalid = stravaConnected && sv && sv.token_valid === false;
+            return (
+              <SettingsRow
+                label="Strava"
+                value={
+                  !stravaConnected ? "Not connected"
+                  : tokenInvalid ? "Reconnect needed"
+                  : "Connected"
+                }
+                onClick={(!stravaConnected || tokenInvalid) ? connectStrava : null}
+              />
+            );
+          })()}
           <SettingsRow
             label="Notifications"
             value={pushPerm === "unsupported" ? "Unsupported on this device"
