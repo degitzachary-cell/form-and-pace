@@ -54,13 +54,6 @@ export const S = {
   signOutBtn: { background:"transparent", border:`1px solid ${C.rule}`, borderRadius:2, padding:"5px 12px", color:C.inkSoft, fontSize:11, cursor:"pointer", letterSpacing:"0.12em", fontFamily:BODY, textTransform:"uppercase" },
 };
 
-// Soft tag tints used in light contexts (kept for back-compat).
-export const TAG_STYLE = {
-  easy:  { bg:"#EAEFD9", accent:C.accent, border:"#CFD9B0" },
-  speed: { bg:"#F2D9CF", accent:C.hot,    border:"#E2BAA8" },
-  tempo: { bg:"#F0E2C5", accent:C.warn,   border:"#E0CCA0" },
-};
-
 // Per-TYPE styling. Visual differentiation by hue + intensity:
 //   SPEED  — solid deep red (the hottest, scariest workout)
 //   TEMPO  — solid bright orange (next-most-intense)

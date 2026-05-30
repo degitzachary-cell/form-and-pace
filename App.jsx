@@ -11,14 +11,14 @@ import {
 } from "./lib/helpers.js";
 import { C, S, typeStyle, COMPLY_COLOR, COMPLY_LABEL, TAG_EMOJI } from "./styles.js";
 import {
-  PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS, DAY_LONG,
+  PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
 import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor, maskPaceInput } from "./lib/load.js";
 import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
 import { matchActivitiesToSessions, linkedActsBySession } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
-import { getThread, appendMessage, markThreadRead } from "./lib/messages.js";
+import { getThread, appendMessage } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Eyebrow, Rule, Num, BigNum, SectionHead, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
 import { StepsEditor } from "./CoachPlanBuilder.jsx";
@@ -5053,8 +5053,6 @@ export default function App() {
         </span>
       </button>
     );
-
-    const flashSoon = (what) => setProfileStatus({ kind:"info", message: `${what} settings — coming soon.` });
 
     const SettingsBlock = (
       <div style={{ marginTop:36 }}>

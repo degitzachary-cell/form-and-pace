@@ -4,7 +4,7 @@ import { fmtPace, fmtTime } from "./lib/helpers.js";
 import {
   computeRtss, getThresholdPace, rtssColor,
   timeInZone, ZONE_LABELS, ZONE_COLORS, ZONE_NAMES,
-  paceStrToSecsPerKm, computePMC, densifyDailyRtss,
+  computePMC, densifyDailyRtss,
 } from "./lib/load.js";
 
 // ─── PACE INPUTS ─────────────────────────────────────────────────────────────
@@ -820,22 +820,6 @@ export const Tick = ({ size = 12, color = "var(--c-accent)" }) => (
   <svg width={size} height={size} viewBox="0 0 12 12" style={{ display: "inline-block", verticalAlign: "middle" }}>
     <path d="M2 6.5 L5 9.5 L10 3" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
-);
-
-// Editorial masthead used at the top of each screen — small seal + wordmark
-// on the left, contextual label on the right, then a hairline rule.
-export const Masthead = ({ context, right, hot = true }) => (
-  <>
-    <div style={{ padding: "20px 24px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <Seal size={20} color={hot ? "var(--c-hot)" : "var(--c-ink)"} />
-        <span className="t-mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--c-mute)" }}>FORM &amp; PACE</span>
-        {context && <span className="t-mono" style={{ fontSize: 11, letterSpacing: "0.1em", color: "var(--c-mute)" }}>· {context}</span>}
-      </div>
-      {right}
-    </div>
-    <Rule />
-  </>
 );
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
