@@ -2826,8 +2826,8 @@ export default function App() {
               <div style={{ fontSize:18, fontWeight:900, color:C.navy, fontFamily:S.displayFont, marginBottom:6 }}>Inbox zero.</div>
               <div style={{ fontSize:12, color:C.mid }}>No athlete logs awaiting your reply.</div>
             </div>
-          ) : items.map((it, i) => (
-            <div key={i}
+          ) : items.map((it) => (
+            <div key={`${it.email}|${it.date}|${it.kind}`}
               style={{ ...S.card, marginBottom:10, padding:"14px 16px", display:"flex", gap:10, alignItems:"flex-start" }}>
               <div onClick={() => {
                   setDashAthlete(it.email);
