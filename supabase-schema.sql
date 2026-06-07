@@ -14,10 +14,11 @@
 -- Idempotent: safe to re-run. Prerequisites: the Supabase `vault` extension
 -- (for get_vault_secret) and `auth` schema (Supabase-managed) already exist.
 --
--- NOTE: the live DB also carries some REDUNDANT DUPLICATE policies from past
--- dashboard edits (two policies expressing the same rule). They are harmless
--- (permissive policies OR together) but noisy. The "OPTIONAL: dedupe live"
--- block at the very bottom drops them so live exactly matches this file.
+-- NOTE: older databases may carry REDUNDANT DUPLICATE policies from past
+-- dashboard edits (two policies expressing the same rule). The "OPTIONAL:
+-- dedupe live" block at the very bottom drops them so the DB exactly matches
+-- this file. (Applied to the live project lsrxqviwgqjpuzzcqcpu on 2026-06-07 —
+-- its policy set now matches this file one-for-one.)
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- ── Extensions ───────────────────────────────────────────────────────────────
