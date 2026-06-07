@@ -31,6 +31,12 @@ async function getValidToken(supabase: any, email: string): Promise<string> {
   });
 
   const refreshed = await res.json();
+  // A failed refresh (revoked token, Strava error) returns no access_token.
+  // Persisting it would overwrite the row with nulls and break all future
+  // refreshes, so bail out and surface the error instead.
+  if (!refreshed?.access_token || !refreshed?.refresh_token) {
+    throw new Error(`Strava token refresh failed: ${JSON.stringify(refreshed)}`);
+  }
   await supabase.from("strava_tokens").upsert({
     athlete_email: email,
     access_token: refreshed.access_token,

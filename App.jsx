@@ -1602,7 +1602,10 @@ export default function App() {
       setSessionDurMin("");
       clearStravaSelection();
       setScreen("result");
-    } catch(e) { console.error(e); }
+    } catch(e) {
+      console.error(e);
+      showToast("Couldn't save your session — check your connection and try again.", "error");
+    }
     setIsSaving(false);
   };
 
@@ -7664,10 +7667,17 @@ export default function App() {
                 onSend={async (body) => {
                   const next = appendMessage(threadSource?.messages || [], { author: "athlete", body });
                   if (!next) return;
-                  if (threadSource === log) {
-                    await saveLog(activeSession.id, { messages: next });
-                  } else if (resultLinkedAct?.id) {
-                    await supabase.from("activities").update({ messages: next }).eq("id", resultLinkedAct.id);
+                  try {
+                    if (threadSource === log) {
+                      await saveLog(activeSession.id, { messages: next });
+                    } else if (resultLinkedAct?.id) {
+                      const { error } = await supabase.from("activities").update({ messages: next }).eq("id", resultLinkedAct.id);
+                      if (error) throw error;
+                      setActivities(prev => prev.map(a => a.id === resultLinkedAct.id ? { ...a, messages: next } : a));
+                    }
+                  } catch (e) {
+                    console.error("message send failed:", e);
+                    showToast("Message didn't send — check your connection and retry.", "error");
                   }
                 }}
               />
