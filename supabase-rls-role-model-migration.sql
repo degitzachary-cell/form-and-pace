@@ -36,6 +36,7 @@ as $$
 $$;
 
 revoke all on function public.is_coach() from public;
+revoke all on function public.is_coach() from anon;
 grant execute on function public.is_coach() to authenticated;
 
 -- ── 2. session_logs ──────────────────────────────────────────────────────────
@@ -63,6 +64,9 @@ create policy "Coaches can update activities"
 -- Replaces the policy that hardcoded BOTH degitzachary@ and z.degit@ — the
 -- latter is seeded as an athlete, so that grant let an athlete read/write every
 -- athlete's plan. Gone now: coach access is role-based only.
+-- Defensively drop any wide-open dashboard policy (USING true, ALL, public)
+-- that would bypass RLS on training plans before installing the role-based one.
+drop policy if exists "Coach full access"            on coach_plans;
 drop policy if exists "Coaches can manage all plans" on coach_plans;
 create policy "Coaches can manage all plans"
   on coach_plans for all using (public.is_coach()) with check (public.is_coach());
@@ -128,6 +132,13 @@ drop trigger if exists profiles_guard_role on profiles;
 create trigger profiles_guard_role
   before insert or update on profiles
   for each row execute function public.guard_profile_role();
+
+-- Trigger function only — fires automatically regardless of EXECUTE grants, so
+-- it must not be reachable via REST RPC. Supabase grants execute to
+-- anon/authenticated by default on public functions, so revoke explicitly.
+revoke all on function public.guard_profile_role() from public;
+revoke all on function public.guard_profile_role() from anon;
+revoke all on function public.guard_profile_role() from authenticated;
 
 -- ── 8. calendar_markers (race / sick / taper / travel / note ribbons) ─────────
 create table if not exists calendar_markers (
