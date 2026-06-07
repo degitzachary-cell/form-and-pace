@@ -258,7 +258,7 @@ A `push_subscriptions` table is required for Web Push — columns: `user_email`,
 | `strava-cron-sync` | Scheduled all-athlete token refresh + run pull | **off** — self-guarded by a shared secret in the `x-cron-secret` header |
 | `push-send` | Sends VAPID Web Push to an athlete | on |
 
-> **`strava-cron-sync`** holds a `CRON_SECRET` constant in its source (server-side only, never in the client bundle). The pg_cron job passes the same value as the `x-cron-secret` header. Strava rotates refresh tokens on every refresh, so the function persists the new token each time — failing to do that breaks all future refreshes.
+> **`strava-cron-sync`** reads its `CRON_SECRET` from the function environment (Supabase → Edge Functions → Secrets) — never committed to source or the client bundle. The pg_cron job passes the same value as the `x-cron-secret` header. The guard fails closed: if `CRON_SECRET` is unset, every request is rejected. Strava rotates refresh tokens on every refresh, so the function persists the new token each time — failing to do that breaks all future refreshes.
 
 ---
 
@@ -270,7 +270,7 @@ A `push_subscriptions` table is required for Web Push — columns: `user_email`,
 | `VITE_SUPABASE_ANON_KEY` | Supabase → Settings → API → anon public key |
 | `VITE_VAPID_PUBLIC` | Generate with `web-push generate-vapid-keys` (optional — a default is baked in for development) |
 
-Strava credentials (`STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`) live in Supabase Edge Function secrets, not in the frontend env.
+Strava credentials (`STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`) live in Supabase Edge Function secrets, not in the frontend env. The scheduled sync's `CRON_SECRET` also lives there (Supabase → Edge Functions → Secrets) — set it to any long random string and use the same value in the pg_cron header (see `supabase-strava-cron-sync-setup.sql`).
 
 ---
 

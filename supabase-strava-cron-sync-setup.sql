@@ -5,10 +5,11 @@
 -- (or whose access token expired) left the coach blind.
 --
 -- Requires the strava-cron-sync edge function to be deployed (verify_jwt
--- off). It self-guards with a shared secret (x-cron-secret header) that
--- lives only in the function source + this cron job, never in the client
--- bundle. To rotate: change CRON_SECRET in the function, redeploy, and
--- update the header value below.
+-- off). It self-guards with a shared secret (x-cron-secret header). The
+-- secret is set as the CRON_SECRET edge-function env var (Supabase →
+-- Edge Functions → Secrets) — never committed to source or the client
+-- bundle. Put the SAME value in the header below. To rotate: update the
+-- CRON_SECRET secret, redeploy the function, and update the header value.
 
 CREATE EXTENSION IF NOT EXISTS pg_net;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
@@ -28,7 +29,7 @@ SELECT cron.schedule(
     url := 'https://lsrxqviwgqjpuzzcqcpu.supabase.co/functions/v1/strava-cron-sync',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-cron-secret', '<CRON_SECRET from strava-cron-sync/index.ts>'
+      'x-cron-secret', '<value of the CRON_SECRET edge-function secret>'
     ),
     body := jsonb_build_object('daysBack', 14),
     timeout_milliseconds := 150000

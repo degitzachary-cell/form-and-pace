@@ -8,10 +8,12 @@
 // activities regardless of whether anyone opened the app.
 //
 // Auth: NOT a user-JWT function. Guarded by a shared secret (CRON_SECRET)
-// baked into this server-side source and into the pg_cron job's
-// x-cron-secret header — never in the client bundle. verify_jwt is
+// read from the function's environment (Supabase → Edge Functions →
+// Secrets) and matched against the pg_cron job's x-cron-secret header —
+// never committed to source or shipped in the client bundle. verify_jwt is
 // disabled at deploy time precisely so this custom guard is the gate.
-// Rotate by changing CRON_SECRET here + the cron job, then redeploying.
+// Rotate by changing the CRON_SECRET secret + the cron job, then redeploying.
+// Fails closed: if CRON_SECRET is unset, every request is rejected.
 //
 // Body (optional): { daysBack?: number }  — defaults to 30.
 
@@ -25,9 +27,9 @@ const corsHeaders = {
 
 const STRAVA_PAGE_SIZE = 200;
 
-// Shared secret — gate for cron/manual invocation. Lives only here +
-// in the cron job's header, never in the client bundle.
-const CRON_SECRET = "5de24f8d9aaf0843b0c5878cb91e1d8a47de7bf284e10c70c2a4be40bf7a8b32";
+// Shared secret — gate for cron/manual invocation. Sourced from the
+// function environment; matched against the cron job's x-cron-secret header.
+const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
 function normaliseSportType(sportType?: string, fallbackType?: string): string {
   const s = String(sportType || fallbackType || "").toLowerCase();
@@ -178,7 +180,8 @@ serve(async (req) => {
     let body: any = {};
     try { body = await req.json(); } catch (_) { /* no body */ }
     const provided = req.headers.get("x-cron-secret") || body?.secret || "";
-    if (provided !== CRON_SECRET) {
+    // Fail closed: an unset CRON_SECRET must never authorise a request.
+    if (!CRON_SECRET || provided !== CRON_SECRET) {
       return new Response(JSON.stringify({ error: "unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
