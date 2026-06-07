@@ -6,6 +6,9 @@ import {
   timeInZone, ZONE_LABELS, ZONE_COLORS, ZONE_NAMES,
   computePMC, densifyDailyRtss,
 } from "./lib/load.js";
+import {
+  getMaxHr, timeInHrZone, aerobicDecoupling, decouplingBand, efficiencyFactor,
+} from "./lib/hr.js";
 
 // ─── PACE INPUTS ─────────────────────────────────────────────────────────────
 // Masked text input for paces. Accepts digits only and auto-formats as
@@ -735,6 +738,70 @@ export function ZoneBar({ splits, durationMin, distanceKm, profile, height = 6, 
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+// HR-derived insights for a logged run: average/max HR, efficiency factor,
+// aerobic decoupling (EF drift first→second half), and an HR-zone bar — all
+// from the HR data Strava already syncs. Renders nothing when there's no
+// usable HR data, so it's safe to drop onto any logged-run screen.
+export function HrInsights({ stravaData, profile, activities, distanceKm, durationMin }) {
+  const splits = stravaData?.splits;
+  const avgHr = stravaData?.avg_heartrate;
+  const maxObserved = stravaData?.max_heartrate;
+  const maxHr = getMaxHr(profile, activities);
+  const tiz = timeInHrZone(splits, maxHr);
+  const decoupling = aerobicDecoupling(splits);
+  const ef = efficiencyFactor({ distanceKm, durationSec: durationMin ? durationMin * 60 : null, avgHr });
+  if (!avgHr && tiz.total === 0 && decoupling == null) return null;
+
+  const band = decouplingBand(decoupling);
+  const bandColor = band === "decoupled" ? "var(--c-hot)" : band === "drifting" ? "var(--c-warn)" : "var(--c-accent)";
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display:"flex", alignItems:"baseline", gap:12, flexWrap:"wrap", marginBottom: tiz.total ? 6 : 0 }}>
+        <span className="t-mono" style={{ fontSize:10, letterSpacing:"0.14em", color:"var(--c-mute)" }}>HEART RATE</span>
+        {avgHr ? (
+          <span className="t-mono" style={{ fontSize:11, color:"var(--c-ink)" }}>
+            {Math.round(avgHr)} avg{maxObserved ? ` · ${Math.round(maxObserved)} max` : ""}
+          </span>
+        ) : null}
+        {ef != null && (
+          <span className="t-mono" style={{ fontSize:11, color:"var(--c-mute)" }} title="Efficiency factor — metres/min per heartbeat. Rising EF at the same effort = improving aerobic fitness.">
+            EF {ef}
+          </span>
+        )}
+        {decoupling != null && (
+          <span className="t-mono" style={{ fontSize:11, color: bandColor }} title="Aerobic decoupling — drop in pace-per-heartbeat from the first to the second half. ≤5% coupled, 5–10% drifting, >10% decoupled (ran past aerobic durability or under-fuelled).">
+            {decoupling > 0 ? "+" : ""}{decoupling}% decoupling
+          </span>
+        )}
+      </div>
+      {tiz.total > 0 && (
+        <>
+          <div style={{ display:"flex", height:6, width:"100%", overflow:"hidden", borderRadius:1 }}>
+            {ZONE_LABELS.map(z => {
+              const pct = (tiz[z] / tiz.total) * 100;
+              if (pct < 0.5) return null;
+              return (
+                <div key={z}
+                  title={`${ZONE_NAMES[z]} · ${Math.round(tiz[z] / 60)}min (${Math.round(pct)}%)`}
+                  style={{ width:`${pct}%`, background: ZONE_COLORS[z] }}/>
+              );
+            })}
+          </div>
+          <div style={{ display:"flex", marginTop:4, gap:8, flexWrap:"wrap" }}>
+            {ZONE_LABELS.filter(z => tiz[z] > 0).map(z => (
+              <span key={z} className="t-mono" style={{ fontSize:10, color:"var(--c-mute)", letterSpacing:"0.06em" }}>
+                <span style={{ display:"inline-block", width:6, height:6, borderRadius:999, background:ZONE_COLORS[z], marginRight:5, verticalAlign:"middle" }}/>
+                {z} {Math.round((tiz[z] / tiz.total) * 100)}%
+              </span>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

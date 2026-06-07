@@ -15,12 +15,12 @@ import {
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
 import { effectiveCompliance, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor, maskPaceInput } from "./lib/load.js";
-import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
+import { dailyLoadFromActivitiesAndLogs, hooperToday, hrvToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
 import { matchActivitiesToSessions, linkedActsBySession } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
 import { getThread, appendMessage, athleteHasUnread } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
-import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Eyebrow, Rule, Num, BigNum, SectionHead, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
+import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Eyebrow, Rule, Num, BigNum, SectionHead, Tick, typeMeta, RtssPillFor, ZoneBar, HrInsights, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
 import { StepsEditor } from "./CoachPlanBuilder.jsx";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 
@@ -443,6 +443,8 @@ export default function App() {
   const [quickSleep,    setQuickSleep]    = useState("");
   const [quickSoreness, setQuickSoreness] = useState(null);
   const [quickMood,     setQuickMood]     = useState(null);
+  const [quickHrv,      setQuickHrv]      = useState("");   // morning HRV (rMSSD, ms)
+  const [quickRestingHr, setQuickRestingHr] = useState(""); // morning resting HR (bpm)
   const [quickSaving,   setQuickSaving]   = useState(false);
   // When the athlete has two sessions on the same day (a "double"),
   // remembers which one their Today card is currently focused on.
@@ -5484,12 +5486,13 @@ export default function App() {
       const pmcTail = pmc.length > 0 ? pmc[pmc.length - 1] : null;
 
       const hooper = hooperToday({ logs: myLogs, asOfDate: today });
+      const hrv = hrvToday({ logs: myLogs, asOfDate: today });
       const drift = recentEasyDrift({
         sessions: programEntry?.weeks?.flatMap(w => w.sessions) || [],
         logs: myLogs,
         asOfDate: today,
       });
-      const verdict = readinessScore({ pmcTail, hooper, drift });
+      const verdict = readinessScore({ pmcTail, hooper, drift, hrv });
 
       // Stay silent when we don't have enough signals to say anything
       // meaningful (neutral). When verdict is "go" and we DID consult
@@ -6137,11 +6140,13 @@ export default function App() {
                   ...(quickSleep      !== ""    ? { sleep_hours: parseFloat(quickSleep) } : {}),
                   ...(quickSoreness  != null    ? { soreness: quickSoreness }            : {}),
                   ...(quickMood      != null    ? { mood: quickMood }                    : {}),
+                  ...(quickHrv        !== ""    ? { hrv: parseFloat(quickHrv) }          : {}),
+                  ...(quickRestingHr  !== ""    ? { resting_hr: parseFloat(quickRestingHr) } : {}),
                 };
                 if (Object.keys(wellness).length === 0) { setQuickSaving(false); return; }
                 const nextAnalysis = { ...(log?.analysis || {}), wellness };
                 await saveLog(todaysSession.s.id, { analysis: nextAnalysis });
-                setQuickRpe(null); setQuickSleep(""); setQuickSoreness(null); setQuickMood(null);
+                setQuickRpe(null); setQuickSleep(""); setQuickSoreness(null); setQuickMood(null); setQuickHrv(""); setQuickRestingHr("");
               } catch (e) { console.error("quick wellness save failed", e); }
               finally { setQuickSaving(false); }
             };
@@ -6177,14 +6182,28 @@ export default function App() {
                 <PickRow label="Effort (RPE)"     options={[1,2,3,4,5,6,7,8,9,10]} value={quickRpe}      onChange={setQuickRpe} colorBy={rpeColor}/>
                 <PickRow label="Soreness · 1–5"   options={[1,2,3,4,5]}            value={quickSoreness} onChange={setQuickSoreness}/>
                 <PickRow label="Mood · 1–5"       options={[1,2,3,4,5]}            value={quickMood}     onChange={setQuickMood}/>
-                <div style={{ marginBottom:14 }}>
-                  <Eyebrow style={{ marginBottom:6 }}>Sleep last night (h)</Eyebrow>
-                  <input type="number" step="0.5" min="0" max="14" placeholder="e.g. 7.5"
-                    value={quickSleep} onChange={e => setQuickSleep(e.target.value)}
-                    style={{ ...S.input, width:120, fontFamily:"var(--f-mono)" }}/>
+                <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:14 }}>
+                  <div>
+                    <Eyebrow style={{ marginBottom:6 }}>Sleep last night (h)</Eyebrow>
+                    <input type="number" step="0.5" min="0" max="14" placeholder="e.g. 7.5"
+                      value={quickSleep} onChange={e => setQuickSleep(e.target.value)}
+                      style={{ ...S.input, width:110, fontFamily:"var(--f-mono)" }}/>
+                  </div>
+                  <div>
+                    <Eyebrow style={{ marginBottom:6 }}>Morning HRV (ms)</Eyebrow>
+                    <input type="number" step="1" min="0" max="250" placeholder="rMSSD"
+                      value={quickHrv} onChange={e => setQuickHrv(e.target.value)}
+                      style={{ ...S.input, width:110, fontFamily:"var(--f-mono)" }}/>
+                  </div>
+                  <div>
+                    <Eyebrow style={{ marginBottom:6 }}>Resting HR (bpm)</Eyebrow>
+                    <input type="number" step="1" min="0" max="120" placeholder="e.g. 48"
+                      value={quickRestingHr} onChange={e => setQuickRestingHr(e.target.value)}
+                      style={{ ...S.input, width:110, fontFamily:"var(--f-mono)" }}/>
+                  </div>
                 </div>
                 {(() => {
-                  const nothingPicked = quickRpe == null && !quickSleep && quickSoreness == null && quickMood == null;
+                  const nothingPicked = quickRpe == null && !quickSleep && quickSoreness == null && quickMood == null && !quickHrv && !quickRestingHr;
                   const disabled = quickSaving || nothingPicked;
                   return (
                     <>
@@ -7570,6 +7589,15 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* HR insights — zone bar, avg/max HR, efficiency factor, decoupling */}
+          <HrInsights
+            stravaData={log?.strava_data}
+            profile={profile}
+            activities={activities}
+            distanceKm={an?.distance_km}
+            durationMin={an?.duration_min}
+          />
 
           {/* Pace strip */}
           <div className="fp-pace-strip" style={{ marginBottom:24 }}>
