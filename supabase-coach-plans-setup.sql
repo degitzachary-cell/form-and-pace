@@ -14,14 +14,16 @@ CREATE POLICY "Athletes can read own plan"
   FOR SELECT
   USING (athlete_email = auth.jwt() ->> 'email');
 
--- Coach can read and write all plans
+-- Coach can read and write all plans.
+-- NOTE: superseded by supabase-rls-role-model-migration.sql, which replaces
+-- this email check with a profiles.role='coach' check. Keep the coach's email
+-- here only as the fresh-install baseline before that migration runs.
 CREATE POLICY "Coaches can manage all plans"
   ON coach_plans
   FOR ALL
   USING (
     auth.jwt() ->> 'email' IN (
-      'degitzachary@gmail.com',
-      'z.degit@gmail.com'
+      'degitzachary@gmail.com'
     )
   );
 
