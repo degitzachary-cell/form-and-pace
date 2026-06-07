@@ -737,8 +737,13 @@ export default function App() {
   // ── Load logs + Strava state when user + role are known ──
   useEffect(() => {
     if (!user || !role) return;
-    Promise.all([loadLogs(), loadActivities()]);
-    if (role === "athlete") loadMarkers(user.email);
+    // Athletes load their own (small, self-scoped) data immediately. Coaches
+    // load via the roster-scoped effect below, once their plans resolve — so we
+    // never fire an unscoped whole-table fetch before the roster is known.
+    if (role === "athlete") {
+      Promise.all([loadLogs(), loadActivities()]);
+      loadMarkers(user.email);
+    }
     const pendingCode = sessionStorage.getItem("strava_pending_code");
     if (pendingCode) {
       sessionStorage.removeItem("strava_pending_code");
@@ -858,23 +863,38 @@ export default function App() {
       });
   }, [role, user?.email]);
 
-  // ── Refresh logs+activities when coach opens an athlete or returns to tab ──
-  // The boot-time loadLogs() runs once; without this the coach sees stale data
-  // when athletes drag-reschedule or log new runs.
+  // ── Coach: load logs + activities once the roster is known ──
+  // Replaces the old boot-time whole-table pull. Fires when plans resolve and
+  // whenever the roster changes (athlete added/removed); Realtime keeps the
+  // data fresh thereafter, so there's no per-screen refetch.
+  const lastCoachLoadRef = useRef(0);
+  const COACH_REFRESH_STALE_MS = 5 * 60 * 1000;
+  useEffect(() => {
+    if (role !== "coach" || !rosterEmails.length) return;
+    lastCoachLoadRef.current = Date.now();
+    Promise.all([loadLogs(rosterEmails), loadActivities(rosterEmails)])
+      .catch(e => console.error("coach load error:", e));
+  }, [role, rosterKey]);
+
+  // ── Refresh markers on athlete-open; refetch on tab-return only if stale ──
   useEffect(() => {
     if (role !== "coach") return;
-    if (coachScreen === "athlete" && dashAthlete) {
-      Promise.all([loadLogs(), loadActivities()]).catch(e => console.error("coach refresh error:", e));
-      loadMarkers(dashAthlete);
-    }
+    // Opening an athlete only needs their markers — logs/activities are already
+    // loaded by the roster effect and kept live by Realtime.
+    if (coachScreen === "athlete" && dashAthlete) loadMarkers(dashAthlete);
     const onVis = () => {
-      if (document.visibilityState === "visible") {
-        Promise.all([loadLogs(), loadActivities()]).catch(e => console.error("coach refresh error:", e));
-      }
+      if (document.visibilityState !== "visible") return;
+      // Realtime can miss events while the tab is backgrounded; refetch on
+      // return, but only when the cache is stale — and always roster-scoped.
+      if (!rosterEmails.length) return;
+      if (Date.now() - lastCoachLoadRef.current < COACH_REFRESH_STALE_MS) return;
+      lastCoachLoadRef.current = Date.now();
+      Promise.all([loadLogs(rosterEmails), loadActivities(rosterEmails)])
+        .catch(e => console.error("coach refresh error:", e));
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [role, coachScreen, dashAthlete]);
+  }, [role, coachScreen, dashAthlete, rosterKey]);
 
   // ── Refresh session log when coach opens a session detail ──
   // Single round-trip; no separate activities re-fetch (the home query already
@@ -920,13 +940,34 @@ export default function App() {
     }
   }, [role, screen, activeSession?.id, activeExtraActivity?.id]);
 
-  const loadLogs = async () => {
+  // Coach roster (lowercased emails, excluding the coach's own account),
+  // derived from the loaded plans. Drives the scoped data fetches below so a
+  // coach never pulls every athlete's rows — or the whole table — client-side.
+  const rosterEmails = useMemo(() => {
+    const me = user?.email?.toLowerCase();
+    return Object.keys(athletePrograms).filter(e => e && e !== me).sort();
+  }, [athletePrograms, user?.email]);
+  const rosterKey = rosterEmails.join(",");
+
+  // Rolling window for the coach activity fetch — covers a full season (matches
+  // the 365-day Strava backfill) without shipping an athlete's entire history.
+  const ACTIVITY_WINDOW_DAYS = 365;
+
+  const loadLogs = async (roster = rosterEmails) => {
     setLogsLoading(true);
     const email = user.email?.toLowerCase();
     let q = supabase.from("session_logs").select("*");
-    if (role === "athlete") q = q.eq("athlete_email", email);
+    if (role === "athlete") {
+      q = q.eq("athlete_email", email);
+    } else {
+      // Coach: scope to the roster, never the whole table. Logs carry no blobs
+      // and feed full-plan compliance, so they aren't date-windowed.
+      if (!roster || roster.length === 0) { setLogsLoading(false); return; }
+      q = q.in("athlete_email", roster);
+    }
     const { data, error } = await q;
-    if (!error && data) {
+    if (error) { console.error("loadLogs failed:", error); setLogsLoading(false); return; }
+    if (data) {
       const map = {};
       data.forEach(row => { map[row.session_id] = row; });
       setLogs(map);
@@ -934,12 +975,22 @@ export default function App() {
     setLogsLoading(false);
   };
 
-  const loadActivities = async () => {
+  const loadActivities = async (roster = rosterEmails) => {
     const email = user.email?.toLowerCase();
     let q = supabase.from("activities").select("*").order("activity_date", { ascending: false });
-    if (role === "athlete") q = q.eq("athlete_email", email);
+    if (role === "athlete") {
+      q = q.eq("athlete_email", email);
+    } else {
+      // Coach: roster-scoped + windowed, replacing the previous select-* over
+      // the entire activities table (including the heavy strava_data JSONB).
+      if (!roster || roster.length === 0) return;
+      const since = new Date();
+      since.setDate(since.getDate() - ACTIVITY_WINDOW_DAYS);
+      q = q.in("athlete_email", roster).gte("activity_date", ymd(since));
+    }
     const { data, error } = await q;
-    if (!error && data) setActivities(data);
+    if (error) { console.error("loadActivities failed:", error); return; }
+    if (data) setActivities(data);
   };
 
   const saveActivity = async (form, stravaDetailData = null) => {
