@@ -6,6 +6,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Strava GET with 429 (rate-limit) backoff. Honours Retry-After when present,
+// else capped exponential backoff. Returns the Response; caller checks .ok.
+async function stravaFetch(url: string, accessToken: string, maxRetries = 2): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}` } });
+    if (res.status !== 429 || attempt >= maxRetries) return res;
+    const retryAfter = parseInt(res.headers.get("Retry-After") || "", 10);
+    const waitMs = Math.min(Number.isFinite(retryAfter) ? retryAfter * 1000 : 2000 * 2 ** attempt, 10000);
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+}
+
 async function getValidToken(supabase: any, email: string): Promise<string> {
   const { data: row, error } = await supabase
     .from("strava_tokens")
@@ -83,9 +95,9 @@ serve(async (req) => {
       const afterParam = after ? `&after=${after}` : "";
       const all: any[] = [];
       for (let page = 1; page <= 10; page++) {
-        const res = await fetch(
+        const res = await stravaFetch(
           `https://www.strava.com/api/v3/athlete/activities?per_page=${per_page}${afterParam}&page=${page}`,
-          { headers: { "Authorization": `Bearer ${accessToken}` } },
+          accessToken,
         );
         if (!res.ok) {
           // Surface a structured error on the first page (client treats any
@@ -108,9 +120,9 @@ serve(async (req) => {
     }
 
     if (action === "get") {
-      const stravaRes = await fetch(
+      const stravaRes = await stravaFetch(
         `https://www.strava.com/api/v3/activities/${activity_id}?include_all_efforts=false`,
-        { headers: { "Authorization": `Bearer ${accessToken}` } },
+        accessToken,
       );
       const data = await stravaRes.json();
       return new Response(JSON.stringify(data), {

@@ -77,11 +77,25 @@ async function getValidToken(supabase: any, row: any): Promise<string | null> {
   return refreshed.access_token;
 }
 
+// Strava GET with 429 (rate-limit) backoff — honours Retry-After, else capped
+// exponential backoff. Important for the cron, which loops the whole roster and
+// can brush the 15-min quota; a transient 429 retries instead of failing the
+// athlete outright.
+async function stravaFetch(url: string, accessToken: string, maxRetries = 2): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}` } });
+    if (res.status !== 429 || attempt >= maxRetries) return res;
+    const retryAfter = parseInt(res.headers.get("Retry-After") || "", 10);
+    const waitMs = Math.min(Number.isFinite(retryAfter) ? retryAfter * 1000 : 2000 * 2 ** attempt, 10000);
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+}
+
 async function fetchActivities(accessToken: string, afterEpoch: number) {
   const all: any[] = [];
   for (let page = 1; page <= 10; page++) {
     const url = `https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=${STRAVA_PAGE_SIZE}&page=${page}`;
-    const res = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}` } });
+    const res = await stravaFetch(url, accessToken);
     if (!res.ok) throw new Error(`Strava list ${res.status}`);
     const batch = await res.json();
     if (!Array.isArray(batch) || batch.length === 0) break;

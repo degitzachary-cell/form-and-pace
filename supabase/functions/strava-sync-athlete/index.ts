@@ -51,11 +51,24 @@ async function getValidToken(supabase: any, email: string): Promise<string> {
   return refreshed.access_token;
 }
 
+// Strava GET with 429 (rate-limit) backoff. Honours Retry-After when present,
+// else exponential backoff, capped so we never blow the function's wall-clock
+// budget. Returns the Response; caller checks .ok.
+async function stravaFetch(url: string, accessToken: string, maxRetries = 2): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}` } });
+    if (res.status !== 429 || attempt >= maxRetries) return res;
+    const retryAfter = parseInt(res.headers.get("Retry-After") || "", 10);
+    const waitMs = Math.min(Number.isFinite(retryAfter) ? retryAfter * 1000 : 2000 * 2 ** attempt, 10000);
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+}
+
 async function fetchAllStravaActivities(accessToken: string, afterEpoch: number) {
   const all: any[] = [];
   for (let page = 1; page <= 10; page++) {
     const url = `https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=${STRAVA_PAGE_SIZE}&page=${page}`;
-    const res = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}` } });
+    const res = await stravaFetch(url, accessToken);
     if (!res.ok) throw new Error(`Strava list failed: ${res.status}`);
     const batch = await res.json();
     if (!Array.isArray(batch) || batch.length === 0) break;
@@ -117,17 +130,27 @@ serve(async (req) => {
     const existingIds = new Set(
       (existing || []).map((r: any) => r.strava_data?.id).filter(Boolean),
     );
-    // Dedupe by (date, type, distance) so a manually-logged activity that
-    // wasn't tagged with strava_data still suppresses an auto-sync row, but
-    // a 5km run + 5km bike on the same day stay separate.
-    const matchesExistingByDateAndDist = (date: string, type: string, distKm: number) =>
-      (existing || []).some((r: any) => {
-        if (r.activity_date !== date) return false;
-        if ((r.activity_type || "Run") !== type) return false;
-        const ad = parseFloat(r.distance_km);
-        if (!ad) return false;
-        return Math.abs(ad - distKm) / Math.max(ad, distKm) < 0.1;
-      });
+    // Suppress an auto-sync row only against an UNTAGGED manual/session row
+    // (no strava_data.id) that might be the same physical run — consume-once,
+    // so two genuine same-day doubles (e.g. AM + PM) both still sync. Rows that
+    // already carry a strava id are handled by existingIds above. Matches the
+    // cron-sync and client auto-sync logic exactly (previously this re-scanned
+    // all rows with .some(), diverging from that and risking suppressing a real
+    // same-day double against a single existing row).
+    const untagged = (existing || [])
+      .filter((r: any) => !r.strava_data?.id && parseFloat(r.distance_km))
+      .map((r: any) => ({
+        date: r.activity_date,
+        type: r.activity_type || "Run",
+        km: parseFloat(r.distance_km),
+        used: false,
+      }));
+    const claimsUntagged = (date: string, type: string, distKm: number) => {
+      const m = untagged.find((u) => !u.used && u.date === date && u.type === type
+        && Math.abs(u.km - distKm) / Math.max(u.km, distKm) < 0.1);
+      if (m) { m.used = true; return true; }
+      return false;
+    };
 
     const rows = stravaActs
       .map((a: any) => {
@@ -137,7 +160,7 @@ serve(async (req) => {
         const durSec = a.moving_time || null;
         if (!date || !durSec) return null;
         const activityType = normaliseSportType(a.sport_type, a.type);
-        if (date && distKm && matchesExistingByDateAndDist(date, activityType, distKm)) return null;
+        if (date && distKm && claimsUntagged(date, activityType, distKm)) return null;
         return {
           athlete_email: targetEmail,
           athlete_name: athleteName,
