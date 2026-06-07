@@ -235,7 +235,7 @@ const scoreTypeColor = (t) => SCORE_TYPE_COLOR[String(t || "").toUpperCase()] ||
 // row with seven day cells (Mon-Sun) showing the type dot + total km. Lets
 // the coach see the rhythm of the plan at a glance before drilling into the
 // editor below. Renders nothing if no weeks exist yet.
-function PlanScoreGrid({ weeks }) {
+function PlanScoreGrid({ weeks, athleteThresholdPace }) {
   if (!Array.isArray(weeks) || weeks.length === 0) return null;
   // Show only weeks at or beyond the current Monday — the coach is
   // looking forward, not back. Past weeks live in the edit list above
@@ -262,10 +262,14 @@ function PlanScoreGrid({ weeks }) {
   const IMPLICIT_PAD_MIN = 15;        // standard 15-min warm-up / cool-down
   const FALLBACK_EASY_PACE = "5:30";  // if athlete has no threshold pace to derive from
   const easyPaceStr = (() => {
-    const thr = athletes[selectedEmail]?.threshold_pace;
-    if (!thr || !/^\d{1,2}:\d{2}$/.test(thr.trim())) return FALLBACK_EASY_PACE;
+    // Threshold pace is passed in by the parent (which can read the
+    // athletes prop). Earlier versions reached into `athletes[selectedEmail]`
+    // from inside this component — those identifiers weren't in scope
+    // and threw on every render, leaving Plan Builder as a blank page.
+    const thr = (athleteThresholdPace || "").trim?.() || "";
+    if (!thr || !/^\d{1,2}:\d{2}$/.test(thr)) return FALLBACK_EASY_PACE;
     // Easy ≈ threshold pace × 1.3 (Daniels' E zone lower bound).
-    const [m, sec] = thr.trim().split(":").map(Number);
+    const [m, sec] = thr.split(":").map(Number);
     const totalSec = Math.round((m * 60 + sec) * 1.3);
     return `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, "0")}`;
   })();
@@ -999,7 +1003,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
           </div>
 
           {selectedEmail && weeks.length > 0 && (
-            <PlanScoreGrid weeks={weeks} />
+            <PlanScoreGrid weeks={weeks} athleteThresholdPace={athletes[selectedEmail]?.threshold_pace} />
           )}
 
           {clipboardWeek && selectedEmail && (
