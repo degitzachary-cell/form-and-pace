@@ -18,7 +18,7 @@ import { effectiveCompliance, dailyRtssFromStravaList, formatStep, isStructured,
 import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
 import { matchActivitiesToSessions, linkedActsBySession } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
-import { getThread, appendMessage } from "./lib/messages.js";
+import { getThread, appendMessage, athleteHasUnread } from "./lib/messages.js";
 import { fetchMarkersForAthlete, markersOnDate, createMarker, deleteMarker, MARKER_STYLE, MARKER_KINDS } from "./lib/markers.js";
 import { Header, SectionCard, StatPill, MiniStat, StravaCard, StravaActivityPicker, Eyebrow, Rule, Num, BigNum, SectionHead, Tick, typeMeta, RtssPillFor, ZoneBar, PMCChart, ThreadPanel, MobileTabBar, CoachLeftRail, LetterheadReplyModal, PaceRangeInput } from "./components.jsx";
 import { StepsEditor } from "./CoachPlanBuilder.jsx";
@@ -478,6 +478,32 @@ export default function App() {
     if (s === "today") setDayOffset(0);
     setScreen(s);
   };
+
+  // Remember the last "list" screen the athlete was on, so day-detail screens
+  // (session / result / extra-activity / log-activity) can send Back there
+  // instead of always to the week view. Fixes: month calendar → tap a day →
+  // Back now returns to the calendar, not the week.
+  const ATHLETE_LIST_SCREENS = ["home", "today", "calendar", "history"];
+  const lastListScreenRef = useRef("home");
+  useEffect(() => {
+    if (role === "athlete" && ATHLETE_LIST_SCREENS.includes(screen)) {
+      lastListScreenRef.current = screen;
+    }
+  }, [screen, role]);
+  const backToList = () => setScreen(lastListScreenRef.current);
+
+  // Same idea for the coach: remember the screen a session/extra-activity was
+  // opened from (athlete detail, calendar, dashboard, inbox, …) so Back returns
+  // there instead of always to the athlete detail. Fixes coach: calendar → day
+  // → Back now returns to the calendar.
+  const COACH_DETAIL_SCREENS = ["session", "extra-activity", "edit-workout"];
+  const lastCoachListScreenRef = useRef("athlete");
+  useEffect(() => {
+    if (role === "coach" && !COACH_DETAIL_SCREENS.includes(coachScreen)) {
+      lastCoachListScreenRef.current = coachScreen;
+    }
+  }, [coachScreen, role]);
+  const coachBack = () => setCoachScreen(lastCoachListScreenRef.current);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
 
@@ -930,7 +956,7 @@ export default function App() {
     const ts = new Date().toISOString();
     if (screen === "result" && activeSession?.id) {
       const log = logs[activeSession.id];
-      if (log?.coach_reply && !log.athlete_read_at) {
+      if (log && athleteHasUnread(log)) {
         supabase.from("session_logs").update({ athlete_read_at: ts })
           .eq("id", log.id).select().maybeSingle()
           .then(({ data }) => { if (data) setLogs(prev => ({ ...prev, [activeSession.id]: data })); })
@@ -939,7 +965,7 @@ export default function App() {
     }
     if (screen === "extra-activity" && activeExtraActivity?.id) {
       const a = activeExtraActivity;
-      if (a.coach_reply && !a.athlete_read_at) {
+      if (athleteHasUnread(a)) {
         supabase.from("activities").update({ athlete_read_at: ts })
           .eq("id", a.id).select().maybeSingle()
           .then(({ data }) => {
@@ -4071,7 +4097,7 @@ export default function App() {
     const sessionLogged = sessionIsLogged(log, linkedAthAct);
     return (
       <div style={S.page}>
-        <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>setCoachScreen("athlete")}/>
+        <Header title={activeSession.type} subtitle={activeSession.day} onBack={coachBack}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 16px 80px" }}>
 
           <SectionCard label="Prescribed Session">
@@ -4603,7 +4629,7 @@ export default function App() {
     const da = athletePrograms[dashAthlete];
     return (
       <div style={S.page}>
-        <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }}/>
+        <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); coachBack(); }}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ fontSize:13, color:C.mid, marginBottom:16 }}>{da?.name}</div>
           <div style={{ textAlign:"center", fontFamily:"var(--f-display)", fontSize:64, fontWeight:400, color:C.accent, margin:"20px 0 8px", lineHeight:1 }}>+</div>
@@ -4702,9 +4728,9 @@ export default function App() {
           <button onClick={async () => {
             if (!confirm("Delete this run?")) return;
             const ok = await deleteActivity(act.id);
-            if (ok) { setActiveExtraActivity(null); setCoachScreen("athlete"); }
+            if (ok) { setActiveExtraActivity(null); coachBack(); }
           }} style={{ ...S.ghostBtn, color:C.crimson, borderColor:C.crimson, marginBottom:8 }}>Delete run</button>
-          <button onClick={()=>{ setActiveExtraActivity(null); setCoachScreen("athlete"); }} style={S.ghostBtn}>← Back to athlete</button>
+          <button onClick={()=>{ setActiveExtraActivity(null); coachBack(); }} style={S.ghostBtn}>← Back</button>
         </div>
       </div>
     );
@@ -5524,9 +5550,9 @@ export default function App() {
       sessionLogIdsByDate[d] = log.session_id;
     }
     const unreadLogs = Object.values(logs).filter(l =>
-      l?.coach_reply && !l.athlete_read_at && l.athlete_email?.toLowerCase() === user.email?.toLowerCase()
+      l?.athlete_email?.toLowerCase() === user.email?.toLowerCase() && athleteHasUnread(l)
     );
-    const unreadActs = myActs.filter(a => a.coach_reply && !a.athlete_read_at);
+    const unreadActs = myActs.filter(a => athleteHasUnread(a));
     // Avoid double-counting an activity that's linked to an unread session_log.
     const unreadActsDeduped = unreadActs.filter(a => {
       if (a.source === "session") {
@@ -7118,7 +7144,7 @@ export default function App() {
     const canSubmit = logForm.distanceKm && parseFloat(logForm.distanceKm) > 0 && logForm.date;
     return (
       <div style={S.page}>
-        <Header title={editingActivityId ? "Edit Run" : "Log Activity"} subtitle={editingActivityId ? "Update entry" : "Manual Entry"} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setEditingActivityId(null); setScreen("home"); }}/>
+        <Header title={editingActivityId ? "Edit Run" : "Log Activity"} subtitle={editingActivityId ? "Update entry" : "Manual Entry"} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setEditingActivityId(null); backToList(); }}/>
         <form
           onSubmit={(e) => { e.preventDefault(); if (canSubmit && !logSaving) saveActivity(logForm, stravaDetail); }}
           style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"20px 16px 80px" }}
@@ -7258,7 +7284,7 @@ export default function App() {
     const niceDate = scheduledDateStr ? parseLocalDate(scheduledDateStr).toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" }) : null;
   return (
     <div style={S.page}>
-      <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); setScreen("home"); }}/>
+      <Header title={activeSession.type} subtitle={activeSession.day} onBack={()=>{ clearStravaSelection(); setStravaActivities([]); backToList(); }}/>
       <form
         onSubmit={(e) => { e.preventDefault(); if (sessionDistKm && !isSaving && !formHidden) handleSubmitFeedback(); }}
         style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}
@@ -7507,7 +7533,7 @@ export default function App() {
     const resultLinkedAct = resultSDate ? findAthAct(user.email, resultSDate) : null;
     return (
       <div style={S.page}>
-        <Header title={activeSession.type} subtitle={`Logged · ${activeSession.day}`} onBack={()=>setScreen("home")} right={<Tick size={16}/>}/>
+        <Header title={activeSession.type} subtitle={`Logged · ${activeSession.day}`} onBack={backToList} right={<Tick size={16}/>}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"24px 22px 80px" }}>
 
           {/* Editorial header */}
@@ -7702,9 +7728,9 @@ export default function App() {
           <button onClick={async () => {
             if (!confirm("Delete this session log? Any activity created from it will also be removed.")) return;
             const ok = await deleteSessionLog(activeSession.id, resultLinkedAct?.id);
-            if (ok) { setActiveSession(null); setScreen("home"); }
+            if (ok) { setActiveSession(null); backToList(); }
           }} style={{ ...S.ghostBtn, marginBottom: 8, color: C.crimson, borderColor: C.crimson }}>Delete session</button>
-          <button onClick={()=>setScreen("home")} style={S.ghostBtn}>← Back to week</button>
+          <button onClick={backToList} style={S.ghostBtn}>← Back</button>
         </div>
       </div>
     );
@@ -7719,7 +7745,7 @@ export default function App() {
     const dateLabel = act.activity_date ? act.activity_date.slice(5).replace("-", " ") : "";
     return (
       <div style={S.page}>
-        <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); setScreen("home"); }}/>
+        <Header title={act.activity_type || "Run"} subtitle={dateLabel} onBack={()=>{ setActiveExtraActivity(null); backToList(); }}/>
         <div style={{ maxWidth: isDesktop ? 760 : 500, margin:"0 auto", padding:"0 16px 80px" }}>
           <div style={{ textAlign:"center", fontFamily:"var(--f-display)", fontSize:64, fontWeight:400, color:C.accent, margin:"20px 0 8px", lineHeight:1 }}>+</div>
           <div style={{ textAlign:"center", fontSize:14, color:C.crimson, fontWeight:700, marginBottom:20, letterSpacing:1 }}>EXTRA RUN</div>
@@ -7733,11 +7759,23 @@ export default function App() {
               <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, fontStyle:"italic" }}>"{act.notes}"</div>
             </SectionCard>
           )}
-          {act.coach_reply && (
-            <SectionCard label="Message from Coach" accent="var(--c-accent)">
-              <div style={{ fontSize:14, color:C.navy, lineHeight:1.8 }}>{act.coach_reply}</div>
-            </SectionCard>
-          )}
+          <ThreadPanel
+            thread={getThread(act)}
+            viewerRole="athlete"
+            onSend={async (body) => {
+              const next = appendMessage(act.messages || [], { author: "athlete", body });
+              if (!next) return;
+              try {
+                const { error } = await supabase.from("activities").update({ messages: next }).eq("id", act.id);
+                if (error) throw error;
+                setActivities(prev => prev.map(x => x.id === act.id ? { ...x, messages: next } : x));
+                setActiveExtraActivity(prev => (prev && prev.id === act.id ? { ...prev, messages: next } : prev));
+              } catch (e) {
+                console.error("message send failed:", e);
+                showToast("Message didn't send — check your connection and retry.", "error");
+              }
+            }}
+          />
           <button onClick={() => {
             setLogForm({
               date: act.activity_date,
@@ -7754,9 +7792,9 @@ export default function App() {
           <button onClick={async () => {
             if (!confirm("Delete this run?")) return;
             const ok = await deleteActivity(act.id);
-            if (ok) { setActiveExtraActivity(null); setScreen("home"); }
+            if (ok) { setActiveExtraActivity(null); backToList(); }
           }} style={{ ...S.ghostBtn, marginBottom: 8, color: C.crimson, borderColor: C.crimson }}>Delete run</button>
-          <button onClick={()=>{ setActiveExtraActivity(null); setScreen("home"); }} style={S.ghostBtn}>← Back to week</button>
+          <button onClick={()=>{ setActiveExtraActivity(null); backToList(); }} style={S.ghostBtn}>← Back</button>
         </div>
       </div>
     );
