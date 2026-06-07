@@ -224,7 +224,15 @@ All dates are `YYYY-MM-DD` strings meaning "this calendar day in the athlete's l
 
 ## Database tables & migrations
 
-Run the SQL files in order against your Supabase project:
+**`supabase-schema.sql` is the authoritative schema** — a snapshot reconciled
+against the live database (tables, columns, constraints, indexes, functions, the
+role-guard trigger, RLS policies, realtime). Run it alone on a fresh project to
+reproduce the full schema. Treat it as the source of truth and diff against it if
+the live DB ever drifts.
+
+The per-file migrations below remain as the historical record of how the schema
+evolved (and the order it was originally applied); `supabase-schema.sql`
+supersedes them for new installs:
 
 | File | What it does |
 |------|--------------|
