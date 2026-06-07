@@ -220,6 +220,18 @@ All dates are `YYYY-MM-DD` strings meaning "this calendar day in the athlete's l
 | Excel import | xlsx (SheetJS) |
 | Hosting | Vercel (Vite auto-detected) |
 
+> **Security note — `xlsx`:** the npm `xlsx@0.18.5` build has known advisories
+> (prototype pollution CVE-2023-30533, ReDoS CVE-2024-22363) and the fix is
+> **only published on the SheetJS CDN, not npm**. Real-world risk here is low
+> (the import is coach-only, behind the "Advanced" panel, parsing the coach's
+> own files), but to clear it install the patched build:
+> ```bash
+> npm rm xlsx
+> npm i https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+> ```
+> (Couldn't be applied in the dev sandbox — egress to the CDN is blocked there;
+> run it in an environment with network access, e.g. locally or in CI.)
+
 ---
 
 ## Database tables & migrations

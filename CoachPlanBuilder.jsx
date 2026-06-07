@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { C, S } from './styles.js';
-import { newId, snapToMonday, ymd, parseLocalDate } from './lib/helpers.js';
+import { newId, snapToMonday, ymd, parseLocalDate, todayStr } from './lib/helpers.js';
 import { DAY_LABELS } from './lib/constants.js';
 import { formatStep, predictDistanceKm, aggregateSteps, isStructured } from './lib/load.js';
 import { PaceRangeInput, PaceInput } from './components.jsx';
@@ -158,7 +158,7 @@ function parseExcelToWeeks(file) {
             });
           });
 
-          if (sessions.length > 0) weeks.push({ weekLabel, weekStart, sessions });
+          if (sessions.length > 0) weeks.push({ id: newId(), weekLabel, weekStart, sessions });
         });
 
         resolve(weeks);
@@ -689,11 +689,11 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   // Past weeks default to collapsed so the editor focuses on this/next
   // week. Click on a week's header to toggle.
   const [expandedWeeks, setExpandedWeeks] = useState(() => new Set());
-  const toggleWeekExpanded = (weekStart) => {
+  const toggleWeekExpanded = (weekId) => {
     setExpandedWeeks(prev => {
       const next = new Set(prev);
-      if (next.has(weekStart)) next.delete(weekStart);
-      else next.add(weekStart);
+      if (next.has(weekId)) next.delete(weekId);
+      else next.add(weekId);
       return next;
     });
   };
@@ -750,17 +750,22 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     const g = entry?.goal && entry.goal !== '—' ? entry.goal : '';
     const p = entry?.current && entry.current !== '—' ? entry.current : '';
     const dw = entry?.defaultWeek || null;
-    setWeeks(w);
+    // Backfill a stable id on any legacy week that lacks one, so every
+    // week-level operation can key off id (not weekStart, which can be empty
+    // or duplicated on imported plans — the old source of "delete/duplicate
+    // hits the wrong week" bugs).
+    const withIds = (w || []).map(x => x.id ? x : { ...x, id: newId() });
+    setWeeks(withIds);
     setAthleteName(n);
     setAthleteGoal(g);
     setAthletePb(p);
     setDefaultWeek(dw);
-    setBaseline(JSON.stringify({ weeks: w, athleteName: n, athleteGoal: g, athletePb: p, defaultWeek: dw }));
+    setBaseline(JSON.stringify({ weeks: withIds, athleteName: n, athleteGoal: g, athletePb: p, defaultWeek: dw }));
     // Pre-expand current + future weeks; past weeks stay collapsed so
     // the editor's vertical real estate goes to the work that's still
     // ahead. Coach can click to expand any past week.
-    const monStr = snapToMonday(new Date().toISOString().slice(0, 10));
-    setExpandedWeeks(new Set((w || []).filter(x => (x.weekStart || '') >= monStr).map(x => x.weekStart)));
+    const monStr = snapToMonday(todayStr());
+    setExpandedWeeks(new Set(withIds.filter(x => (x.weekStart || '') >= monStr).map(x => x.id)));
   }, [selectedEmail, athletes]);
 
   const buildMeta = () => ({
@@ -776,8 +781,36 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     setUploading(true);
     try {
       const parsedWeeks = await parseExcelToWeeks(file);
+      // The parser reads fixed rows (dates row 3, runs row 4, pace row 7, km
+      // row 8). If the sheet is shifted or a different shape it silently yields
+      // nothing — fail loudly instead of reporting a misleading "imported 0".
+      if (!parsedWeeks.length) {
+        setStatus({ kind: 'error', message: "Couldn't read any sessions from that file. Expected one sheet per week with dates on row 3, run descriptions on row 4, paces on row 7 and weekly km on row 8." });
+        setUploading(false);
+        e.target.value = '';
+        return;
+      }
       const existing = athletes[uploadTarget]?.weeks || [];
-      const updated = uploadMode === 'replace' ? parsedWeeks : [...existing, ...parsedWeeks];
+      const merged = uploadMode === 'replace' ? parsedWeeks : [...existing, ...parsedWeeks];
+      // Normalise: every week needs a stable id and a unique, non-empty Monday
+      // weekStart. The parser leaves weekStart blank when a sheet has no
+      // parseable date; blank/duplicate starts break calendar date mapping and
+      // week identity, so assign the next free Monday to any blank or collision.
+      const validStart = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+      const taken = new Set(merged.map(w => w.weekStart).filter(validStart));
+      const lastStart = [...taken].sort().pop();
+      let cursor = parseLocalDate(lastStart || snapToMonday(todayStr()));
+      const advance = () => {
+        do { cursor.setDate(cursor.getDate() + 7); } while (taken.has(ymd(cursor)));
+        const v = ymd(cursor); taken.add(v); return v;
+      };
+      const assigned = new Set();
+      const updated = merged.map(wk => {
+        let ws = validStart(wk.weekStart) ? wk.weekStart : null;
+        if (!ws || assigned.has(ws)) ws = advance();  // blank or duplicate → next free Monday
+        assigned.add(ws);
+        return { ...wk, id: wk.id || newId(), weekStart: ws };
+      });
       const targetData = athletes[uploadTarget] || {};
       const importMeta = {
         name:    targetData.name    && targetData.name    !== uploadTarget ? targetData.name    : '',
@@ -794,32 +827,57 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     e.target.value = '';
   };
 
+  // First Monday (YYYY-MM-DD) not already used by a week. With `fromMonday`,
+  // starts the week after it; otherwise the week after the latest existing
+  // week, else this Monday. Shared by add / duplicate / paste so none of them
+  // can land on an already-occupied Monday (was duplicated 3× with subtly
+  // different behaviour).
+  const nextFreeMonday = (fromMonday) => {
+    const existing = new Set(weeks.map(w => w.weekStart).filter(Boolean));
+    let cursor;
+    if (fromMonday) {
+      cursor = parseLocalDate(fromMonday);
+      cursor.setDate(cursor.getDate() + 7);
+    } else {
+      const latest = weeks.map(w => w.weekStart).filter(Boolean).sort().pop();
+      cursor = parseLocalDate(latest || snapToMonday(todayStr()));
+      if (latest) cursor.setDate(cursor.getDate() + 7);
+    }
+    let safety = 0;
+    while (existing.has(ymd(cursor)) && safety++ < 520) cursor.setDate(cursor.getDate() + 7);
+    return ymd(cursor);
+  };
+
+  const sortedByStart = (list) =>
+    [...list].sort((a, b) => (a.weekStart || '').localeCompare(b.weekStart || ''));
+
   const handleAddWeek = () => {
     if (!newWeekLabel || !newWeekStart) return;
     // Always snap to Monday so weeks line up with sessionDateStr lookups.
     const monday = snapToMonday(newWeekStart) || newWeekStart;
+    if (weeks.some(w => w.weekStart === monday)) {
+      setStatus({ kind: 'error', message: 'A week starting that Monday already exists — edit it, or pick another date.' });
+      return;
+    }
     // If this athlete has a default week shape saved, stamp it in as
     // the starting sessions. Coach can then edit fine details from
     // there without rebuilding the structure each time.
     const sessions = (defaultWeek?.sessions || []).map(s => ({ ...s, id: newId() }));
     const newWeek = { id: newId(), weekLabel: newWeekLabel, weekStart: monday, sessions };
-    setWeeks([...weeks, newWeek]);
+    setWeeks(sortedByStart([...weeks, newWeek]));
     setNewWeekLabel('');
     setNewWeekStart('');
     setShowAddWeek(false);
   };
 
-  // Save this week's shape as the athlete's default. Strips IDs and the
+  // Save this week's shape as the athlete's default. Strips ids and the
   // weekStart/weekLabel since those are per-week. Sessions keep their
   // type/desc/pace/etc so the next added week starts pre-populated.
-  // All week-level handlers look up by weekStart (the natural unique key
-  // per athlete) rather than by id. Legacy plans imported from Excel
-  // didn't always carry stable ids, so id-based lookup was returning
-  // the first week with a missing/duplicate id — which is the "duplicate
-  // copies the wrong week" bug. weekStart is an ISO date and inherently
-  // unique within a plan, so this is the more robust key.
-  const handleSaveAsDefaultWeek = (weekStart) => {
-    const src = weeks.find(w => w.weekStart === weekStart);
+  // Week-level handlers key off the stable `id` (backfilled on load) — weekStart
+  // can be empty or duplicated on imported plans, which is what made the old
+  // weekStart-keyed handlers operate on the wrong (or every) week.
+  const handleSaveAsDefaultWeek = (weekId) => {
+    const src = weeks.find(w => w.id === weekId);
     if (!src) return;
     if (!(src.sessions || []).length) {
       setStatus({ kind: 'error', message: 'This week has no sessions to save as a default.' });
@@ -827,10 +885,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     }
     if (defaultWeek && !window.confirm('Replace this athlete\'s existing default week?')) return;
     const stripped = {
-      sessions: (src.sessions || []).map(s => {
-        const { id, _, ...rest } = s;
-        return rest;
-      }),
+      sessions: (src.sessions || []).map(({ id, ...rest }) => rest),
     };
     setDefaultWeek(stripped);
     setStatus({ kind: 'success', message: `Default week saved (${stripped.sessions.length} sessions). New weeks will start from this shape.` });
@@ -842,41 +897,23 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     setStatus({ kind: 'success', message: 'Default week cleared.' });
   };
 
-  const handleDuplicateWeek = (weekStart) => {
-    const src = weeks.find(w => w.weekStart === weekStart);
+  const handleDuplicateWeek = (weekId) => {
+    const src = weeks.find(w => w.id === weekId);
     if (!src) return;
-    // Walk forward week-by-week from the source until we find a Monday
-    // that doesn't already exist in the plan. Avoids collisions when
-    // the next slot is already taken — e.g. duplicating week 18/05
-    // lands at 25/05 if free, else 01/06, else 08/06, …
-    const existingStarts = new Set(weeks.map(w => w.weekStart));
-    const cursor = parseLocalDate(src.weekStart || todayMondayFallback());
-    cursor.setDate(cursor.getDate() + 7);
-    let safety = 0;
-    while (existingStarts.has(ymd(cursor)) && safety++ < 260) {
-      cursor.setDate(cursor.getDate() + 7);
-    }
-    const newWeekStart = ymd(cursor);
+    const newWeekStart = nextFreeMonday(src.weekStart);
     const newWeek = {
       id: newId(),
       weekLabel: `${src.weekLabel || 'Week'} (copy)`,
       weekStart: newWeekStart,
       sessions: src.sessions.map(s => ({ ...s, id: newId() })),
     };
-    // Insert in chronological order so the calendar list stays sorted.
-    const next = [...weeks, newWeek].sort((a, b) => (a.weekStart || '').localeCompare(b.weekStart || ''));
-    setWeeks(next);
+    setWeeks(sortedByStart([...weeks, newWeek]));
   };
 
-  const todayMondayFallback = () => {
-    const t = new Date();
-    return snapToMonday(t.toISOString().slice(0, 10));
-  };
-
-  // Copy a week to the cross-athlete clipboard. Strips IDs and dates — the
+  // Copy a week to the cross-athlete clipboard. Strips ids and dates — the
   // skeleton (label, sessions with their day/type/pace/desc) is what travels.
-  const handleCopyWeek = (weekStart) => {
-    const src = weeks.find(w => w.weekStart === weekStart);
+  const handleCopyWeek = (weekId) => {
+    const src = weeks.find(w => w.id === weekId);
     if (!src) return;
     writeClipboard({
       weekLabel: src.weekLabel || 'Copied week',
@@ -887,47 +924,32 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     setStatus({ kind: 'success', message: 'Week copied — paste into any athlete.' });
   };
 
-  // Paste the clipboard into the currently selected athlete. Picks the
-  // Monday after the latest existing week as the weekStart (or this Monday
-  // if the athlete has no weeks yet). New IDs are minted for each session.
+  // Paste the clipboard into the currently selected athlete on the next free
+  // Monday. New ids are minted for the week and each session.
   const handlePasteWeek = () => {
     if (!clipboardWeek || !selectedEmail) return;
-    let weekStart;
-    if (weeks.length > 0) {
-      const latest = [...weeks]
-        .map(w => w.weekStart)
-        .filter(Boolean)
-        .sort()
-        .pop();
-      if (latest) {
-        const next = parseLocalDate(latest);
-        next.setDate(next.getDate() + 7);
-        weekStart = ymd(next);
-      }
-    }
-    if (!weekStart) weekStart = todayMondayFallback();
     const newWeek = {
       id: newId(),
       weekLabel: clipboardWeek.weekLabel || 'Pasted week',
-      weekStart,
+      weekStart: nextFreeMonday(),
       sessions: (clipboardWeek.sessions || []).map(s => ({ ...s, id: newId() })),
     };
-    setWeeks([...weeks, newWeek]);
+    setWeeks(sortedByStart([...weeks, newWeek]));
     setStatus({ kind: 'success', message: `Pasted week (${newWeek.sessions.length} sessions) into ${athleteName || selectedEmail}.` });
   };
 
-  const handleDeleteWeek = (weekStart) => {
-    setWeeks(weeks.filter(w => w.weekStart !== weekStart));
+  const handleDeleteWeek = (weekId) => {
+    setWeeks(weeks.filter(w => w.id !== weekId));
   };
 
-  const handleAddSession = (weekStart) => {
+  const handleAddSession = (weekId) => {
     const newSession = { id: newId(), day: '', type: 'EASY', tag: 'easy', pace: '', terrain: '', desc: '' };
-    setWeeks(weeks.map(w => w.weekStart === weekStart ? { ...w, sessions: [...w.sessions, newSession] } : w));
+    setWeeks(weeks.map(w => w.id === weekId ? { ...w, sessions: [...w.sessions, newSession] } : w));
   };
 
-  const handleSessionChange = (weekStart, sessionId, field, value) => {
+  const handleSessionChange = (weekId, sessionId, field, value) => {
     setWeeks(weeks.map(w => {
-      if (w.weekStart !== weekStart) return w;
+      if (w.id !== weekId) return w;
       const sessions = w.sessions.map(s => {
         if (s.id !== sessionId) return s;
         const updates = { [field]: value };
@@ -938,8 +960,8 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
     }));
   };
 
-  const handleDeleteSession = (weekStart, sessionId) => {
-    setWeeks(weeks.map(w => w.weekStart === weekStart ? { ...w, sessions: w.sessions.filter(s => s.id !== sessionId) } : w));
+  const handleDeleteSession = (weekId, sessionId) => {
+    setWeeks(weeks.map(w => w.id === weekId ? { ...w, sessions: w.sessions.filter(s => s.id !== sessionId) } : w));
   };
 
   const handleSave = async () => {
@@ -1114,12 +1136,12 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
           )}
 
           {weeks.map(week => {
-            const isExpanded = expandedWeeks.has(week.weekStart);
+            const isExpanded = expandedWeeks.has(week.id);
             const sessionCount = week.sessions?.length || 0;
             return (
-            <div key={week.weekStart || week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}`, paddingBottom: isExpanded ? undefined : 12 }}>
+            <div key={week.id} style={{ ...cardStyle, borderLeft: `3px solid ${C.crimson}`, paddingBottom: isExpanded ? undefined : 12 }}>
               <div
-                onClick={() => toggleWeekExpanded(week.weekStart)}
+                onClick={() => toggleWeekExpanded(week.id)}
                 style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   marginBottom: isExpanded ? 12 : 0, flexWrap: 'wrap', gap: 8,
@@ -1138,19 +1160,19 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                   </div>
                 </div>
                 <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => handleCopyWeek(week.weekStart)} style={{
+                  <button type="button" onClick={() => handleCopyWeek(week.id)} style={{
                     background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                   }} title="Copy this week to clipboard — paste into any athlete">Copy</button>
-                  <button type="button" onClick={() => handleSaveAsDefaultWeek(week.weekStart)} style={{
+                  <button type="button" onClick={() => handleSaveAsDefaultWeek(week.id)} style={{
                     background: C.white, color: C.accent, border: `1px solid ${C.accent}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600,
                   }} title="Use this week's shape as the default starting point for new weeks for this athlete">Save as default</button>
-                  <button type="button" onClick={() => handleDuplicateWeek(week.weekStart)} style={{
+                  <button type="button" onClick={() => handleDuplicateWeek(week.id)} style={{
                     background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                   }}>Duplicate</button>
-                  <button type="button" onClick={() => handleDeleteWeek(week.weekStart)} style={{
+                  <button type="button" onClick={() => handleDeleteWeek(week.id)} style={{
                     background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
                     borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                   }}>Delete week</button>
@@ -1168,7 +1190,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       <select
                         style={{ ...inputStyle, flex: '0 0 90px' }}
                         value={DAY_LABELS.includes(session.day?.slice(0, 3)) ? session.day.slice(0, 3) : ''}
-                        onChange={e => handleSessionChange(week.weekStart, session.id, 'day', e.target.value)}
+                        onChange={e => handleSessionChange(week.id, session.id, 'day', e.target.value)}
                       >
                         <option value="">Day…</option>
                         {DAY_LABELS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -1176,7 +1198,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       <select
                         style={{ ...inputStyle, flex: '1 1 140px', color: accent, fontWeight: 600 }}
                         value={session.type}
-                        onChange={e => handleSessionChange(week.weekStart, session.id, 'type', e.target.value)}
+                        onChange={e => handleSessionChange(week.id, session.id, 'type', e.target.value)}
                       >
                         {SESSION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
@@ -1185,13 +1207,13 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       <PaceRangeInput
                         label="Pace"
                         value={session.pace}
-                        onChange={(v) => handleSessionChange(week.weekStart, session.id, 'pace', v)}
+                        onChange={(v) => handleSessionChange(week.id, session.id, 'pace', v)}
                       />
                       <input
                         style={{ ...inputStyle, flex: 1 }}
                         placeholder="Terrain"
                         value={session.terrain}
-                        onChange={e => handleSessionChange(week.weekStart, session.id, 'terrain', e.target.value)}
+                        onChange={e => handleSessionChange(week.id, session.id, 'terrain', e.target.value)}
                       />
                     </div>
                     <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 6 }}>Coach notes</div>
@@ -1199,15 +1221,15 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                       style={{ ...S.textarea, minHeight: 64, marginBottom: 8 }}
                       placeholder="Anything the athlete should know — context, focus, cues."
                       value={session.desc}
-                      onChange={e => handleSessionChange(week.weekStart, session.id, 'desc', e.target.value)}
+                      onChange={e => handleSessionChange(week.id, session.id, 'desc', e.target.value)}
                     />
 
                     <StepsEditor
                       session={session}
-                      onChange={(steps) => handleSessionChange(week.weekStart, session.id, 'steps', steps)}
+                      onChange={(steps) => handleSessionChange(week.id, session.id, 'steps', steps)}
                     />
 
-                    <button type="button" onClick={() => handleDeleteSession(week.weekStart, session.id)} style={{
+                    <button type="button" onClick={() => handleDeleteSession(week.id, session.id)} style={{
                       background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
                       borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                     }}>Delete session</button>
@@ -1216,7 +1238,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
               })}
 
               {isExpanded && (
-                <button type="button" onClick={() => handleAddSession(week.weekStart)} style={{
+                <button type="button" onClick={() => handleAddSession(week.id)} style={{
                   ...S.ghostBtn, marginTop: 4,
                 }}>+ Add session</button>
               )}
