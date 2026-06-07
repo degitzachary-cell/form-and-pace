@@ -678,7 +678,7 @@ export function PMCChart({ dailyRtss, fromDate, toDate, displayDays = 90, height
         })}
 
         {/* date ticks */}
-        {[0, Math.floor(N/2), N - 1].map(i => (
+        {[...new Set([0, Math.floor(N / 2), N - 1])].map(i => (
           <text key={`d${i}`} x={x(i)} y={VB_H - 6} textAnchor="middle" fontSize="9" fill="var(--c-mute)" fontFamily="var(--f-mono)">
             {pmc[i].date.slice(5)}
           </text>
@@ -993,7 +993,7 @@ export function StravaCard({ data, onClear }) {
 }
 
 // ─── STRAVA ACTIVITY PICKER ───────────────────────────────────────────────────
-export function StravaActivityPicker({ activities, loading, selectedId, detail, detailLoading, onOpen, onSelect, onClear, compact }) {
+export function StravaActivityPicker({ activities = [], loading, selectedId, detail, detailLoading, onOpen, onSelect, onClear, compact }) {
   if (detail && compact) {
     return (
       <div style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 14px", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>

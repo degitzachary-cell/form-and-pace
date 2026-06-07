@@ -52,7 +52,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { action, activity_id, per_page = 15 } = await req.json();
+    const { action, activity_id, per_page = 15, after } = await req.json();
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -76,23 +76,49 @@ serve(async (req) => {
 
     const accessToken = await getValidToken(supabase, user.email);
 
-    let url = "";
+    // List: honour the caller's `after` window (epoch seconds) and page through
+    // it — Strava caps a page at per_page, so a single fetch silently truncated
+    // the history the client asked for (and dropped `after` entirely before).
     if (action === "list") {
-      url = `https://www.strava.com/api/v3/athlete/activities?per_page=${per_page}`;
-    } else if (action === "get") {
-      url = `https://www.strava.com/api/v3/activities/${activity_id}?include_all_efforts=false`;
-    } else {
-      throw new Error("Unknown action");
+      const afterParam = after ? `&after=${after}` : "";
+      const all: any[] = [];
+      for (let page = 1; page <= 10; page++) {
+        const res = await fetch(
+          `https://www.strava.com/api/v3/athlete/activities?per_page=${per_page}${afterParam}&page=${page}`,
+          { headers: { "Authorization": `Bearer ${accessToken}` } },
+        );
+        if (!res.ok) {
+          // Surface a structured error on the first page (client treats any
+          // non-array as "no data"); on a later page keep what we have.
+          if (page === 1) {
+            return new Response(JSON.stringify({ error: `Strava list failed: ${res.status}`, status: res.status }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          break;
+        }
+        const batch = await res.json();
+        if (!Array.isArray(batch) || batch.length === 0) break;
+        all.push(...batch);
+        if (batch.length < per_page) break;
+      }
+      return new Response(JSON.stringify(all), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const stravaRes = await fetch(url, {
-      headers: { "Authorization": `Bearer ${accessToken}` },
-    });
-    const data = await stravaRes.json();
+    if (action === "get") {
+      const stravaRes = await fetch(
+        `https://www.strava.com/api/v3/activities/${activity_id}?include_all_efforts=false`,
+        { headers: { "Authorization": `Bearer ${accessToken}` } },
+      );
+      const data = await stravaRes.json();
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    throw new Error("Unknown action");
   } catch (err) {
     const notConnected = err.message === "Strava not connected";
     return new Response(JSON.stringify({ error: err.message }), {

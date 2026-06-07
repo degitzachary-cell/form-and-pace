@@ -470,6 +470,14 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [screen, role]);
+
+  // Bottom-nav tab change. Tapping "Today" explicitly returns to the current
+  // day, clearing any swiped/chevroned day-offset; drilling into a session and
+  // backing out (which calls setScreen directly) preserves the viewed day.
+  const navTab = (s) => {
+    if (s === "today") setDayOffset(0);
+    setScreen(s);
+  };
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
 
@@ -2045,7 +2053,6 @@ export default function App() {
   if (role === "coach" && coachScreen === "dashboard") {
     const athletes = Object.entries(athletePrograms);
     const today = todayStr();
-    const fmtDate = ymd;
 
     // athleteRows is memoised at top level (see useMemo above).
 
@@ -5254,7 +5261,7 @@ export default function App() {
       statsBlock: StatTrio,
       predictorBlock: RaceForecast,
       settingsBlock: SettingsBlock,
-      tabBar: <MobileTabBar current="profile" isDesktop={isDesktop} onTab={(s) => setScreen(s)} onTapLog={handleTapLog}/>,
+      tabBar: <MobileTabBar current="profile" isDesktop={isDesktop} onTab={navTab} onTapLog={handleTapLog}/>,
     });
   }
 
@@ -5354,7 +5361,10 @@ export default function App() {
     const todaysSession = focusedTodaysSession;
     const todaysActivity = todaysSession
       ? (todayMatch.bySessionId.get(todaysSession.s.id)
-         || allTodaysActivities.find(a => a.activity_date === today && todayMatch.unmatchedActs.includes(a))
+         // allTodaysActivities is already filtered to viewedDate, so just pick
+         // an unmatched extra run on the viewed day (was wrongly re-checking
+         // `=== today`, hiding extras on past/future days).
+         || allTodaysActivities.find(a => todayMatch.unmatchedActs.includes(a))
          || null)
       : (allTodaysActivities[0] || null);
     // Only surface today's Strava run on the Today screen — bike / strength /
@@ -6395,7 +6405,7 @@ export default function App() {
         <MobileTabBar
           current="today"
           isDesktop={isDesktop}
-          onTab={(s) => setScreen(s)}
+          onTab={navTab}
           onTapLog={handleTapLog}
         />
       </div>
@@ -6723,7 +6733,7 @@ export default function App() {
         <MobileTabBar
           current="home"
           isDesktop={isDesktop}
-          onTab={(s) => setScreen(s)}
+          onTab={navTab}
           onTapLog={handleTapLog}
         />
       </div>
@@ -7093,7 +7103,7 @@ export default function App() {
         <MobileTabBar
           current="calendar"
           isDesktop={isDesktop}
-          onTab={(s) => setScreen(s)}
+          onTab={navTab}
           onTapLog={handleTapLog}
         />
       </div>
@@ -7924,7 +7934,7 @@ export default function App() {
         <MobileTabBar
           current="home"
           isDesktop={isDesktop}
-          onTab={(s) => setScreen(s)}
+          onTab={navTab}
           onTapLog={handleTapLog}
         />
       </div>
