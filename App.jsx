@@ -1768,6 +1768,139 @@ export default function App() {
     return m;
   }, [activitiesByEmail, athletePrograms, logsByEmail]);
 
+  // Coach dashboard roster rows (7-day dot strip, replies-needed, status flags).
+  // Memoised at top level — the dashboard screen lives behind a conditional
+  // return where an in-place useMemo would be an illegal conditional hook, and
+  // this is an O(athletes × sessions) build we don't want re-running on every
+  // unrelated render. Recomputes only when programs / logs / activities change.
+  const athleteRows = useMemo(() => {
+    const today = todayStr();
+    const fmtDate = ymd;
+    return Object.entries(athletePrograms).map(([email, data]) => {
+      const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
+      const myActs = (activities || []).filter(a => a.athlete_email?.toLowerCase() === email.toLowerCase());
+      const actsByDate = new Map();
+      for (const a of myActs) actsByDate.set(a.activity_date, a);
+
+      // session_logs that logged a run with no matching activity row.
+      const orphanLogsByDate = new Map();
+      for (const w of weeksList) {
+        for (const s of (w.sessions || [])) {
+          const log = logs[s.id];
+          if (!log?.analysis?.distance_km) continue;
+          const planDate = sessionDateStr(w.weekStart, s.day);
+          const onDate = log.analysis.actual_date || planDate;
+          if (actsByDate.has(onDate)) continue;
+          const upd = log.updated_at?.split("T")[0];
+          const effective = upd && upd !== onDate ? upd : onDate;
+          if (!orphanLogsByDate.has(effective)) orphanLogsByDate.set(effective, log);
+        }
+      }
+
+      // Current week Mon → Sun.
+      const todayD = new Date(); todayD.setHours(0,0,0,0);
+      const dow = todayD.getDay();
+      const monOff = dow === 0 ? -6 : 1 - dow;
+      const monD = new Date(todayD); monD.setDate(todayD.getDate() + monOff);
+      const plannedByDate = new Map();
+      for (const w of weeksList) {
+        for (const s of (w.sessions || [])) {
+          if ((s.type || "").toUpperCase() === "REST") continue;
+          const sd = sessionDateStr(w.weekStart, s.day);
+          if (sd && !plannedByDate.has(sd)) plannedByDate.set(sd, s);
+        }
+      }
+      const days = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monD); d.setDate(monD.getDate() + i);
+        const dStr = fmtDate(d);
+        const isToday = dStr === today;
+        const plannedSess = plannedByDate.get(dStr);
+        const act = actsByDate.get(dStr);
+        const orphanLog = orphanLogsByDate.get(dStr);
+        const isLogged = !!act || !!orphanLog;
+        let color = C.lightRule;
+        let pattern = null;
+        if (isLogged) color = C.accent;
+        else if (plannedSess && dStr < today) color = C.hot;
+        else if (plannedSess) {
+          const ts = typeStyle(plannedSess.type);
+          color = ts.accent;
+          pattern = ts.pattern || null;
+        }
+        days.push({ dStr, isToday, color, pattern, hasPlan: !!plannedSess, isLogged });
+      }
+
+      // Replies needed: each athlete-day with unanswered, unread content.
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
+      const cutoffStr = fmtDate(cutoff);
+      const datesNeedingReply = new Set();
+      for (const a of myActs) {
+        if (a.activity_date >= cutoffStr && !a.coach_reply && !a.coach_read_at) datesNeedingReply.add(a.activity_date);
+      }
+      for (const w of weeksList) {
+        for (const s of (w.sessions || [])) {
+          const log = logs[s.id];
+          if (!log || !log.feedback) continue;
+          const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
+          if (onDate < cutoffStr) continue;
+          const linkedAct = actsByDate.get(onDate);
+          const replied = linkedAct?.coach_reply || log.coach_reply;
+          const read = linkedAct?.coach_read_at || log.coach_read_at;
+          if (!replied && !read) datesNeedingReply.add(onDate);
+        }
+      }
+      const repliesNeeded = datesNeedingReply.size;
+      const lastDay = days[days.length-1];
+      const last3 = days.slice(-3);
+      const behind = last3.filter(d => d.hasPlan && !d.isLogged && d.dStr < today).length >= 2;
+      const activeToday = lastDay.isLogged;
+      return { email, data, days, repliesNeeded, behind, activeToday };
+    });
+  }, [athletePrograms, logs, activities]);
+
+  // Reply Inbox rows — same rationale as athleteRows (lifted out of the
+  // conditional inbox screen so it can be memoised).
+  const inboxItems = useMemo(() => {
+    const fmtDate = ymd;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
+    const cutoffStr = fmtDate(cutoff);
+    const items = [];
+    const seen = new Set(); // key: email|date
+    for (const [email, data] of Object.entries(athletePrograms)) {
+      const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
+      const sessionsById = {};
+      for (const w of weeksList) for (const s of (w.sessions || [])) sessionsById[s.id] = { ...s, weekStart: w.weekStart };
+      const myActsByDate = new Map();
+      for (const a of activities) if (a.athlete_email?.toLowerCase() === email.toLowerCase()) myActsByDate.set(a.activity_date, a);
+      for (const log of Object.values(logs)) {
+        if (log.athlete_email?.toLowerCase() !== email.toLowerCase()) continue;
+        if (!log.feedback) continue;
+        const sess = sessionsById[log.session_id];
+        if (!sess) continue;
+        const onDate = log.analysis?.actual_date || sessionDateStr(sess.weekStart, sess.day);
+        if (onDate < cutoffStr) continue;
+        const linkedAct = myActsByDate.get(onDate);
+        if ((linkedAct?.coach_reply) || log.coach_reply) continue;
+        if ((linkedAct?.coach_read_at) || log.coach_read_at) continue;
+        items.push({ kind:"session", date: onDate, email, athleteName: data.name || prettyEmailName(email), title: sess.type, snippet: log.feedback, sess, log, linkedAct });
+        seen.add(`${email}|${onDate}`);
+      }
+    }
+    for (const a of activities) {
+      if (a.coach_reply || a.coach_read_at) continue;
+      if (a.activity_date < cutoffStr) continue;
+      const data = athletePrograms[a.athlete_email?.toLowerCase()];
+      if (!data) continue;
+      const key = `${a.athlete_email?.toLowerCase()}|${a.activity_date}`;
+      if (seen.has(key)) continue;
+      items.push({ kind:"activity", date: a.activity_date, email: a.athlete_email, athleteName: data.name || prettyEmailName(a.athlete_email), title: a.activity_type || "Run", snippet: a.notes || `${a.distance_km}km`, act: a });
+      seen.add(key);
+    }
+    items.sort((a, b) => b.date.localeCompare(a.date));
+    return items;
+  }, [athletePrograms, logs, activities]);
+
   // ────────────────────────────────────────────────────────────
   //  LOADING
   // ────────────────────────────────────────────────────────────
@@ -1914,110 +2047,7 @@ export default function App() {
     const today = todayStr();
     const fmtDate = ymd;
 
-    // Compute per-athlete: 7-day dot strip, replies-needed count, status flag.
-    const athleteRows = athletes.map(([email, data]) => {
-      const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
-      // Index planned sessions by date — skip REST entries (they shouldn't
-      // count as a workout-to-do).
-      const sessionsByDate = new Map();
-      for (const w of weeksList) {
-        for (const s of (w.sessions || [])) {
-          if ((s.type || "").toUpperCase() === "REST") continue;
-          const log = logs[s.id];
-          const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
-          if (onDate) sessionsByDate.set(onDate, { s, log });
-        }
-      }
-      const myActs = (activities || []).filter(a => a.athlete_email?.toLowerCase() === email.toLowerCase());
-      const actsByDate = new Map();
-      for (const a of myActs) actsByDate.set(a.activity_date, a);
-
-      // Index session_logs by their effective date for athletes who logged a
-      // run without a matching activity row. Falls back to updated_at when
-      // analysis.actual_date is missing AND no activity was created.
-      const orphanLogsByDate = new Map();
-      for (const w of weeksList) {
-        for (const s of (w.sessions || [])) {
-          const log = logs[s.id];
-          if (!log?.analysis?.distance_km) continue;
-          const planDate = sessionDateStr(w.weekStart, s.day);
-          const onDate = log.analysis.actual_date || planDate;
-          if (actsByDate.has(onDate)) continue;
-          // Use updated_at if the scheduled date predates the log by >2 days
-          // (athlete logged catch-up well after the planned day).
-          const upd = log.updated_at?.split("T")[0];
-          const effective = upd && upd !== onDate ? upd : onDate;
-          if (!orphanLogsByDate.has(effective)) orphanLogsByDate.set(effective, log);
-        }
-      }
-
-      // Current week Mon → Sun (not rolling 7 days).
-      const todayD = new Date(); todayD.setHours(0,0,0,0);
-      const dow = todayD.getDay();
-      const monOff = dow === 0 ? -6 : 1 - dow;
-      const monD = new Date(todayD); monD.setDate(todayD.getDate() + monOff);
-      // Index ALL planned sessions (incl REST) by their original scheduled date
-      // so the strip shows what was planned even if the session was moved.
-      const plannedByDate = new Map();
-      for (const w of weeksList) {
-        for (const s of (w.sessions || [])) {
-          if ((s.type || "").toUpperCase() === "REST") continue;
-          const sd = sessionDateStr(w.weekStart, s.day);
-          if (sd && !plannedByDate.has(sd)) plannedByDate.set(sd, s);
-        }
-      }
-      const days = [];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(monD); d.setDate(monD.getDate() + i);
-        const dStr = fmtDate(d);
-        const isToday = dStr === today;
-        const plannedSess = plannedByDate.get(dStr);
-        const act = actsByDate.get(dStr);
-        const orphanLog = orphanLogsByDate.get(dStr);
-        const isLogged = !!act || !!orphanLog;
-        let color = C.lightRule;
-        let pattern = null;
-        if (isLogged) color = C.accent; // green
-        else if (plannedSess && dStr < today) color = C.hot; // missed
-        else if (plannedSess) {
-          const ts = typeStyle(plannedSess.type);
-          color = ts.accent;
-          pattern = ts.pattern || null;
-        }
-        days.push({ dStr, isToday, color, pattern, hasPlan: !!plannedSess, isLogged });
-      }
-
-      // Replies needed: each athlete-day with content needs at most one reply.
-      // Activity is canonical; session_log only adds to the count if no
-      // matching activity exists for that date. Read (coach_read_at) items
-      // are excluded.
-      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
-      const cutoffStr = fmtDate(cutoff);
-      const datesNeedingReply = new Set();
-      for (const a of myActs) {
-        if (a.activity_date >= cutoffStr && !a.coach_reply && !a.coach_read_at) datesNeedingReply.add(a.activity_date);
-      }
-      for (const w of weeksList) {
-        for (const s of (w.sessions || [])) {
-          const log = logs[s.id];
-          if (!log || !log.feedback) continue;
-          const onDate = log?.analysis?.actual_date || sessionDateStr(w.weekStart, s.day);
-          if (onDate < cutoffStr) continue;
-          const linkedAct = actsByDate.get(onDate);
-          const replied = linkedAct?.coach_reply || log.coach_reply;
-          const read = linkedAct?.coach_read_at || log.coach_read_at;
-          if (!replied && !read) datesNeedingReply.add(onDate);
-        }
-      }
-      const repliesNeeded = datesNeedingReply.size;
-
-      const lastDay = days[days.length-1];
-      const last3 = days.slice(-3);
-      const behind = last3.filter(d => d.hasPlan && !d.isLogged && d.dStr < today).length >= 2;
-      const activeToday = lastDay.isLogged;
-
-      return { email, data, days, repliesNeeded, behind, activeToday };
-    });
+    // athleteRows is memoised at top level (see useMemo above).
 
     const filteredRows = athleteRows.filter(r => {
       if (coachFilter === "all") return true;
@@ -2740,45 +2770,7 @@ export default function App() {
   }
 
   if (role === "coach" && coachScreen === "inbox") {
-    const fmtDate = ymd;
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
-    const cutoffStr = fmtDate(cutoff);
-
-    // Build inbox items: one row per athlete-day. Activity is canonical; if a
-    // session_log + activity both exist for the same date, the session item wins.
-    const items = [];
-    const seen = new Set(); // key: email|date
-    for (const [email, data] of Object.entries(athletePrograms)) {
-      const weeksList = Array.isArray(data.weeks) ? data.weeks : [];
-      const sessionsById = {};
-      for (const w of weeksList) for (const s of (w.sessions || [])) sessionsById[s.id] = { ...s, weekStart: w.weekStart };
-      const myActsByDate = new Map();
-      for (const a of activities) if (a.athlete_email?.toLowerCase() === email.toLowerCase()) myActsByDate.set(a.activity_date, a);
-      for (const log of Object.values(logs)) {
-        if (log.athlete_email?.toLowerCase() !== email.toLowerCase()) continue;
-        if (!log.feedback) continue;
-        const sess = sessionsById[log.session_id];
-        if (!sess) continue;
-        const onDate = log.analysis?.actual_date || sessionDateStr(sess.weekStart, sess.day);
-        if (onDate < cutoffStr) continue;
-        const linkedAct = myActsByDate.get(onDate);
-        if ((linkedAct?.coach_reply) || log.coach_reply) continue;
-        if ((linkedAct?.coach_read_at) || log.coach_read_at) continue;
-        items.push({ kind:"session", date: onDate, email, athleteName: data.name || prettyEmailName(email), title: sess.type, snippet: log.feedback, sess, log, linkedAct });
-        seen.add(`${email}|${onDate}`);
-      }
-    }
-    for (const a of activities) {
-      if (a.coach_reply || a.coach_read_at) continue;
-      if (a.activity_date < cutoffStr) continue;
-      const data = athletePrograms[a.athlete_email?.toLowerCase()];
-      if (!data) continue;
-      const key = `${a.athlete_email?.toLowerCase()}|${a.activity_date}`;
-      if (seen.has(key)) continue;
-      items.push({ kind:"activity", date: a.activity_date, email: a.athlete_email, athleteName: data.name || prettyEmailName(a.athlete_email), title: a.activity_type || "Run", snippet: a.notes || `${a.distance_km}km`, act: a });
-      seen.add(key);
-    }
-    items.sort((a, b) => b.date.localeCompare(a.date));
+    const items = inboxItems;  // memoised at top level
 
     return (
       <div style={S.page}>
