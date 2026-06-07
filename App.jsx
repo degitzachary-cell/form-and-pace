@@ -14,7 +14,7 @@ import {
   PROFILE_DISTANCES, EMPTY_PB_GOAL, PB_GOAL_LABEL, DAY_LABELS,
   parseTime, normalizePlan, cleanPbGoal, fmtPbGoal,
 } from "./lib/constants.js";
-import { effectiveCompliance, dailyRtssFromActivities, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor, maskPaceInput } from "./lib/load.js";
+import { effectiveCompliance, dailyRtssFromStravaList, formatStep, isStructured, autoClassifyRunType, getThresholdPace, aggregateSteps, dominantPace, defaultRpeTarget, computePMC, densifyDailyRtss, isLogReal, predictRaces, secondsToTimeStr, forecastPMC, plannedSessionRtss, resolveSeedForAthlete, displayPace, displayDistance, distanceUnitLabel, predictDistanceKm, rpeColor, maskPaceInput } from "./lib/load.js";
 import { dailyLoadFromActivitiesAndLogs, hooperToday, recentEasyDrift, readinessScore, READINESS_LABELS, effortDrift } from "./lib/wellness.js";
 import { matchActivitiesToSessions, linkedActsBySession } from "./lib/sessionMatching.js";
 import { WORKOUT_SEEDS } from "./lib/workoutSeeds.js";
@@ -656,11 +656,16 @@ export default function App() {
 
   // Activities (manual logging + future Strava sync)
   const [activities,  setActivities]  = useState([]);
+  // Latest activities, mirrored into a ref so effects can dedupe against the
+  // current list without listing `activities` as a dependency (which would
+  // re-run them on every change). Fixes the Strava auto-sync stale closure.
+  const activitiesRef = useRef(activities);
+  activitiesRef.current = activities;
   // Calendar markers — race / sick / taper / travel ribbons. Keyed by
   // athlete email (lowercased). Athletes load their own; coaches load the
   // currently-selected athlete's set on demand.
   const [markersByEmail, setMarkersByEmail] = useState({});
-  const [logForm,     setLogForm]     = useState({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
+  const [logForm,     setLogForm]     = useState({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" });
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [logSaving,   setLogSaving]   = useState(false);
   const [logError,    setLogError]    = useState(null);
@@ -1059,7 +1064,7 @@ export default function App() {
           });
         }
       }
-      setLogForm({ date: new Date().toISOString().split("T")[0], distanceKm: "", durationMin: "", type: "Run", notes: "" });
+      setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" });
       setEditingActivityId(null);
       clearStravaSelection();
       setStravaActivities([]);
@@ -1296,7 +1301,9 @@ export default function App() {
   useEffect(() => {
     if (role !== "athlete" || !stravaConnected || !stravaActivities.length || !user?.email) return;
     const myEmail = user.email.toLowerCase();
-    const myActivities = activities.filter(a => a.athlete_email?.toLowerCase() === myEmail);
+    // Read the freshest list from the ref — `activities` isn't in this effect's
+    // deps, so the closure value would otherwise be stale and re-insert rows.
+    const myActivities = activitiesRef.current.filter(a => a.athlete_email?.toLowerCase() === myEmail);
     const existingStravaIds = new Set(myActivities.map(a => a.strava_data?.id).filter(Boolean));
     // Suppress an auto-sync row only when an UNTAGGED manual/session row
     // (no strava_data.id) might be the same physical run. Rows that
@@ -1583,8 +1590,10 @@ export default function App() {
           distance_km: parseFloat(sessionDistKm),
           duration_seconds: sessionDurMin ? Math.round(parseFloat(sessionDurMin) * 60) : null,
           notes: feedbackText || null,
-          source: stravaDetail ? "strava" : "session",
-          strava_data: stravaDetail || null,
+          // Only (re)write source + strava_data when a Strava activity is
+          // attached. Editing feedback without re-attaching must NOT null out
+          // previously-linked Strava splits/laps.
+          ...(stravaDetail ? { source: "strava", strava_data: stravaDetail } : {}),
         }).eq("id", existing.id).select().single();
         if (updAct) setActivities(prev => prev.map(a => a.id === updAct.id ? updAct : a));
       }
@@ -1710,6 +1719,31 @@ export default function App() {
 
   const { activitiesByEmail, statsFor } = useAthleteStats({ activities, athletePrograms, logs });
 
+  // Logs grouped by athlete email so per-athlete load can fold in that
+  // athlete's session feedback (sRPE) without leaking other athletes' logs.
+  const logsByEmail = useMemo(() => {
+    const m = new Map();
+    for (const log of Object.values(logs)) {
+      const k = log?.athlete_email?.toLowerCase();
+      if (!k) continue;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(log);
+    }
+    return m;
+  }, [logs]);
+
+  // Single source of truth for an athlete's daily training load: run rTSS where
+  // available PLUS sRPE-converted load for strength / hyrox / manual sessions.
+  // Every PMC computation routes through this so the fitness curve is identical
+  // across the coach dashboard, drilldown, athlete home, and Load tab (they
+  // previously disagreed — only the Load tab counted non-run load).
+  const dailyLoadFor = (email, acts, prof) =>
+    dailyLoadFromActivitiesAndLogs({
+      activities: acts || [],
+      logs: logsByEmail.get(email?.toLowerCase()) || [],
+      profile: prof || {},
+    });
+
   // Per-athlete PMC series (CTL/ATL/TSB), memoised so the heavy
   // dailyRtss → densify → computePMC pipeline only runs when activities
   // or programs change — not on every screen-render. 180-day window so
@@ -1723,13 +1757,13 @@ export default function App() {
     for (const [email, prog] of Object.entries(athletePrograms)) {
       const lowerEmail = email.toLowerCase();
       const acts = activitiesByEmail.get(lowerEmail) || [];
-      const dailyR = dailyRtssFromActivities(acts, prog || {});
+      const dailyR = dailyLoadFor(lowerEmail, acts, prog);
       const dense = densifyDailyRtss(dailyR, fromStr, todayLocal);
       const pmc = computePMC(dense);
       m.set(lowerEmail, { dailyR, dense, pmc, fromStr, toStr: todayLocal });
     }
     return m;
-  }, [activitiesByEmail, athletePrograms]);
+  }, [activitiesByEmail, athletePrograms, logsByEmail]);
 
   // ────────────────────────────────────────────────────────────
   //  LOADING
@@ -2999,7 +3033,7 @@ export default function App() {
       if (memoTail?.pmc?.length) return memoTail.pmc;
       const daActs = target ? (activitiesByEmail.get(target?.toLowerCase()) || []) : [];
       if (!daActs.length) return [];
-      const dailyR = dailyRtssFromActivities(daActs, ap || {});
+      const dailyR = dailyLoadFor(target, daActs, ap);
       const fromBack = new Date(todayD); fromBack.setDate(todayD.getDate() - 180);
       const dense = densifyDailyRtss(dailyR, ymd(fromBack), ymd(todayD));
       return computePMC(dense);
@@ -3503,7 +3537,7 @@ export default function App() {
             const toStr = memoEntry?.toStr || todayStr();
             const dailyRtss = memoEntry?.dailyR?.length
               ? memoEntry.dailyR
-              : dailyRtssFromActivities(activitiesByEmail.get(dashAthlete?.toLowerCase()) || [], da);
+              : dailyLoadFor(dashAthlete, activitiesByEmail.get(dashAthlete?.toLowerCase()) || [], da);
             const pmc = memoEntry?.pmc?.length
               ? memoEntry.pmc
               : computePMC(densifyDailyRtss(dailyRtss, fromStr, toStr));
@@ -6257,7 +6291,7 @@ export default function App() {
             const fullDailyR = pmcByEmail.get(user.email?.toLowerCase())?.dailyR;
             const dailyR = (fullDailyR && fullDailyR.length)
               ? fullDailyR.filter(d => inLastWeek(d.date))
-              : dailyRtssFromActivities(lastWeekActs, profile);
+              : dailyLoadFor(user.email, lastWeekActs, profile);
             const totalRtss = dailyR.reduce((a, b) => a + (b.rtss || 0), 0);
 
             // Top run = the activity with the highest rTSS (or longest distance fallback)
@@ -6987,7 +7021,7 @@ export default function App() {
             // plan row), so memo's dailyR would be empty.
             const dailyRtss = stravaConnected && stravaActivities.length
               ? dailyRtssFromStravaList(stravaActivities, profile)
-              : dailyRtssFromActivities(myActs, profile);
+              : dailyLoadFor(user.email, myActs, profile);
             const t = new Date();
             const from = new Date(t); from.setDate(t.getDate() - 180);
             const fmt = ymd;
