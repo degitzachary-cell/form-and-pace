@@ -492,18 +492,6 @@ export default function App() {
   }, [screen, role]);
   const backToList = () => setScreen(lastListScreenRef.current);
 
-  // Same idea for the coach: remember the screen a session/extra-activity was
-  // opened from (athlete detail, calendar, dashboard, inbox, …) so Back returns
-  // there instead of always to the athlete detail. Fixes coach: calendar → day
-  // → Back now returns to the calendar.
-  const COACH_DETAIL_SCREENS = ["session", "extra-activity", "edit-workout"];
-  const lastCoachListScreenRef = useRef("athlete");
-  useEffect(() => {
-    if (role === "coach" && !COACH_DETAIL_SCREENS.includes(coachScreen)) {
-      lastCoachListScreenRef.current = coachScreen;
-    }
-  }, [coachScreen, role]);
-  const coachBack = () => setCoachScreen(lastCoachListScreenRef.current);
   const [isSaving,     setIsSaving]      = useState(false);
   const [hoveredWeekIdx, setHoveredWeekIdx] = useState(null);
 
@@ -551,6 +539,19 @@ export default function App() {
 
   // Coach state
   const [coachScreen,   setCoachScreen]   = useState("dashboard");
+
+  // Coach back-navigation: remember the screen a session/extra-activity was
+  // opened from (athlete detail, calendar, dashboard, inbox, …) so Back returns
+  // there instead of always to the athlete detail. Declared AFTER coachScreen
+  // so the effect's dependency array doesn't read it before initialization.
+  const COACH_DETAIL_SCREENS = ["session", "extra-activity", "edit-workout"];
+  const lastCoachListScreenRef = useRef("athlete");
+  useEffect(() => {
+    if (role === "coach" && !COACH_DETAIL_SCREENS.includes(coachScreen)) {
+      lastCoachListScreenRef.current = coachScreen;
+    }
+  }, [coachScreen, role]);
+  const coachBack = () => setCoachScreen(lastCoachListScreenRef.current);
   // Sub-tab inside the coach athlete detail screen: plan / logs / messages.
   // Profile tab routes to coachScreen "profile" instead.
   const [coachAthleteTab, setCoachAthleteTab] = useState("plan");
@@ -902,6 +903,17 @@ export default function App() {
       });
   }, [role, user?.email]);
 
+  // Coach roster (lowercased emails, excluding the coach's own account),
+  // derived from the loaded plans. Drives the scoped data fetches below.
+  // MUST be declared above the effects that read rosterKey in their dependency
+  // arrays — a later declaration triggers a temporal-dead-zone crash ("cannot
+  // access rosterKey before initialization") on every render.
+  const rosterEmails = useMemo(() => {
+    const me = user?.email?.toLowerCase();
+    return Object.keys(athletePrograms).filter(e => e && e !== me).sort();
+  }, [athletePrograms, user?.email]);
+  const rosterKey = rosterEmails.join(",");
+
   // ── Coach: load logs + activities once the roster is known ──
   // Replaces the old boot-time whole-table pull. Fires when plans resolve and
   // whenever the roster changes (athlete added/removed); Realtime keeps the
@@ -978,15 +990,6 @@ export default function App() {
       }
     }
   }, [role, screen, activeSession?.id, activeExtraActivity?.id]);
-
-  // Coach roster (lowercased emails, excluding the coach's own account),
-  // derived from the loaded plans. Drives the scoped data fetches below so a
-  // coach never pulls every athlete's rows — or the whole table — client-side.
-  const rosterEmails = useMemo(() => {
-    const me = user?.email?.toLowerCase();
-    return Object.keys(athletePrograms).filter(e => e && e !== me).sort();
-  }, [athletePrograms, user?.email]);
-  const rosterKey = rosterEmails.join(",");
 
   // Rolling window for the coach activity fetch — covers a full season (matches
   // the 365-day Strava backfill) without shipping an athlete's entire history.
