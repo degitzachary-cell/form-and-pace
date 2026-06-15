@@ -1104,7 +1104,11 @@ export function StravaActivityPicker({ activities = [], loading, selectedId, det
             style={{ width:"100%", background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 14px", color: selectedId ? C.navy : C.mid, fontSize:14, boxSizing:"border-box", outline:"none" }}
           >
             <option value="">— Choose a run —</option>
-            {activities.map(a => {
+            {[...activities]
+              .sort((a, b) =>
+                (b.start_date_local || b.start_date || "").localeCompare(a.start_date_local || a.start_date || "")
+              )
+              .map(a => {
               const d = new Date(a.start_date_local);
               const dateStr = d.toLocaleDateString("en-AU",{day:"numeric",month:"short"});
               const km = (a.distance/1000).toFixed(1);
