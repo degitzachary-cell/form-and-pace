@@ -749,7 +749,7 @@ export function ZoneBar({ splits, durationMin, distanceKm, profile, height = 6, 
 // usable HR data, so it's safe to drop onto any logged-run screen.
 export function HrInsights({ stravaData, profile, activities, distanceKm, durationMin }) {
   const splits = stravaData?.splits;
-  const avgHr = stravaData?.avg_heartrate;
+  const avgHr = stravaData?.avg_heartrate ?? stravaData?.average_heartrate;
   const maxObserved = stravaData?.max_heartrate;
   const maxHr = getMaxHr(profile, activities);
   const tiz = timeInHrZone(splits, maxHr);
@@ -947,15 +947,28 @@ export function StravaCard({ data, onClear }) {
   const minHRVal = hrGraphData.length ? Math.min(...hrGraphData.map(sp => sp.avg_heartrate)) : 0;
   const hrColor = (hr) => hr > 170 ? "#f87171" : hr > 155 ? "#fb923c" : hr > 140 ? "#fbbf24" : "#4ade80";
 
+  // Strava data comes in two shapes: the full DETAIL shape (distance_m,
+  // moving_time_s, avg_speed_mps, splits — saved when a run is imported via the
+  // picker) and the lightweight LIST/auto-sync shape (distance, moving_time,
+  // average_speed — no splits). Read both so auto-synced runs show real
+  // numbers instead of "NaNkm / –".
+  const distanceM   = data.distance_m ?? data.distance;
+  const movingTimeS = data.moving_time_s ?? data.moving_time;
+  const elapsedS    = data.elapsed_time_s ?? data.elapsed_time;
+  const avgSpeed    = data.avg_speed_mps ?? data.average_speed;
+  const avgHrV      = data.avg_heartrate ?? data.average_heartrate;
+  const maxHrV      = data.max_heartrate;
+  const elevGain    = data.elevation_gain_m ?? data.total_elevation_gain;
+
   const tiles = [
-    { label:"Distance",    val:(data.distance_m/1000).toFixed(2)+"km" },
-    { label:"Moving Time", val:fmtTime(data.moving_time_s) },
-    { label:"Elapsed",     val:fmtTime(data.elapsed_time_s) },
-    { label:"Avg Pace",    val:fmtPace(data.avg_speed_mps) },
-    ...(data.avg_heartrate    ? [{ label:"Avg HR",    val:Math.round(data.avg_heartrate)+"bpm", hrTile:true }] : []),
-    ...(data.max_heartrate    ? [{ label:"Max HR",    val:Math.round(data.max_heartrate)+"bpm" }] : []),
-    ...(data.elevation_gain_m != null ? [{ label:"Elevation", val:data.elevation_gain_m+"m" }] : []),
-    ...(data.avg_cadence      ? [{ label:"Cadence",   val:data.avg_cadence+"spm" }] : []),
+    { label:"Distance",    val: distanceM != null ? (distanceM / 1000).toFixed(2) + "km" : "–" },
+    { label:"Moving Time", val: fmtTime(movingTimeS) },
+    { label:"Elapsed",     val: fmtTime(elapsedS) },
+    { label:"Avg Pace",    val: fmtPace(avgSpeed) },
+    ...(avgHrV ? [{ label:"Avg HR", val:Math.round(avgHrV)+"bpm", hrTile:true }] : []),
+    ...(maxHrV ? [{ label:"Max HR", val:Math.round(maxHrV)+"bpm" }] : []),
+    ...(elevGain != null ? [{ label:"Elevation", val:Math.round(elevGain)+"m" }] : []),
+    ...(data.avg_cadence  ? [{ label:"Cadence",   val:data.avg_cadence+"spm" }] : []),
   ];
 
   return (
@@ -969,7 +982,11 @@ export function StravaCard({ data, onClear }) {
               // When the run actually happened (local time on the athlete's
               // device), not when it was imported. Falls back to UTC start_date
               // if local isn't present.
-              const raw = data.start_date_local || data.start_date;
+              // start_date_local is already local time, but Strava tags it
+              // with a "Z"; strip it so we don't double-apply the viewer's
+              // timezone offset (which was showing e.g. 06:11 as 14:11).
+              const localRaw = data.start_date_local ? data.start_date_local.replace(/Z$/, "") : null;
+              const raw = localRaw || data.start_date;
               if (!raw) return null;
               const d = new Date(raw);
               if (isNaN(d)) return null;
@@ -1109,7 +1126,7 @@ export function StravaActivityPicker({ activities = [], loading, selectedId, det
                 (b.start_date_local || b.start_date || "").localeCompare(a.start_date_local || a.start_date || "")
               )
               .map(a => {
-              const d = new Date(a.start_date_local);
+              const d = new Date((a.start_date_local || a.start_date || "").replace(/Z$/, ""));
               const dateStr = d.toLocaleDateString("en-AU",{day:"numeric",month:"short"});
               const km = (a.distance/1000).toFixed(1);
               const mins = Math.round(a.moving_time/60);
