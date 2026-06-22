@@ -105,9 +105,78 @@ async function fetchActivities(accessToken: string, afterEpoch: number) {
   return all;
 }
 
-async function syncOne(supabase: any, tokenRow: any, daysBack: number) {
+// Transform a Strava activity DETAIL response into our stored detail shape
+// (mirrors lib/helpers.js extractStravaData) — adds splits + per-split HR.
+function extractDetail(detail: any) {
+  return {
+    id: detail.id,
+    name: detail.name,
+    start_date: detail.start_date || null,
+    start_date_local: detail.start_date_local || null,
+    distance_m: detail.distance,
+    moving_time_s: detail.moving_time,
+    elapsed_time_s: detail.elapsed_time,
+    avg_speed_mps: detail.average_speed,
+    avg_heartrate: detail.average_heartrate || null,
+    max_heartrate: detail.max_heartrate || null,
+    elevation_gain_m: detail.total_elevation_gain || null,
+    avg_cadence: detail.average_cadence ? Math.round(detail.average_cadence * 2) : null,
+    splits: (detail.splits_metric || []).map((sp: any) => ({
+      split: sp.split, distance_m: sp.distance, moving_time_s: sp.moving_time,
+      elapsed_time_s: sp.elapsed_time, avg_speed_mps: sp.average_speed,
+      avg_heartrate: sp.average_heartrate || null,
+      avg_cadence: sp.average_cadence ? Math.round(sp.average_cadence * 2) : null,
+    })),
+    laps: (detail.laps || []).map((lp: any) => ({
+      lap_index: lp.lap_index, name: lp.name, distance_m: lp.distance,
+      moving_time_s: lp.moving_time, elapsed_time_s: lp.elapsed_time,
+      avg_speed_mps: lp.average_speed, avg_heartrate: lp.average_heartrate || null,
+      avg_cadence: lp.average_cadence ? Math.round(lp.average_cadence * 2) : null,
+    })),
+  };
+}
+
+// Backfill full detail (splits + per-split HR) for recent RUN activities that
+// were auto-synced with only the lightweight list summary — so the coach/athlete
+// see splits and the HR-zone/decoupling analytics without anyone opening the
+// run. Bounded by a shared `budget` so one cron run never blows Strava's
+// ~100/15min read limit; the backlog clears over successive runs, then
+// steady-state is ~0 (only newly-synced runs need it).
+async function backfillSplits(supabase: any, accessToken: string, email: string, sinceDate: string, budget: { left: number }) {
+  if (budget.left <= 0) return 0;
+  const { data: rows } = await supabase
+    .from("activities")
+    .select("id, strava_activity_id, strava_data")
+    .eq("athlete_email", email)
+    .eq("activity_type", "Run")
+    .gte("activity_date", sinceDate)
+    .not("strava_activity_id", "is", null)
+    .order("activity_date", { ascending: false })
+    .limit(60);
+  let upgraded = 0;
+  for (const r of rows || []) {
+    if (budget.left <= 0) break;
+    if (r.strava_data && Array.isArray(r.strava_data.splits)) continue; // already detailed
+    budget.left--;
+    try {
+      const res = await stravaFetch(
+        `https://www.strava.com/api/v3/activities/${r.strava_activity_id}?include_all_efforts=false`,
+        accessToken,
+      );
+      if (!res.ok) continue;
+      const detail = await res.json();
+      if (!detail?.id) continue;
+      const merged = { ...(r.strava_data || {}), ...extractDetail(detail) };
+      const { error } = await supabase.from("activities").update({ strava_data: merged }).eq("id", r.id);
+      if (!error) upgraded++;
+    } catch (_) { /* skip this one, try the rest */ }
+  }
+  return upgraded;
+}
+
+async function syncOne(supabase: any, tokenRow: any, daysBack: number, budget: { left: number }) {
   const email = tokenRow.athlete_email;
-  const result: any = { email, refreshed: false, fetched: 0, inserted: 0, error: null };
+  const result: any = { email, refreshed: false, fetched: 0, inserted: 0, detailed: 0, error: null };
   try {
     const wasExpired = tokenRow.expires_at <= Math.floor(Date.now() / 1000) + 300;
     const accessToken = await getValidToken(supabase, tokenRow);
@@ -181,6 +250,10 @@ async function syncOne(supabase: any, tokenRow: any, daysBack: number) {
       if (error) throw new Error(error.message);
       result.inserted += count ?? 0;
     }
+
+    // Upgrade recent runs that only have the list summary to full detail
+    // (splits + per-split HR), within the shared rate-limit budget.
+    result.detailed = await backfillSplits(supabase, accessToken, email, sinceDate, budget);
   } catch (e) {
     result.error = (e as Error).message;
   }
@@ -211,15 +284,19 @@ serve(async (req) => {
     const { data: tokens, error } = await supabase.from("strava_tokens").select("*");
     if (error) throw new Error(error.message);
 
+    // Shared detail-fetch budget across all athletes so a single cron run can't
+    // blow Strava's ~100/15min read limit. The backlog clears over a few runs.
+    const budget = { left: 50 };
     const results = [];
     for (const t of tokens || []) {
-      results.push(await syncOne(supabase, t, daysBack));
+      results.push(await syncOne(supabase, t, daysBack, budget));
     }
 
     return new Response(JSON.stringify({
       ranAt: new Date().toISOString(),
       athletes: results.length,
       totalInserted: results.reduce((n, r) => n + (r.inserted || 0), 0),
+      totalDetailed: results.reduce((n, r) => n + (r.detailed || 0), 0),
       refreshed: results.filter(r => r.refreshed).length,
       results,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
