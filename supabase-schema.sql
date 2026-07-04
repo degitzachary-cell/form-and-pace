@@ -7,9 +7,11 @@
 -- indexes, functions, the role guard trigger, RLS policies, and the realtime
 -- publication.
 --
--- Run order on a fresh project: this file ALONE is sufficient. The individual
--- `supabase-*-setup.sql` / `*-migration.sql` files remain as the historical
--- record of how the schema evolved; this snapshot supersedes them.
+-- Run order on a fresh project: this file, THEN supabase-multicoach-migration.sql
+-- (which layers the coach_athletes roster on top and rewrites the coach
+-- policies below from "sees everything" to "sees their accepted roster").
+-- The other `supabase-*-setup.sql` / `*-migration.sql` files remain as the
+-- historical record of how the schema evolved; this snapshot supersedes them.
 --
 -- Idempotent: safe to re-run. Prerequisites: the Supabase `vault` extension
 -- (for get_vault_secret) and `auth` schema (Supabase-managed) already exist.

@@ -414,6 +414,17 @@ export default function App() {
 
   // Athlete state
   const [screen,        setScreen]        = useState("today");
+  // Open signup: a brand-new user (no profile row yet) chooses Coach or
+  // Athlete before anything else renders. Roster-scoped RLS makes the coach
+  // role grant nothing until an athlete accepts an invite, so self-selection
+  // is safe.
+  const [pendingSignup, setPendingSignup] = useState(false);
+  const [signupBusy,    setSignupBusy]    = useState(false);
+  // Athlete-side: pending coach invites (coach_athletes rows awaiting accept).
+  const [myInvites,     setMyInvites]     = useState([]);
+  // Coach-side: add-athlete-by-email input state.
+  const [inviteEmail,   setInviteEmail]   = useState("");
+  const [inviteBusy,    setInviteBusy]    = useState(false);
   const [activeSession, setActiveSession] = useState(null);
   const [activeExtraActivity, setActiveExtraActivity] = useState(null);
   const [activeMonday, setActiveMonday] = useState(null);
@@ -604,18 +615,35 @@ export default function App() {
       return;
     }
 
-    // Coach path: plans → then profiles, so the roster is known before profiles arrive.
+    // Coach path: roster membership + plans → then profiles.
     const loadAll = async () => {
       const { data: planRows, error: planErr } = await supabase.from('coach_plans').select('*');
       if (planErr) { console.error('Failed to load coach plans:', planErr); return; }
 
-      // Build roster from plans first.
+      // Roster membership (coach_athletes) — the multi-coach source of truth.
+      // Includes invited athletes who have no plan yet (previously invisible).
+      // Tolerated as optional so the app still works before the multicoach
+      // migration has been applied.
+      let memberRows = [];
+      try {
+        const { data, error } = await supabase
+          .from('coach_athletes').select('athlete_email, status')
+          .eq('coach_email', email);
+        if (!error && data) memberRows = data;
+      } catch (e) { console.error('coach_athletes load failed:', e); }
+
       const roster = {};
+      memberRows.forEach(m => {
+        const key = m.athlete_email?.toLowerCase();
+        if (!key) return;
+        roster[key] = { weeks: [], rosterStatus: m.status };
+      });
+      // Overlay plans (legacy rows without a membership row still count).
       (planRows || []).forEach(row => {
         const key = row.athlete_email?.toLowerCase();
         if (!key) return;
         const { weeks, meta } = normalizePlan(row.plan_json);
-        roster[key] = { ...Object.fromEntries(Object.entries(meta).filter(([,v]) => v)), weeks };
+        roster[key] = { ...(roster[key] || {}), ...Object.fromEntries(Object.entries(meta).filter(([,v]) => v)), weeks };
       });
 
       // Now enrich with profile data — only for emails that are in the roster.
@@ -723,33 +751,95 @@ export default function App() {
   const resolveUser = async (u) => {
     const email = u.email?.toLowerCase();
     setUser(u);
-    let { data: profileData } = await supabase
+    const { data: profileData, error: profErr } = await supabase
       .from("profiles")
       .select("*")
       .eq("email", email)
       .maybeSingle();
-    if (!profileData) {
+    if (profErr) {
+      // Transient read failure — don't drop an EXISTING user into the signup
+      // picker (they'd re-choose a role). Fall back to the old athlete-default
+      // behaviour without persisting anything.
+      console.error("profile load failed:", profErr);
       const fullName = u.user_metadata?.full_name || email;
-      const newProfile = {
-        email,
-        role: "athlete",
-        name: fullName,
-        avatar: fullName.slice(0, 2).toUpperCase(),
-        goal: null,
-        current_pb: null,
-      };
-      // Upsert protects against the brief race when onAuthStateChange fires twice
-      // (e.g. token refresh) before the first insert lands.
-      const { data: created } = await supabase
-        .from("profiles")
-        .upsert(newProfile, { onConflict: "email" })
-        .select()
-        .maybeSingle();
-      profileData = created || newProfile;
+      const fallback = { email, role: "athlete", name: fullName, avatar: fullName.slice(0, 2).toUpperCase() };
+      setProfile(fallback);
+      setRole("athlete");
+    } else if (!profileData) {
+      // Genuinely new user — hold at the Coach/Athlete choice screen; the
+      // profile row is created with their chosen role in completeSignup().
+      setPendingSignup(true);
+    } else {
+      setProfile(profileData);
+      setRole(profileData.role || "athlete");
     }
-    setProfile(profileData);
-    setRole(profileData?.role || "athlete");
     setAuthLoading(false);
+  };
+
+  // Finish open signup: create the profile with the chosen role.
+  const completeSignup = async (chosenRole) => {
+    if (!user?.email) return;
+    setSignupBusy(true);
+    const email = user.email.toLowerCase();
+    const fullName = user.user_metadata?.full_name || email;
+    const newProfile = {
+      email,
+      role: chosenRole,
+      name: fullName,
+      avatar: fullName.slice(0, 2).toUpperCase(),
+      goal: null,
+      current_pb: null,
+    };
+    // Upsert protects against the brief race when onAuthStateChange fires
+    // twice before the first insert lands.
+    const { data: created, error } = await supabase
+      .from("profiles")
+      .upsert(newProfile, { onConflict: "email" })
+      .select()
+      .maybeSingle();
+    setSignupBusy(false);
+    if (error) {
+      showToast("Couldn't finish signup: " + error.message, "error");
+      return;
+    }
+    const p = created || newProfile;
+    setProfile(p);
+    setRole(p.role || chosenRole);
+    setPendingSignup(false);
+  };
+
+  // ── Athlete: load pending coach invites (consent step of multi-coach) ──
+  useEffect(() => {
+    if (role !== "athlete" || !user?.email) { setMyInvites([]); return; }
+    const email = user.email.toLowerCase();
+    supabase.from("coach_athletes").select("*")
+      .eq("athlete_email", email).eq("status", "pending")
+      .then(async ({ data, error }) => {
+        if (error || !data?.length) { setMyInvites([]); return; }
+        // Enrich with the inviting coach's name (profiles RLS allows an
+        // athlete to read their inviter's profile).
+        const { data: coachProfiles } = await supabase
+          .from("profiles").select("email, name").in("email", data.map(r => r.coach_email));
+        setMyInvites(data.map(r => ({
+          ...r,
+          coachName: coachProfiles?.find(p => p.email === r.coach_email)?.name || prettyEmailName(r.coach_email),
+        })));
+      });
+  }, [role, user?.email]);
+
+  const acceptInvite = async (invite) => {
+    const { error } = await supabase.from("coach_athletes")
+      .update({ status: "active", accepted_at: new Date().toISOString() })
+      .eq("id", invite.id);
+    if (error) { showToast("Couldn't accept the invite: " + error.message, "error"); return; }
+    setMyInvites(prev => prev.filter(i => i.id !== invite.id));
+    showToast(`You're now coached by ${invite.coachName}.`, "success");
+  };
+
+  const declineInvite = async (invite) => {
+    const { error } = await supabase.from("coach_athletes").delete().eq("id", invite.id);
+    if (error) { showToast("Couldn't decline the invite: " + error.message, "error"); return; }
+    setMyInvites(prev => prev.filter(i => i.id !== invite.id));
   };
 
   // ── Capture Strava OAuth code before auth resolves ──
@@ -1969,6 +2059,41 @@ export default function App() {
   );
 
   // ────────────────────────────────────────────────────────────
+  //  OPEN SIGNUP — choose Coach or Athlete (new users only)
+  // ────────────────────────────────────────────────────────────
+  if (user && pendingSignup) {
+    const roleCard = (title, blurb, chosen) => (
+      <button
+        type="button"
+        disabled={signupBusy}
+        onClick={() => completeSignup(chosen)}
+        style={{
+          display:"block", width:"100%", textAlign:"left", cursor: signupBusy ? "wait" : "pointer",
+          background:C.paper, border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.accent}`,
+          borderRadius:2, padding:"20px 22px", marginBottom:14, fontFamily:S.bodyFont,
+          opacity: signupBusy ? 0.6 : 1,
+        }}>
+        <div className="t-display" style={{ fontSize:22, color:C.ink, marginBottom:6 }}>{title}</div>
+        <div style={{ fontSize:13, color:C.mute, lineHeight:1.5 }}>{blurb}</div>
+      </button>
+    );
+    return (
+      <div style={{ ...S.page, display:"flex", flexDirection:"column", justifyContent:"center", padding:"40px 28px", maxWidth:480, margin:"0 auto", minHeight:"100vh" }}>
+        <div style={{ textAlign:"center", marginBottom:36 }}>
+          <span className="fp-seal" style={{ fontSize:44, color:C.accent }}>✻</span>
+          <h1 className="t-display" style={{ fontSize:34, fontWeight:400, margin:"18px 0 8px", color:C.ink }}>Welcome.</h1>
+          <p style={{ fontFamily:S.displayFont, fontStyle:"italic", fontSize:15, color:C.mute, margin:0 }}>
+            How will you use Form &amp; Pace?
+          </p>
+        </div>
+        {roleCard("I'm an athlete", "Follow your plan, log sessions, sync Strava, and track fitness and readiness. Your coach invites you — or joins later.", "athlete")}
+        {roleCard("I'm a coach", "Build training plans, invite athletes by email, and monitor their load, compliance, and readiness. Athletes accept your invite before you can see their data.", "coach")}
+        <button onClick={signOut} style={{ ...S.ghostBtn, marginTop:10 }}>Sign out</button>
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
   //  LOGIN SCREEN
   // ────────────────────────────────────────────────────────────
   if (!user) {
@@ -2676,14 +2801,44 @@ export default function App() {
     }));
   };
 
+  // Invite an athlete to this coach's roster by email. Creates a PENDING
+  // coach_athletes row; the athlete accepts in-app, which is what unlocks the
+  // coach's read access to their data (consent-based multi-coach model).
+  const inviteAthlete = async () => {
+    const em = inviteEmail.trim().toLowerCase();
+    if (!em || !/^\S+@\S+\.\S+$/.test(em)) { showToast("Enter a valid email address.", "error"); return; }
+    if (em === user.email?.toLowerCase()) { showToast("That's your own email.", "error"); return; }
+    setInviteBusy(true);
+    const { error } = await supabase.from("coach_athletes")
+      .insert({ coach_email: user.email.toLowerCase(), athlete_email: em, status: "pending" });
+    setInviteBusy(false);
+    if (error) {
+      showToast(error.code === "23505"
+        ? "That athlete is already on your roster."
+        : "Invite failed: " + error.message, "error");
+      return;
+    }
+    setAthletePrograms(prev => ({
+      ...prev,
+      [em]: { ...(prev[em] || {}), weeks: prev[em]?.weeks || [], rosterStatus: "pending" },
+    }));
+    setInviteEmail("");
+    showToast(`Invited ${em} — they'll be asked to accept when they sign in.`, "success");
+  };
+
   // Remove an athlete from the coach's roster. Deletes the coach_plans row
-  // (which is what populates athletePrograms) — the athlete's profile,
-  // session_logs, and activities are preserved. Caller must confirm.
+  // and the coach_athletes membership — the athlete's profile, session_logs,
+  // and activities are preserved. Caller must confirm.
   const removeAthleteFromRoster = async (email) => {
     if (!email) return;
     const key = email.toLowerCase();
     const { error } = await supabase.from("coach_plans").delete().eq("athlete_email", key);
     if (error) { showToast("Couldn't remove athlete: " + error.message, "error"); return false; }
+    // Membership row is best-effort (may predate the multicoach migration).
+    try {
+      await supabase.from("coach_athletes").delete()
+        .eq("coach_email", user.email.toLowerCase()).eq("athlete_email", key);
+    } catch (e) { console.error("coach_athletes delete failed:", e); }
     setAthletePrograms(prev => {
       const next = { ...prev };
       delete next[key];
@@ -2736,10 +2891,29 @@ export default function App() {
             right={<button onClick={signOut} style={S.signOutBtn}>Sign out</button>}
           />
           <div style={{ flex: 1, overflowY: "auto", padding: isDesktop ? "32px 40px 80px" : "24px 16px 80px" }}>
+            {/* Invite an athlete by email — creates a pending roster row the
+                athlete accepts in-app. */}
+            <div style={{ maxWidth: 1100, margin:"0 auto 28px" }}>
+              <div style={{ display:"flex", gap:10, alignItems:"stretch", flexWrap:"wrap", background:C.paper, border:`1px solid ${C.rule}`, borderLeft:`3px solid ${C.accent}`, borderRadius:2, padding:"14px 16px" }}>
+                <div style={{ flex:"1 1 240px" }}>
+                  <Eyebrow style={{ marginBottom:6 }}>Invite an athlete</Eyebrow>
+                  <input
+                    type="email" placeholder="athlete@email.com"
+                    value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") inviteAthlete(); }}
+                    style={{ ...S.input, width:"100%", fontFamily:"var(--f-mono)" }}/>
+                </div>
+                <button onClick={inviteAthlete} disabled={inviteBusy}
+                  className="fp-btn fp-btn--accent"
+                  style={{ alignSelf:"flex-end", padding:"12px 22px", fontSize:11, opacity: inviteBusy ? 0.6 : 1 }}>
+                  {inviteBusy ? "Inviting…" : "Invite"}
+                </button>
+              </div>
+            </div>
             {allEntries.length === 0 ? (
               <div style={{ textAlign:"center", padding:"60px 24px", color:C.mute }}>
                 <div className="t-display-italic" style={{ fontSize:18, marginBottom:8 }}>No athletes on your roster yet.</div>
-                <div style={{ fontSize:13 }}>Build a plan in the Plan Builder to enroll an athlete.</div>
+                <div style={{ fontSize:13 }}>Invite an athlete by email above — they accept when they next sign in.</div>
               </div>
             ) : (
               <div style={{ maxWidth: 1100, margin:"0 auto" }}>
@@ -2780,6 +2954,9 @@ export default function App() {
                               <div style={{ minWidth:0, flex:1 }}>
                                 <div style={{ fontFamily:S.displayFont, fontSize:18, color:C.ink, lineHeight:1.2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
                                 <div className="t-mono" style={{ fontSize:10, color:C.mute, letterSpacing:"0.06em", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{email}</div>
+                                {data?.rosterStatus === "pending" && (
+                                  <div className="t-mono" style={{ fontSize:9, color:C.warn, letterSpacing:"0.14em", marginTop:3 }}>INVITE PENDING</div>
+                                )}
                               </div>
                             </div>
                             {goal && (
@@ -5629,6 +5806,28 @@ export default function App() {
               <div style={{ fontSize:13, opacity:0.85 }}>›</div>
             </div>
           )}
+          {/* Pending coach invites — the consent step of the multi-coach
+              model. Accepting is what unlocks the coach's view of this
+              athlete's training data. */}
+          {myInvites.map(inv => (
+            <div key={inv.id} style={{
+              margin:"12px 16px 0", padding:"14px 16px",
+              background:C.paper, border:`1px solid ${C.rule}`, borderLeft:`4px solid ${C.accent}`, borderRadius:2,
+            }}>
+              <div className="t-mono" style={{ fontSize:10, letterSpacing:"0.18em", color:C.accent, fontWeight:700, marginBottom:6 }}>
+                COACH INVITE
+              </div>
+              <div style={{ fontSize:14, color:C.navy, fontFamily:S.displayFont, lineHeight:1.4, marginBottom:12 }}>
+                <b>{inv.coachName}</b> wants to coach you on Form &amp; Pace. Accepting lets them see your training, plan your weeks, and reply to your logs.
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => acceptInvite(inv)} className="fp-btn fp-btn--accent"
+                  style={{ flex:1, padding:"10px", fontSize:11 }}>Accept</button>
+                <button onClick={() => declineInvite(inv)}
+                  style={{ ...S.ghostBtn, flex:1, marginBottom:0 }}>Decline</button>
+              </div>
+            </div>
+          ))}
           {RaceCountdown}
           {ReadinessAlert}
           {/* Doubles switcher — only shown when there's more than one

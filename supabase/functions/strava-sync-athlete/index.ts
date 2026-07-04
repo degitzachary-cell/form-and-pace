@@ -114,6 +114,18 @@ serve(async (req) => {
     if (callerProfile?.role !== "coach") throw new Error("Coach role required");
 
     const targetEmail = String(athleteEmail).toLowerCase();
+
+    // Multi-coach: the target athlete must be an ACTIVE member of the
+    // caller's roster (coach_athletes). The service-role client bypasses RLS,
+    // so this in-code check is the enforcement here.
+    const { data: member } = await supabase
+      .from("coach_athletes").select("id")
+      .eq("coach_email", user.email.toLowerCase())
+      .eq("athlete_email", targetEmail)
+      .eq("status", "active")
+      .maybeSingle();
+    if (!member) throw new Error("Athlete is not on your roster (or hasn't accepted your invite)");
+
     const accessToken = await getValidToken(supabase, targetEmail);
     const afterEpoch = Math.floor(Date.now() / 1000) - daysBack * 24 * 60 * 60;
     const stravaActs = await fetchAllStravaActivities(accessToken, afterEpoch);

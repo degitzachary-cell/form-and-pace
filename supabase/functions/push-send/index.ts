@@ -46,13 +46,27 @@ serve(async (req) => {
     }
     if (!title) throw new Error("title required");
 
-    // Athletes can only notify themselves (defence-in-depth; UI never tries).
+    // Athletes can only notify themselves; coaches only their ACTIVE roster
+    // (multi-coach). Service-role client bypasses RLS, so enforce in code.
     const { data: callerProfile } = await supabase
       .from("profiles").select("role").eq("email", user.email.toLowerCase()).single();
     const callerEmail = user.email.toLowerCase();
     const targets = recipientEmails.map((e) => String(e).toLowerCase());
-    if (callerProfile?.role !== "coach" && targets.some((t) => t !== callerEmail)) {
-      throw new Error("Athletes can only notify themselves");
+    if (callerProfile?.role !== "coach") {
+      if (targets.some((t) => t !== callerEmail)) {
+        throw new Error("Athletes can only notify themselves");
+      }
+    } else {
+      const others = targets.filter((t) => t !== callerEmail);
+      if (others.length) {
+        const { data: members } = await supabase
+          .from("coach_athletes").select("athlete_email")
+          .eq("coach_email", callerEmail).eq("status", "active")
+          .in("athlete_email", others);
+        const allowed = new Set((members || []).map((m: any) => m.athlete_email));
+        const blocked = others.filter((t) => !allowed.has(t));
+        if (blocked.length) throw new Error(`Not on your roster: ${blocked.join(", ")}`);
+      }
     }
 
     const { data: subs, error: subErr } = await supabase
