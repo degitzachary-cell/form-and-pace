@@ -743,13 +743,23 @@ export default function App() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) resolveUser(session.user);
-      else { setUser(null); setRole(null); setAuthLoading(false); }
+      else {
+        lastResolvedEmailRef.current = null;
+        setUser(null); setRole(null); setAuthLoading(false);
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  // Supabase re-fires onAuthStateChange on every token refresh (~hourly) with
+  // the same user. Without this guard each refresh minted a new `user` object,
+  // which re-ran every [user, role]-keyed effect — refetching plans, logs and
+  // activities for no reason. Resolve once per signed-in email.
+  const lastResolvedEmailRef = useRef(null);
   const resolveUser = async (u) => {
     const email = u.email?.toLowerCase();
+    if (email && lastResolvedEmailRef.current === email) return;
+    lastResolvedEmailRef.current = email;
     setUser(u);
     const { data: profileData, error: profErr } = await supabase
       .from("profiles")
