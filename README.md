@@ -264,7 +264,8 @@ supersedes them for new installs:
 | `supabase-realtime-publication-migration.sql` | Adds tables to the `supabase_realtime` publication so live updates fire |
 | `supabase-strava-cron-sync-setup.sql` | Schedules the server-side Strava sync (every 3h) via pg_cron + pg_net |
 | `supabase-rls-role-model-migration.sql` | Replaces hardcoded-email coach policies with a `profiles.role='coach'` check (`is_coach()`), guards profile-role escalation, commits schema + RLS for `calendar_markers` / `workout_templates` / `push_subscriptions`, and adds roster-query indexes |
-| `supabase-multicoach-migration.sql` | **Run last.** Open signup / multi-coach: adds the `coach_athletes` roster (invite → athlete accepts), rewrites every coach policy from "sees everything" to "sees their ACTIVE roster", scopes `profiles` reads, allows self-service Coach/Athlete role choice at signup, and backfills the existing roster. Redeploy `strava-sync-athlete` + `push-send` afterwards (they gain roster checks) |
+| `supabase-perf-initplan-migration.sql` | Performance: wraps per-row `auth.jwt()` / `is_coach()` calls in `(select …)` initplans across all self-scoped policies (fixes every `auth_rls_initplan` advisor warning). Run after the multicoach migration |
+| `supabase-multicoach-migration.sql` | **Run last** (before the perf migration). Open signup / multi-coach: adds the `coach_athletes` roster (invite → athlete accepts), rewrites every coach policy from "sees everything" to "sees their ACTIVE roster", scopes `profiles` reads, allows self-service Coach/Athlete role choice at signup, and backfills the existing roster. Redeploy `strava-sync-athlete` + `push-send` afterwards (they gain roster checks) |
 
 A `calendar_markers` table is also required (race / sick / taper / travel ribbons). Create it via the SQL Editor if not already present — see the marker setup section in the Supabase SQL files.
 
