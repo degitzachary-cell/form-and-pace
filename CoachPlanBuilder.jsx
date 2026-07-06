@@ -681,6 +681,10 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   const [newWeekLabel, setNewWeekLabel] = useState('');
   const [newWeekStart, setNewWeekStart] = useState('');
   const [showAddWeek, setShowAddWeek] = useState(false);
+  // Move-a-week: which week's inline "move to another week" control is open,
+  // and the target date the coach has picked in it.
+  const [moveWeekId, setMoveWeekId] = useState(null);
+  const [moveTarget, setMoveTarget] = useState('');
   // Excel import is a power-user/migration tool — kept available but
   // tucked behind a disclosure at the bottom of the page so the main
   // flow (athlete picker → edit weeks) doesn't get pushed off-screen.
@@ -908,6 +912,43 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
       sessions: src.sessions.map(s => ({ ...s, id: newId() })),
     };
     setWeeks(sortedByStart([...weeks, newWeek]));
+  };
+
+  // Move an ENTIRE week (all its sessions) to another week. The picked date is
+  // snapped to its Monday. If that Monday is empty the week just relocates; if
+  // another week already sits there the two SWAP dates (nothing is overwritten
+  // or lost). Session `day` fields are relative to weekStart, so every session
+  // travels with the week automatically.
+  const handleMoveWeek = (weekId, targetDateInput) => {
+    const src = weeks.find(w => w.id === weekId);
+    if (!src) return;
+    const targetMonday = snapToMonday(targetDateInput);
+    if (!targetMonday) {
+      setStatus({ kind: 'error', message: 'Pick a date to move the week to.' });
+      return;
+    }
+    if (targetMonday === src.weekStart) { setMoveWeekId(null); setMoveTarget(''); return; }
+    const occupant = weeks.find(w => w.id !== weekId && w.weekStart === targetMonday);
+    if (occupant && !src.weekStart) {
+      // Would give the occupant an empty weekStart — refuse rather than corrupt.
+      setStatus({ kind: 'error', message: 'That week is already taken; give this week a start date first.' });
+      return;
+    }
+    const srcOldStart = src.weekStart;
+    const next = weeks.map(w => {
+      if (w.id === weekId) return { ...w, weekStart: targetMonday };
+      if (occupant && w.id === occupant.id) return { ...w, weekStart: srcOldStart };
+      return w;
+    });
+    setWeeks(sortedByStart(next));
+    setMoveWeekId(null);
+    setMoveTarget('');
+    setStatus({
+      kind: 'success',
+      message: occupant
+        ? `Swapped this week with the week of ${targetMonday}.`
+        : `Moved week to ${targetMonday}.`,
+    });
   };
 
   // Copy a week to the cross-athlete clipboard. Strips ids and dates — the
@@ -1159,23 +1200,58 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                     </div>
                   </div>
                 </div>
-                <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => handleCopyWeek(week.id)} style={{
-                    background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
-                    borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
-                  }} title="Copy this week to clipboard — paste into any athlete">Copy</button>
-                  <button type="button" onClick={() => handleSaveAsDefaultWeek(week.id)} style={{
-                    background: C.white, color: C.accent, border: `1px solid ${C.accent}`,
-                    borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600,
-                  }} title="Use this week's shape as the default starting point for new weeks for this athlete">Save as default</button>
-                  <button type="button" onClick={() => handleDuplicateWeek(week.id)} style={{
-                    background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
-                    borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
-                  }}>Duplicate</button>
-                  <button type="button" onClick={() => handleDeleteWeek(week.id)} style={{
-                    background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
-                    borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
-                  }}>Delete week</button>
+                <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <button type="button" onClick={() => handleCopyWeek(week.id)} style={{
+                      background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
+                      borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                    }} title="Copy this week to clipboard — paste into any athlete">Copy</button>
+                    <button type="button" onClick={() => handleSaveAsDefaultWeek(week.id)} style={{
+                      background: C.white, color: C.accent, border: `1px solid ${C.accent}`,
+                      borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600,
+                    }} title="Use this week's shape as the default starting point for new weeks for this athlete">Save as default</button>
+                    <button type="button" onClick={() => {
+                      const opening = moveWeekId !== week.id;
+                      setMoveWeekId(opening ? week.id : null);
+                      setMoveTarget(opening ? (week.weekStart || '') : '');
+                    }} style={{
+                      background: moveWeekId === week.id ? C.accent : C.white,
+                      color: moveWeekId === week.id ? C.white : C.navy,
+                      border: `1px solid ${moveWeekId === week.id ? C.accent : C.rule}`,
+                      borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                    }} title="Move this entire week (all its sessions) to another week">Move</button>
+                    <button type="button" onClick={() => handleDuplicateWeek(week.id)} style={{
+                      background: C.white, color: C.navy, border: `1px solid ${C.rule}`,
+                      borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                    }}>Duplicate</button>
+                    <button type="button" onClick={() => handleDeleteWeek(week.id)} style={{
+                      background: C.white, color: C.crimson, border: `1px solid ${C.rule}`,
+                      borderRadius: 2, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+                    }}>Delete week</button>
+                  </div>
+                  {moveWeekId === week.id && (
+                    <div style={{
+                      display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end',
+                      background: C.bg, border: `1px solid ${C.rule}`, borderRadius: 2, padding: '7px 9px',
+                    }}>
+                      <span style={{ fontSize: 11, color: C.mid }}>Move to week of</span>
+                      <input
+                        type="date"
+                        value={moveTarget}
+                        onChange={e => setMoveTarget(e.target.value)}
+                        style={{ ...inputStyle, width: 150, padding: '5px 8px' }}
+                      />
+                      <button type="button" onClick={() => handleMoveWeek(week.id, moveTarget)} disabled={!moveTarget} style={{
+                        background: C.accent, color: C.white, border: 0, borderRadius: 2,
+                        padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: moveTarget ? 'pointer' : 'not-allowed',
+                        opacity: moveTarget ? 1 : 0.5,
+                      }}>Move here</button>
+                      <button type="button" onClick={() => { setMoveWeekId(null); setMoveTarget(''); }} style={{
+                        background: C.white, color: C.mid, border: `1px solid ${C.rule}`,
+                        borderRadius: 2, padding: '6px 10px', fontSize: 11, cursor: 'pointer',
+                      }}>Cancel</button>
+                    </div>
+                  )}
                 </div>
               </div>
 
