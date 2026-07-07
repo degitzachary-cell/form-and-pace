@@ -1168,12 +1168,25 @@ export default function App() {
           .update({ ...basePayload, source: "strava" })
           .eq("id", existingForStrava.id).select().single());
       } else {
-        ({ data, error } = await supabase.from("activities").insert({
+        const insertRow = {
           ...basePayload,
           athlete_email: user.email?.toLowerCase(),
           athlete_name: athleteData?.name || user.user_metadata?.full_name || user.email,
           source: stravaDetailData ? "strava" : "manual",
-        }).select().single());
+        };
+        // If a Strava run is attached, UPSERT on the (athlete, strava id) unique
+        // index rather than plain-insert. The auto-sync cron may have already
+        // inserted this exact run server-side after our local `activities` state
+        // was last loaded — the local dedup above would then miss it and a plain
+        // insert would hit the unique constraint (23505), failing the import.
+        // Upserting merges into the existing row instead.
+        if (stravaDetailData?.id != null) {
+          ({ data, error } = await supabase.from("activities")
+            .upsert(insertRow, { onConflict: "athlete_email,strava_activity_id" })
+            .select().single());
+        } else {
+          ({ data, error } = await supabase.from("activities").insert(insertRow).select().single());
+        }
       }
     }
     if (error) { console.error("saveActivity error:", error); setLogError(error.message); }
@@ -1721,8 +1734,23 @@ export default function App() {
           source: "session",
           ...(stravaDetail ? { strava_data: stravaDetail } : {}),
         };
-        const { data: actData } = await supabase.from("activities").insert(payload).select().single();
-        if (actData) setActivities(prev => [actData, ...prev]);
+        // Same race as saveActivity: an attached Strava run may already exist as
+        // a strava-auto row the cron inserted since we last loaded activities.
+        // Upsert on the (athlete, strava id) unique index so the attach merges
+        // into that row instead of failing the insert with a 23505 (which was
+        // being swallowed here, so the session showed logged but the activity —
+        // and its distance toward weekly totals — silently never saved).
+        let actData, actErr;
+        if (stravaDetail?.id != null) {
+          ({ data: actData, error: actErr } = await supabase.from("activities")
+            .upsert(payload, { onConflict: "athlete_email,strava_activity_id" })
+            .select().single());
+        } else {
+          ({ data: actData, error: actErr } = await supabase.from("activities")
+            .insert(payload).select().single());
+        }
+        if (actErr) console.error("handleSubmitFeedback activity write error:", actErr);
+        if (actData) setActivities(prev => [actData, ...prev.filter(a => a.id !== actData.id)]);
       } else {
         const { data: updAct } = await supabase.from("activities").update({
           activity_date: sessionDate,
