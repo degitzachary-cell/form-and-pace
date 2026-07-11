@@ -1077,7 +1077,19 @@ export function StravaCard({ data, onClear }) {
 }
 
 // ─── STRAVA ACTIVITY PICKER ───────────────────────────────────────────────────
-export function StravaActivityPicker({ activities = [], loading, selectedId, detail, detailLoading, onOpen, onSelect, onClear, compact }) {
+export function StravaActivityPicker({ activities = [], loading, error, selectedId, detail, detailLoading, onOpen, onSelect, onClear, compact }) {
+  // A Strava refusal (deactivated app, expired token, rate limit) must read
+  // as an outage with a retry — an unexplained empty picker looks like the
+  // athlete has no runs, which is how a full pipeline failure went unnoticed.
+  if (error && !detail && !detailLoading) {
+    return (
+      <div style={{ marginBottom:14, padding:"12px 14px", background:"#fdf6ec", border:"1px solid #e0c48c", borderRadius:2 }}>
+        <div className="t-mono" style={{ fontSize:11, letterSpacing:"0.16em", color:"#a06a00", marginBottom:4 }}>STRAVA UNAVAILABLE</div>
+        <div style={{ fontSize:12.5, color:C.mid, lineHeight:1.5 }}>{error}</div>
+        <button type="button" onClick={onOpen} style={{ marginTop:8, background:"none", border:`1px solid ${C.rule}`, borderRadius:2, padding:"4px 10px", color:C.mid, fontSize:11, cursor:"pointer" }}>Try again</button>
+      </div>
+    );
+  }
   if (detail && compact) {
     return (
       <div style={{ background:C.white, border:`1px solid ${C.rule}`, borderRadius:2, padding:"12px 14px", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>

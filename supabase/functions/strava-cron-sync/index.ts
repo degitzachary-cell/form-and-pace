@@ -96,7 +96,10 @@ async function fetchActivities(accessToken: string, afterEpoch: number) {
   for (let page = 1; page <= 10; page++) {
     const url = `https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=${STRAVA_PAGE_SIZE}&page=${page}`;
     const res = await stravaFetch(url, accessToken);
-    if (!res.ok) throw new Error(`Strava list ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Strava list ${res.status}: ${body.slice(0, 200)}`);
+    }
     const batch = await res.json();
     if (!Array.isArray(batch) || batch.length === 0) break;
     all.push(...batch);
@@ -292,14 +295,28 @@ serve(async (req) => {
       results.push(await syncOne(supabase, t, daysBack, budget));
     }
 
-    return new Response(JSON.stringify({
+    // Per-athlete errors were invisible: pg_cron discards the response body,
+    // so a failure for EVERY athlete still logged as a healthy 200 (this hid
+    // a 9-day total outage when Strava deactivated the app). Log each error
+    // to the function log, and when the whole roster fails return 500 so the
+    // outage is visible in the request log line itself.
+    const failed = results.filter(r => r.error);
+    for (const r of failed) console.error(`strava-cron-sync: ${r.email} failed: ${r.error}`);
+    const summary = {
       ranAt: new Date().toISOString(),
       athletes: results.length,
       totalInserted: results.reduce((n, r) => n + (r.inserted || 0), 0),
       totalDetailed: results.reduce((n, r) => n + (r.detailed || 0), 0),
       refreshed: results.filter(r => r.refreshed).length,
+      failed: failed.length,
       results,
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    };
+    const allFailed = results.length > 0 && failed.length === results.length;
+    if (allFailed) console.error(`strava-cron-sync: ALL ${results.length} athletes failed — first error: ${failed[0].error}`);
+    return new Response(JSON.stringify(summary), {
+      status: allFailed ? 500 : 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },

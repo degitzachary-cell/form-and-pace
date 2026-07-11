@@ -715,6 +715,7 @@ export default function App() {
   const [pushPerm,              setPushPerm]              = useState("default");
   const [stravaActivities,      setStravaActivities]      = useState([]);
   const [stravaActivitiesLoading, setStravaActivitiesLoading] = useState(false);
+  const [stravaListError,       setStravaListError]       = useState(null);
   const [selectedStravaId,      setSelectedStravaId]      = useState(null);
   const [stravaDetail,          setStravaDetail]          = useState(null);
   const [stravaDetailLoading,   setStravaDetailLoading]   = useState(false);
@@ -1531,10 +1532,16 @@ export default function App() {
   const loadStravaActivities = async () => {
     if (stravaActivitiesLoading) return;
     setStravaActivitiesLoading(true);
+    setStravaListError(null);
     try {
       const data = await fetchStravaActivities();
       if (data) setStravaActivities(data);
-    } catch(e) { console.error("strava list error", e); }
+    } catch(e) {
+      console.error("strava list error", e);
+      // Surface Strava refusals (expired token, deactivated app, rate limit)
+      // in the picker instead of leaving an unexplained empty list.
+      setStravaListError(e.message);
+    }
     setStravaActivitiesLoading(false);
   };
 
@@ -7413,6 +7420,7 @@ export default function App() {
               compact={true}
               activities={stravaActivities}
               loading={stravaActivitiesLoading}
+              error={stravaListError}
               selectedId={selectedStravaId}
               detail={stravaDetail}
               detailLoading={stravaDetailLoading}
@@ -7624,6 +7632,7 @@ export default function App() {
           <StravaActivityPicker
             activities={stravaActivities}
             loading={stravaActivitiesLoading}
+            error={stravaListError}
             selectedId={selectedStravaId}
             detail={stravaDetail}
             detailLoading={stravaDetailLoading}
