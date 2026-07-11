@@ -86,7 +86,7 @@ function normaliseSportType(sportType?: string, fallbackType?: string): string {
   if (s === "walk") return "Walk";
   if (s === "hike") return "Hike";
   if (s === "weighttraining") return "Strength";
-  if (s === "workout" || s === "crossfit" || s === "hiit") return "Workout";
+  if (s === "workout" || s === "crossfit" || s === "hiit" || s === "highintensityintervaltraining") return "Workout";
   if (s === "yoga" || s === "pilates") return "Mobility";
   if (s === "rowing" || s === "virtualrow") return "Row";
   if (!sportType) return "Other";
