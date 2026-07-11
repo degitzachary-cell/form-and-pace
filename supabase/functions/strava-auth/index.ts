@@ -40,7 +40,9 @@ serve(async (req) => {
 
     // Store tokens
     const { error } = await supabase.from("strava_tokens").upsert({
-      athlete_email: user.email,
+      // Lowercase: every RLS predicate and the activities dedupe index key on
+      // the exact string — a mixed-case JWT email would fork the athlete's data.
+      athlete_email: user.email.toLowerCase(),
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       expires_at: tokenData.expires_at,

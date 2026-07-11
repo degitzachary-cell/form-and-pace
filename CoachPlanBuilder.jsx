@@ -240,7 +240,7 @@ function PlanScoreGrid({ weeks, athleteThresholdPace }) {
   // Show only weeks at or beyond the current Monday — the coach is
   // looking forward, not back. Past weeks live in the edit list above
   // (collapsed by default) where they can still be inspected if needed.
-  const monStr = snapToMonday(new Date().toISOString().slice(0, 10));
+  const monStr = snapToMonday(todayStr());
   const upcoming = weeks.filter(w => (w.weekStart || '') >= monStr);
   if (upcoming.length === 0) return null;
   const blockLabel = `${upcoming.length} ${upcoming.length === 1 ? 'week' : 'weeks'} ahead`;
@@ -1143,7 +1143,7 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
                             next.setDate(next.getDate() + 7);
                             weekStart = ymd(next);
                           } else {
-                            weekStart = todayMondayFallback();
+                            weekStart = snapToMonday(todayStr());
                           }
                           const newWeek = {
                             id: newId(),

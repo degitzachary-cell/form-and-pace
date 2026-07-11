@@ -38,15 +38,20 @@ async function getValidToken(supabase: any, email: string): Promise<string> {
     }),
   });
   const refreshed = await res.json();
-  if (!refreshed?.access_token) throw new Error("Strava token refresh failed");
+  // Guard BOTH tokens — persisting a null refresh_token would permanently
+  // break refreshes for this athlete (Strava rotates refresh tokens).
+  if (!refreshed?.access_token || !refreshed?.refresh_token) {
+    throw new Error(`Strava token refresh failed: ${JSON.stringify(refreshed).slice(0, 200)}`);
+  }
 
-  await supabase.from("strava_tokens").upsert({
+  const { error: persistErr } = await supabase.from("strava_tokens").upsert({
     athlete_email: email,
     access_token: refreshed.access_token,
     refresh_token: refreshed.refresh_token,
     expires_at: refreshed.expires_at,
     updated_at: new Date().toISOString(),
   }, { onConflict: "athlete_email" });
+  if (persistErr) console.error(`failed to persist refreshed token for ${email}: ${persistErr.message}`);
 
   return refreshed.access_token;
 }
@@ -212,7 +217,7 @@ serve(async (req) => {
           })
           .select("id", { count: "exact" });
         if (error) throw new Error(`Insert failed: ${error.message}`);
-        inserted += count ?? chunk.length;
+        inserted += count ?? 0;
       }
     }
 

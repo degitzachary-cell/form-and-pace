@@ -64,15 +64,23 @@ async function getValidToken(supabase: any, row: any): Promise<string | null> {
     }),
   });
   const refreshed = await res.json();
-  if (!refreshed?.access_token) return null;
+  // Guard BOTH tokens: Strava rotates refresh tokens, and persisting a row
+  // with a null refresh_token would break every future refresh for this
+  // athlete. Also surface a failed persist — swallowing it means the rotated
+  // token is lost and the NEXT cycle fails invisibly.
+  if (!refreshed?.access_token || !refreshed?.refresh_token) {
+    console.error(`token refresh returned incomplete payload for ${row.athlete_email}: ${JSON.stringify(refreshed).slice(0, 200)}`);
+    return null;
+  }
 
-  await supabase.from("strava_tokens").upsert({
+  const { error } = await supabase.from("strava_tokens").upsert({
     athlete_email: row.athlete_email,
     access_token: refreshed.access_token,
     refresh_token: refreshed.refresh_token,
     expires_at: refreshed.expires_at,
     updated_at: new Date().toISOString(),
   }, { onConflict: "athlete_email" });
+  if (error) console.error(`failed to persist refreshed token for ${row.athlete_email}: ${error.message}`);
 
   return refreshed.access_token;
 }

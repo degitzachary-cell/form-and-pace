@@ -79,14 +79,14 @@ serve(async (req) => {
       const { data } = await supabase
         .from("strava_tokens")
         .select("strava_athlete_id")
-        .eq("athlete_email", user.email)
+        .eq("athlete_email", user.email.toLowerCase())
         .single();
       return new Response(JSON.stringify({ connected: !!data }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const accessToken = await getValidToken(supabase, user.email);
+    const accessToken = await getValidToken(supabase, user.email.toLowerCase());
 
     // List: honour the caller's `after` window (epoch seconds) and page through
     // it — Strava caps a page at per_page, so a single fetch silently truncated
@@ -124,6 +124,16 @@ serve(async (req) => {
         `https://www.strava.com/api/v3/activities/${activity_id}?include_all_efforts=false`,
         accessToken,
       );
+      // Same hardening as `list`: a Strava failure (403 deactivated app, 401,
+      // 429) must surface as a structured error, not be returned as if it were
+      // activity data with HTTP 200.
+      if (!stravaRes.ok) {
+        const errBody = await stravaRes.text().catch(() => "");
+        console.error(`strava-activities get failed: ${stravaRes.status} ${errBody.slice(0, 200)}`);
+        return new Response(JSON.stringify({ error: `Strava get failed: ${stravaRes.status}`, status: stravaRes.status }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const data = await stravaRes.json();
       return new Response(JSON.stringify(data), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

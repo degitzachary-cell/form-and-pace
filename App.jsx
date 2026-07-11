@@ -892,6 +892,11 @@ export default function App() {
       sessionStorage.removeItem("strava_pending_code");
       exchangeStravaCode(pendingCode).then(d => {
         if (d?.success) setStravaConnected(true);
+        // postFunction never rejects — failures come back as {error}. Without
+        // this branch a failed OAuth exchange (expired code, deactivated app)
+        // left the athlete on "Not connected" with zero feedback and the
+        // one-time code already consumed.
+        else if (d?.error) showToast(`Strava connection failed: ${d.error}. Please try connecting again.`, "error");
       }).catch(e => console.error("Strava exchange error", e));
     } else {
       refreshStravaConnection();
@@ -1192,14 +1197,20 @@ export default function App() {
     }
     if (error) { console.error("saveActivity error:", error); setLogError(error.message); }
     if (!error && data) {
-      setActivities(prev => editingActivityId ? prev.map(a => a.id === data.id ? data : a) : [data, ...prev]);
-      // Auto-link to matching scheduled session for the actual date.
-      if (programEntry) {
+      setActivities(prev => editingActivityId
+        ? prev.map(a => a.id === data.id ? data : a)
+        : [data, ...prev.filter(a => a.id !== data.id)]);
+      // Auto-link to matching scheduled session for the actual date — but only
+      // when the logged activity is a Run and the session isn't REST: logging
+      // a bike ride must not mark a planned run "completed", and a REST day
+      // has nothing to complete.
+      if (programEntry && (form.type || "Run") === "Run") {
         const allSessionsWithDate = programEntry.weeks.flatMap(w =>
           w.sessions.map(s => ({ ...s, weekStart: w.weekStart }))
         );
         const matchedSession = allSessionsWithDate.find(
           s => sessionDateStr(s.weekStart, s.day) === effectiveDate
+            && (s.type || "").toUpperCase() !== "REST"
         );
         if (matchedSession && !logs[matchedSession.id]) {
           const scheduledDate = sessionDateStr(matchedSession.weekStart, matchedSession.day);
@@ -1211,10 +1222,17 @@ export default function App() {
             // Only set actual_date if the run happened on a different day than scheduled.
             ...(effectiveDate !== scheduledDate ? { actual_date: effectiveDate } : {}),
           };
-          await saveLog(matchedSession.id, {
-            analysis: autoAnalysis,
-            ...(stravaDetailData ? { strava_data: stravaDetailData } : {}),
-          });
+          // Auto-link failure must not strand the Save button on "Saving…" —
+          // the activity itself saved; the link is best-effort.
+          try {
+            await saveLog(matchedSession.id, {
+              analysis: autoAnalysis,
+              ...(stravaDetailData ? { strava_data: stravaDetailData } : {}),
+            });
+          } catch (e) {
+            console.error("auto-link saveLog failed:", e);
+            showToast("Run saved, but couldn't link it to your scheduled session.", "error");
+          }
         }
       }
       setLogForm({ date: todayStr(), distanceKm: "", durationMin: "", type: "Run", notes: "" });
@@ -1506,10 +1524,23 @@ export default function App() {
       })
       .filter(Boolean);
     if (!rows.length) return;
-    supabase.from("activities").insert(rows).select().then(({ data, error }) => {
-      if (error) { console.error("strava auto-sync error:", error); return; }
-      if (data?.length) setActivities(prev => [...data, ...prev]);
-    });
+    // Upsert, not insert: the server-side cron may have already inserted any
+    // of these runs. With a plain batch insert, ONE duplicate aborted the
+    // whole batch (23505 on the strava-id unique index) — permanently, since
+    // the local dedup set never learns about cron rows — silently freezing
+    // auto-sync. ignoreDuplicates makes overlap a no-op instead.
+    supabase.from("activities")
+      .upsert(rows, { onConflict: "athlete_email,strava_activity_id", ignoreDuplicates: true })
+      .select()
+      .then(({ data, error }) => {
+        if (error) { console.error("strava auto-sync error:", error); return; }
+        if (data?.length) {
+          setActivities(prev => {
+            const ids = new Set(data.map(d => d.id));
+            return [...data, ...prev.filter(a => !ids.has(a.id))];
+          });
+        }
+      });
   }, [role, stravaConnected, stravaActivities, user?.email]);
 
 
@@ -1555,7 +1586,14 @@ export default function App() {
         setStravaDetailLoading(false);
         return extracted;
       }
-    } catch(e) { console.error("strava get error", e); }
+    } catch(e) {
+      console.error("strava get error", e);
+      // fetchStravaDetail throws with a user-facing message on a Strava
+      // refusal — show it in the picker banner (and as a toast for the
+      // Today-screen import buttons that don't render the picker).
+      setStravaListError(e.message);
+      showToast(e.message, "error");
+    }
     setStravaDetailLoading(false);
     return null;
   };
@@ -1723,12 +1761,26 @@ export default function App() {
       const prevActualDate = logs[s.id]?.analysis?.actual_date;
       const stravaId = stravaDetail?.id;
       const myEmail = user.email?.toLowerCase();
+      // A same-day activity is only a merge candidate when it plausibly IS
+      // this session's run: rows this flow created earlier (source "session"),
+      // or a Run row of comparable distance (an auto-synced copy of the same
+      // run). Without this guard, first-activity-of-the-day matching let a
+      // logged run overwrite an unrelated same-day strength workout or ride.
+      const enteredKm = parseFloat(sessionDistKm);
+      const plausibleMatch = (a) => {
+        if (!a) return null;
+        if (a.source === "session") return a;
+        const km = parseFloat(a.distance_km);
+        if (a.activity_type === "Run"
+            && (!km || !enteredKm || Math.abs(km - enteredKm) / Math.max(km, enteredKm) < 0.25)) return a;
+        return null;
+      };
       const existing = (stravaId
           ? activities.find(a => a.athlete_email?.toLowerCase() === myEmail && a.strava_data?.id === stravaId)
           : null)
-        || findAthAct(user.email, sessionDate)
-        || findAthAct(user.email, scheduledDate)
-        || (prevActualDate ? findAthAct(user.email, prevActualDate) : null);
+        || plausibleMatch(findAthAct(user.email, sessionDate))
+        || plausibleMatch(findAthAct(user.email, scheduledDate))
+        || (prevActualDate ? plausibleMatch(findAthAct(user.email, prevActualDate)) : null);
       if (!existing) {
         const payload = {
           athlete_email: user.email?.toLowerCase(),
@@ -1759,7 +1811,7 @@ export default function App() {
         if (actErr) console.error("handleSubmitFeedback activity write error:", actErr);
         if (actData) setActivities(prev => [actData, ...prev.filter(a => a.id !== actData.id)]);
       } else {
-        const { data: updAct } = await supabase.from("activities").update({
+        const { data: updAct, error: updErr } = await supabase.from("activities").update({
           activity_date: sessionDate,
           distance_km: parseFloat(sessionDistKm),
           duration_seconds: sessionDurMin ? Math.round(parseFloat(sessionDurMin) * 60) : null,
@@ -1769,6 +1821,10 @@ export default function App() {
           // previously-linked Strava splits/laps.
           ...(stravaDetail ? { source: "strava", strava_data: stravaDetail } : {}),
         }).eq("id", existing.id).select().single();
+        if (updErr) {
+          console.error("handleSubmitFeedback activity update error:", updErr);
+          showToast("Session saved, but the activity entry didn't update — weekly totals may be off.", "error");
+        }
         if (updAct) setActivities(prev => prev.map(a => a.id === updAct.id ? updAct : a));
       }
 
@@ -7860,8 +7916,8 @@ export default function App() {
             <div>
               <Eyebrow style={{ marginBottom:6 }}>Pace</Eyebrow>
               <Num size={17}>{an?.distance_km && an?.duration_min ? (() => {
-                const sec = (an.duration_min * 60) / an.distance_km;
-                return `${Math.floor(sec/60)}:${String(Math.round(sec%60)).padStart(2,"0")}`;
+                const sec = Math.round((an.duration_min * 60) / an.distance_km);
+                return `${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")}`;
               })() : "—"}</Num>
             </div>
             <div>
