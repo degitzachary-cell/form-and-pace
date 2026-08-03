@@ -733,6 +733,15 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   // Dirty = current state differs from last loaded/saved snapshot.
   const currentSnapshot = JSON.stringify({ weeks, athleteName, athleteGoal, athletePb, defaultWeek });
   const isDirty = !!selectedEmail && baseline !== '' && currentSnapshot !== baseline;
+  // Mirror `isDirty` into a ref so the prop-load effect can read the latest
+  // value without taking `isDirty`/`weeks` as dependencies (which would make it
+  // re-run — and clobber edits — on every keystroke).
+  const isDirtyRef = useRef(false);
+  useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
+  // Which athlete's data we've loaded into the editor. Used to tell a genuine
+  // athlete switch (must reload) from a background athletePrograms re-mint
+  // (must NOT reload while the coach has unsaved edits).
+  const loadedEmailRef = useRef(null);
 
   // Warn before leaving the tab with unsaved changes.
   useEffect(() => {
@@ -748,6 +757,17 @@ export default function CoachPlanBuilder({ athletes, onSave }) {
   }));
 
   useEffect(() => {
+    // The `athletes` prop is re-minted whenever athletePrograms changes —
+    // including background updates (realtime coach_plans events, the profile/
+    // token enrichment pass) that fire while the coach is editing. Re-pulling
+    // `weeks` from the prop then wiped unsaved edits: a just-deleted session
+    // reappeared, and the next Save re-persisted it ("it comes back"). So only
+    // (re)load when the SELECTED athlete actually changes; skip prop re-mints
+    // for the same athlete while there are unsaved edits. A clean editor still
+    // refreshes (e.g. to show a just-completed Excel import).
+    const emailChanged = loadedEmailRef.current !== selectedEmail;
+    if (!emailChanged && isDirtyRef.current) return;
+    loadedEmailRef.current = selectedEmail;
     const entry = selectedEmail ? athletes[selectedEmail] : null;
     const w = entry?.weeks || [];
     const n = entry?.name && entry.name !== selectedEmail ? entry.name : '';
