@@ -5310,9 +5310,14 @@ export default function App() {
               terrain: (f.terrain || "").trim(),
               rpe_target: (f.rpe_target || "").toString().trim() || null,
               duration_min: f.duration_min ? Number(f.duration_min) : null,
-              ...(f.time_of_day ? { time_of_day: f.time_of_day } : {}),
-              ...(Array.isArray(f.steps) && f.steps.length > 0 ? { steps: f.steps } : {}),
-              ...(Array.isArray(f.exercises) && f.exercises.length > 0 ? { exercises: f.exercises } : {}),
+              // These MUST be present on every save (as null when empty), not
+              // conditionally spread in. saveWorkout merges sessionData over the
+              // existing session, so an omitted key keeps the OLD value — which
+              // meant clearing a workout's steps/exercises/time silently
+              // reverted on save ("it just comes back").
+              time_of_day: f.time_of_day || null,
+              steps: (Array.isArray(f.steps) && f.steps.length > 0) ? f.steps : null,
+              exercises: (Array.isArray(f.exercises) && f.exercises.length > 0) ? f.exercises : null,
             };
             try {
               await saveWorkout(ew.athleteEmail, ew.weekStart, sessionData, ew.sessionId);
