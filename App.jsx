@@ -5039,9 +5039,16 @@ export default function App() {
     const pickType = (t) => {
       setField("type", t);
       if (SCAFFOLD_TYPES.has(t) && !(Array.isArray(f.steps) && f.steps.length > 0)) {
+        // Speed = short/track reps → Interval block. Tempo & Threshold = longer
+        // holds → Workout (steady) block. Both wrapped in Warm Up / Cool Down.
+        const middle = t === "SPEED"
+          ? { kind: "interval", reps: 6,
+              work: { unit: "m", distance_m: 800, duration_s: "", pace: "" },
+              recovery: { unit: "sec", distance_m: "", duration_s: 90, pace: "", style: "jog" } }
+          : { kind: "steady", unit: "min", duration_min: "", distance_km: "", pace: "", note: "" };
         setField("steps", [
           { kind: "warmup",   duration_min: 15, pace: "" },
-          { kind: "steady",   unit: "min", duration_min: "", distance_km: "", pace: "", note: "" },
+          middle,
           { kind: "cooldown", duration_min: 15, pace: "" },
         ]);
       }
