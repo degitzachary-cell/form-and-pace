@@ -65,6 +65,7 @@ export const TYPE_STYLE = {
   RECOVERY:   { accent:C.cool,    dot:C.cool,    bg:"#DDE6EC", border:"#B7C9D5" },
   "LONG RUN": { accent:"#7B5A8C", dot:"#7B5A8C", bg:"#E9DEF0", border:"#C9B8D5" },
   TEMPO:      { accent:"#D97706", dot:"#D97706", bg:"#FCE7C8", border:"#E8C088" },
+  THRESHOLD:  { accent:"#0E7490", dot:"#0E7490", bg:"#D6EAF0", border:"#A6CBD9" },
   SPEED:      { accent:"#C8341B", dot:"#C8341B", bg:"#F5D2C8", border:"#E2A99A" },
   HYROX:      { accent:"#C79541", dot:"#C79541", bg:"#FFF4D4", border:"#1C1D22",
                 pattern:"linear-gradient(135deg, #F5C542 0 50%, #1C1D22 50% 100%)" },

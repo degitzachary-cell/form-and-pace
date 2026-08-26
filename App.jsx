@@ -3186,7 +3186,7 @@ export default function App() {
   }
 
   if (role === "coach" && coachScreen === "templates") {
-    const TEMPLATE_TYPES = ["all", "EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX", "RACE", "REST"];
+    const TEMPLATE_TYPES = ["all", "EASY", "RECOVERY", "LONG RUN", "THRESHOLD", "TEMPO", "SPEED", "HYROX", "RACE", "REST"];
     const onLibraryTab = templateTab === "library";
     const sourceList = onLibraryTab ? WORKOUT_SEEDS : workoutTemplates;
     const filteredTemplates = sourceList.filter(t => {
@@ -5029,9 +5029,23 @@ export default function App() {
     const dayDate = sessionDateStr(ew.weekStart, ew.dayLabel);
     const dayDisplay = dayDate ? `${ew.dayLabel} ${parseInt(dayDate.slice(8), 10)}` : ew.dayLabel;
     const setField = (k, v) => setEditingWorkout(prev => ({ ...prev, prefill: { ...(prev.prefill || {}), [k]: v } }));
-    const TYPES = ["EASY", "RECOVERY", "LONG RUN", "TEMPO", "SPEED", "HYROX", "STRENGTH", "RACE DAY", "REST"];
+    const TYPES = ["EASY", "RECOVERY", "LONG RUN", "THRESHOLD", "TEMPO", "SPEED", "HYROX", "STRENGTH", "RACE DAY", "REST"];
     const isStrengthType = (f.type || "").toUpperCase() === "STRENGTH";
-    const tagFor = (t) => t === "SPEED" ? "speed" : t === "TEMPO" ? "tempo" : "easy";
+    const tagFor = (t) => t === "SPEED" ? "speed" : (t === "TEMPO" || t === "THRESHOLD") ? "tempo" : "easy";
+    // Interval/workout types scaffold a Warm Up (15) → Workout → Cool Down (15)
+    // shell so the coach fills the middle instead of building from scratch.
+    // Only when the session has no steps yet — never clobber existing structure.
+    const SCAFFOLD_TYPES = new Set(["THRESHOLD", "TEMPO", "SPEED"]);
+    const pickType = (t) => {
+      setField("type", t);
+      if (SCAFFOLD_TYPES.has(t) && !(Array.isArray(f.steps) && f.steps.length > 0)) {
+        setField("steps", [
+          { kind: "warmup",   duration_min: 15, pace: "" },
+          { kind: "steady",   unit: "min", duration_min: "", distance_km: "", pace: "", note: "" },
+          { kind: "cooldown", duration_min: 15, pace: "" },
+        ]);
+      }
+    };
     // A valid workout needs a type plus at least ONE of: coach notes,
     // structured steps, exercises (strength), a pace target, or a duration.
     const canSave = !!(f.type || "EASY") && (
@@ -5104,7 +5118,7 @@ export default function App() {
                 const sel = (f.type || "EASY") === t;
                 const tts = typeStyle(t);
                 return (
-                  <button key={t} type="button" onClick={() => setField("type", t)}
+                  <button key={t} type="button" onClick={() => pickType(t)}
                     style={{
                       background: sel ? (tts.pattern || tts.accent) : C.white,
                       border: `1px solid ${sel ? tts.accent : C.rule}`,
@@ -6349,7 +6363,7 @@ export default function App() {
             //      include explicit warmup/cooldown — athletes do them
             //      anyway, so they count toward total volume.
             //   4. No steps: predict the whole thing from duration × pace.
-            const WORKOUT_PAD_TYPES = new Set(["TEMPO", "SPEED", "HYROX", "INTERVAL"]);
+            const WORKOUT_PAD_TYPES = new Set(["TEMPO", "THRESHOLD", "SPEED", "HYROX", "INTERVAL"]);
             const easyPaceStr = (() => {
               const thr = profile?.threshold_pace;
               if (!thr || !/^\d{1,2}:\d{2}$/.test(thr.trim())) return "5:30";

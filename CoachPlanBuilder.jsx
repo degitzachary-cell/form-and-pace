@@ -36,7 +36,7 @@ function inferSessionType(desc) {
 
 const getTagFromType = (type) => {
   if (type === 'SPEED') return 'speed';
-  if (type === 'TEMPO') return 'tempo';
+  if (type === 'TEMPO' || type === 'THRESHOLD') return 'tempo';
   return 'easy';
 };
 
@@ -169,12 +169,13 @@ function parseExcelToWeeks(file) {
   });
 }
 
-const SESSION_TYPES = ['LONG RUN','SPEED','TEMPO','EASY','RECOVERY'];
+const SESSION_TYPES = ['LONG RUN','SPEED','THRESHOLD','TEMPO','EASY','RECOVERY'];
 
 const TYPE_ACCENT = {
   'LONG RUN': '#14365f',
   'SPEED':    '#7a1a1a',
   'TEMPO':    '#5a2a6e',
+  'THRESHOLD':'#0E7490',
   'EASY':     '#2a6e27',
   'RECOVERY': '#0f6678',
 };
@@ -222,6 +223,7 @@ const SCORE_TYPE_COLOR = {
   "LONG RUN":  "#7B5A8C",
   LONG:        "#7B5A8C",
   TEMPO:       "#D97706",                   // bright orange
+  THRESHOLD:   "#0E7490",                   // teal
   SPEED:       "#C8341B",                   // deep red
   RACE:        C.ink,
   "RACE DAY":  C.ink,
@@ -258,7 +260,7 @@ function PlanScoreGrid({ weeks, athleteThresholdPace }) {
   //      explicit warmup/cooldown steps — athletes do them anyway, so
   //      they belong in the predicted volume.
   //   5. Whole-session predict from duration × pace as a final fallback.
-  const WORKOUT_TYPES_WITH_IMPLICIT_PADDING = new Set(["TEMPO", "SPEED", "HYROX", "INTERVAL"]);
+  const WORKOUT_TYPES_WITH_IMPLICIT_PADDING = new Set(["TEMPO", "THRESHOLD", "SPEED", "HYROX", "INTERVAL"]);
   const IMPLICIT_PAD_MIN = 15;        // standard 15-min warm-up / cool-down
   const FALLBACK_EASY_PACE = "5:30";  // if athlete has no threshold pace to derive from
   const easyPaceStr = (() => {
