@@ -505,6 +505,35 @@ export function StepsEditor({ session, onChange }) {
     </div>
   );
 
+  // Interval work/recovery time entry: type in min OR sec, stored as seconds
+  // (duration_s) under the hood — matches the Workout block, so a 6-minute rep
+  // isn't entered as "360". Remembers the chosen unit on `<part>.tunit`.
+  const intervalTime = (step, i, part) => {
+    const p = step[part] || {};
+    const tunit = p.tunit || ((p.duration_s && p.duration_s % 60 === 0 && p.duration_s >= 120) ? 'min' : 'sec');
+    const shown = (p.duration_s === '' || p.duration_s == null)
+      ? '' : (tunit === 'min' ? +(p.duration_s / 60).toFixed(2) : p.duration_s);
+    const setVal = (v) => {
+      if (v === '') { setNested(i, part, { duration_s: '', tunit }); return; }
+      const n = Number(v);
+      setNested(i, part, { duration_s: tunit === 'min' ? Math.round(n * 60) : Math.round(n), tunit });
+    };
+    return (
+      <>
+        <input style={{ ...inp, width: 55 }} type="number" min="0" step={tunit === 'min' ? '0.5' : '5'}
+          placeholder={tunit} value={shown} onChange={e => setVal(e.target.value)}/>
+        <div style={{ display: 'inline-flex', border: `1px solid ${C.rule}`, borderRadius: 2, overflow: 'hidden' }}>
+          {['min', 'sec'].map((u, idx) => (
+            <button key={u} type="button" onClick={() => setNested(i, part, { tunit: u })}
+              style={{ background: tunit === u ? C.ink : 'transparent', color: tunit === u ? C.paper : C.mute,
+                border: 0, borderLeft: idx ? `1px solid ${C.rule}` : 'none', padding: '4px 7px',
+                fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer' }}>{u}</button>
+          ))}
+        </div>
+      </>
+    );
+  };
+
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 10, letterSpacing: 2, color: C.mid, textTransform: 'uppercase', marginBottom: 8 }}>Sections (optional)</div>
@@ -632,7 +661,7 @@ export function StepsEditor({ session, onChange }) {
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input style={{ ...inp, width: 70 }} type="number" placeholder="m" value={step.work?.distance_m ?? ''} onChange={e => setNested(i, 'work', { distance_m: e.target.value === '' ? '' : Number(e.target.value) })}/>
                   <span style={{ fontSize: 10, color: C.mid }}>or</span>
-                  <input style={{ ...inp, width: 60 }} type="number" placeholder="sec" value={step.work?.duration_s ?? ''} onChange={e => setNested(i, 'work', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  {intervalTime(step, i, "work")}
                   <PaceRangeInput value={step.work?.pace || ''} onChange={(v) => setNested(i, 'work', { pace: v })}/>
                 </div>
               </div>
@@ -641,7 +670,7 @@ export function StepsEditor({ session, onChange }) {
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input style={{ ...inp, width: 70 }} type="number" placeholder="m" value={step.recovery?.distance_m ?? ''} onChange={e => setNested(i, 'recovery', { distance_m: e.target.value === '' ? '' : Number(e.target.value) })}/>
                   <span style={{ fontSize: 10, color: C.mid }}>or</span>
-                  <input style={{ ...inp, width: 60 }} type="number" placeholder="sec" value={step.recovery?.duration_s ?? ''} onChange={e => setNested(i, 'recovery', { duration_s: e.target.value === '' ? '' : Number(e.target.value) })}/>
+                  {intervalTime(step, i, "recovery")}
                   <StyleToggle withRest value={step.recovery?.style} onChange={(v) => setNested(i, 'recovery', { style: v })}/>
                   <PaceRangeInput value={step.recovery?.pace || ''} onChange={(v) => setNested(i, 'recovery', { pace: v })}/>
                 </div>
