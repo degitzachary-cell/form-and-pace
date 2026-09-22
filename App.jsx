@@ -3186,7 +3186,7 @@ export default function App() {
   }
 
   if (role === "coach" && coachScreen === "templates") {
-    const TEMPLATE_TYPES = ["all", "EASY", "RECOVERY", "LONG RUN", "THRESHOLD", "TEMPO", "SPEED", "HYROX", "RACE", "REST"];
+    const TEMPLATE_TYPES = ["all", "EASY", "RECOVERY", "LONG RUN", "THRESHOLD", "TEMPO", "SPEED", "PARKRUN", "HYROX", "RACE", "REST"];
     const onLibraryTab = templateTab === "library";
     const sourceList = onLibraryTab ? WORKOUT_SEEDS : workoutTemplates;
     const filteredTemplates = sourceList.filter(t => {
@@ -5029,9 +5029,9 @@ export default function App() {
     const dayDate = sessionDateStr(ew.weekStart, ew.dayLabel);
     const dayDisplay = dayDate ? `${ew.dayLabel} ${parseInt(dayDate.slice(8), 10)}` : ew.dayLabel;
     const setField = (k, v) => setEditingWorkout(prev => ({ ...prev, prefill: { ...(prev.prefill || {}), [k]: v } }));
-    const TYPES = ["EASY", "RECOVERY", "LONG RUN", "THRESHOLD", "TEMPO", "SPEED", "HYROX", "STRENGTH", "RACE DAY", "REST"];
+    const TYPES = ["EASY", "RECOVERY", "LONG RUN", "THRESHOLD", "TEMPO", "SPEED", "PARKRUN", "HYROX", "STRENGTH", "RACE DAY", "REST"];
     const isStrengthType = (f.type || "").toUpperCase() === "STRENGTH";
-    const tagFor = (t) => t === "SPEED" ? "speed" : (t === "TEMPO" || t === "THRESHOLD") ? "tempo" : "easy";
+    const tagFor = (t) => (t === "SPEED" || t === "PARKRUN") ? "speed" : (t === "TEMPO" || t === "THRESHOLD") ? "tempo" : "easy";
     // Interval/workout types scaffold a Warm Up (15) → Workout → Cool Down (15)
     // shell so the coach fills the middle instead of building from scratch.
     // Only when the session has no steps yet — never clobber existing structure.

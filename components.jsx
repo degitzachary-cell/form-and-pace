@@ -862,6 +862,7 @@ export const TYPE_META = {
   "LONG RUN": { dot: "#7B5A8C",                label: "Long" },
   TEMPO:      { dot: "#D97706",                label: "Tempo" },
   THRESHOLD:  { dot: "#0E7490",                label: "Threshold" },
+  PARKRUN:    { dot: "#2E7D32",                label: "Parkrun" },
   SPEED:      { dot: "#C8341B",                label: "Speed" },
   RACE:       { dot: "var(--c-ink)",           label: "Race" },
   "RACE DAY": { dot: "var(--c-ink)",           label: "Race" },

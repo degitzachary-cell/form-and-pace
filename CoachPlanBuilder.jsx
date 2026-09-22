@@ -35,7 +35,7 @@ function inferSessionType(desc) {
 }
 
 const getTagFromType = (type) => {
-  if (type === 'SPEED') return 'speed';
+  if (type === 'SPEED' || type === 'PARKRUN') return 'speed';
   if (type === 'TEMPO' || type === 'THRESHOLD') return 'tempo';
   return 'easy';
 };
@@ -169,13 +169,14 @@ function parseExcelToWeeks(file) {
   });
 }
 
-const SESSION_TYPES = ['LONG RUN','SPEED','THRESHOLD','TEMPO','EASY','RECOVERY'];
+const SESSION_TYPES = ['LONG RUN','SPEED','THRESHOLD','TEMPO','PARKRUN','EASY','RECOVERY'];
 
 const TYPE_ACCENT = {
   'LONG RUN': '#14365f',
   'SPEED':    '#7a1a1a',
   'TEMPO':    '#5a2a6e',
   'THRESHOLD':'#0E7490',
+  'PARKRUN':  '#2E7D32',
   'EASY':     '#2a6e27',
   'RECOVERY': '#0f6678',
 };
@@ -224,6 +225,7 @@ const SCORE_TYPE_COLOR = {
   LONG:        "#7B5A8C",
   TEMPO:       "#D97706",                   // bright orange
   THRESHOLD:   "#0E7490",                   // teal
+  PARKRUN:     "#2E7D32",                   // green
   SPEED:       "#C8341B",                   // deep red
   RACE:        C.ink,
   "RACE DAY":  C.ink,
